@@ -17,6 +17,9 @@
 - [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py)
 - [vnpy/alpha/strategy/strategies/equity_demo_strategy.py](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py)
 - [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py)
+- [examples/czsc_strategy/czsc_adapter.py](file://examples/czsc_strategy/czsc_adapter.py)
+- [examples/czsc_strategy/czsc_multi_timeframe_strategy.py](file://examples/czsc_strategy/czsc_multi_timeframe_strategy.py)
+- [examples/czsc_strategy/README.md](file://examples/czsc_strategy/README.md)
 </cite>
 
 ## 目录
@@ -25,11 +28,12 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考量](#性能考量)
-8. [故障排查指南](#故障排查指南)
-9. [结论](#结论)
-10. [附录](#附录)
+6. [CZSC技术分析集成](#czsc技术分析集成)
+7. [依赖关系分析](#依赖关系分析)
+8. [性能考量](#性能考量)
+9. [故障排查指南](#故障排查指南)
+10. [结论](#结论)
+11. [附录](#附录)
 
 ## 引言
 本技术文档面向量化策略开发者，系统性介绍Alpha策略模块的设计与实现，覆盖以下关键主题：
@@ -37,12 +41,13 @@
 - 回测引擎BacktestingEngine的实现机制、数据接口与交易模拟
 - 策略模板的标准接口、信号生成机制与风险管理
 - 演示策略EquityDemoStrategy的实现细节与使用示例
+- **新增**：CZSC技术分析框架与Alpha策略模块的深度集成
 - 策略开发最佳实践、性能优化建议与实盘部署指导
 
-目标是帮助读者从概念验证到实盘应用，构建稳定、可扩展、可复用的Alpha策略体系。
+目标是帮助读者从概念验证到实盘应用，构建稳定、可扩展、可复用的Alpha策略体系，特别是结合CZSC缠论技术分析的强大功能。
 
 ## 项目结构
-Alpha策略模块位于vnpy/alpha目录下，按“数据处理/特征工程”、“模型学习”、“策略执行/回测”、“实验室工具”四个层次组织，形成完整的Alpha研究流水线。
+Alpha策略模块位于vnpy/alpha目录下，按"数据处理/特征工程"、"模型学习"、"策略执行/回测"、"实验室工具"四个层次组织，形成完整的Alpha研究流水线。**新增**：examples/czsc_strategy目录提供了CZSC技术分析框架与Alpha策略的集成示例。
 
 ```mermaid
 graph TB
@@ -51,16 +56,20 @@ A["dataset<br/>数据与特征工程"]
 B["model<br/>机器学习模型"]
 C["strategy<br/>策略与回测"]
 D["lab<br/>Alpha实验室"]
+E["CZSC适配层<br/>技术分析集成"]
 end
 A --> B
 B --> C
 D --> A
 D --> B
 D --> C
+E --> A
+E --> C
 ```
 
 **章节来源**
-- [vnpy/alpha/__init__.py](file://vnpy/alpha/__init__.py#L1-L19)
+- [vnpy/alpha/__init__.py:1-19](file://vnpy/alpha/__init__.py#L1-L19)
+- [examples/czsc_strategy/README.md:1-194](file://examples/czsc_strategy/README.md#L1-L194)
 
 ## 核心组件
 - AlphaDataset：特征工厂与数据管线，支持表达式/Polars表达式特征计算、跨时序/跨截面操作、数据清洗与分段（训练/验证/测试）管理。
@@ -69,22 +78,27 @@ D --> C
 - BacktestingEngine：回测引擎，负责数据加载、逐K回放、订单撮合、每日损益计算、统计指标与可视化。
 - AlphaLab：Alpha实验室，提供数据持久化/加载、组件过滤、合约参数、信号/模型/数据集存取。
 - 演示策略EquityDemoStrategy：多因子信号驱动的多股票多头组合策略示例。
+- **新增**：CzscAnalyzer：CZSC技术分析适配器，提供缠论分析、中枢识别、背驰检测等功能。
+- **新增**：CzscMultiTimeframeStrategy：基于CZSC的多时间周期交易策略。
 
 **章节来源**
-- [vnpy/alpha/dataset/template.py](file://vnpy/alpha/dataset/template.py#L23-L306)
-- [vnpy/alpha/model/template.py](file://vnpy/alpha/model/template.py#L9-L31)
-- [vnpy/alpha/strategy/template.py](file://vnpy/alpha/strategy/template.py#L15-L206)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L20-L481)
-- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L12-L102)
+- [vnpy/alpha/dataset/template.py:23-306](file://vnpy/alpha/dataset/template.py#L23-L306)
+- [vnpy/alpha/model/template.py:9-31](file://vnpy/alpha/model/template.py#L9-L31)
+- [vnpy/alpha/strategy/template.py:15-206](file://vnpy/alpha/strategy/template.py#L15-L206)
+- [vnpy/alpha/strategy/backtesting.py:22-945](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
+- [vnpy/alpha/lab.py:20-481](file://vnpy/alpha/lab.py#L20-L481)
+- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py:12-102](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L12-L102)
+- [examples/czsc_strategy/czsc_adapter.py:1-494](file://examples/czsc_strategy/czsc_adapter.py#L1-L494)
+- [examples/czsc_strategy/czsc_multi_timeframe_strategy.py:1-518](file://examples/czsc_strategy/czsc_multi_timeframe_strategy.py#L1-L518)
 
 ## 架构总览
-Alpha策略模块采用“特征工程-模型学习-策略执行-回测评估”的闭环设计。数据通过AlphaLab加载与缓存，经AlphaDataset生成特征与标签，AlphaModel进行拟合与预测，策略基于信号生成交易指令，BacktestingEngine完成订单撮合与损益统计。
+Alpha策略模块采用"特征工程-模型学习-策略执行-回测评估"的闭环设计。数据通过AlphaLab加载与缓存，经AlphaDataset生成特征与标签，AlphaModel进行拟合与预测，策略基于信号生成交易指令，BacktestingEngine完成订单撮合与损益统计。**新增**：CZSC适配层提供高级技术分析能力，与Alpha框架无缝集成。
 
 ```mermaid
 graph TB
 subgraph "数据层"
 DL["AlphaLab<br/>数据/组件/合约/信号/模型/数据集"]
+CA["CzscAnalyzer<br/>缠论分析适配器"]
 end
 subgraph "特征与模型"
 AD["AlphaDataset<br/>特征表达式/计算/分段"]
@@ -95,23 +109,32 @@ subgraph "策略与回测"
 AS["AlphaStrategy<br/>策略模板"]
 BE["BacktestingEngine<br/>回测引擎"]
 ED["EquityDemoStrategy<br/>演示策略"]
+CS["CzscMultiTimeframeStrategy<br/>多周期策略"]
+end
+subgraph "技术分析层"
+CZSC["CZSC框架<br/>缠论分析"]
 end
 DL --> AD
+CA --> CZSC
+CZSC --> CS
 AD --> AM
 AM --> LM
 LM --> BE
 BE --> AS
 ED --> AS
+CS --> BE
 ```
 
 **图示来源**
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L20-L481)
-- [vnpy/alpha/dataset/template.py](file://vnpy/alpha/dataset/template.py#L23-L306)
-- [vnpy/alpha/model/template.py](file://vnpy/alpha/model/template.py#L9-L31)
-- [vnpy/alpha/model/models/lasso_model.py](file://vnpy/alpha/model/models/lasso_model.py#L13-L140)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
-- [vnpy/alpha/strategy/template.py](file://vnpy/alpha/strategy/template.py#L15-L206)
-- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L12-L102)
+- [vnpy/alpha/lab.py:20-481](file://vnpy/alpha/lab.py#L20-L481)
+- [vnpy/alpha/dataset/template.py:23-306](file://vnpy/alpha/dataset/template.py#L23-L306)
+- [vnpy/alpha/model/template.py:9-31](file://vnpy/alpha/model/template.py#L9-L31)
+- [vnpy/alpha/model/models/lasso_model.py:13-140](file://vnpy/alpha/model/models/lasso_model.py#L13-L140)
+- [vnpy/alpha/strategy/backtesting.py:22-945](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
+- [vnpy/alpha/strategy/template.py:15-206](file://vnpy/alpha/strategy/template.py#L15-L206)
+- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py:12-102](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L12-L102)
+- [examples/czsc_strategy/czsc_adapter.py:1-494](file://examples/czsc_strategy/czsc_adapter.py#L1-L494)
+- [examples/czsc_strategy/czsc_multi_timeframe_strategy.py:1-518](file://examples/czsc_strategy/czsc_multi_timeframe_strategy.py#L1-L518)
 
 ## 详细组件分析
 
@@ -139,18 +162,18 @@ SplitSegments --> End(["结束：得到可训练/推理数据"])
 ```
 
 **图示来源**
-- [vnpy/alpha/dataset/template.py](file://vnpy/alpha/dataset/template.py#L90-L194)
-- [vnpy/alpha/dataset/utility.py](file://vnpy/alpha/dataset/utility.py#L13-L17)
-- [vnpy/alpha/dataset/utility.py](file://vnpy/alpha/dataset/utility.py#L203-L255)
+- [vnpy/alpha/dataset/template.py:90-194](file://vnpy/alpha/dataset/template.py#L90-L194)
+- [vnpy/alpha/dataset/utility.py:13-17](file://vnpy/alpha/dataset/utility.py#L13-L17)
+- [vnpy/alpha/dataset/utility.py:203-255](file://vnpy/alpha/dataset/utility.py#L203-L255)
 
 **章节来源**
-- [vnpy/alpha/dataset/template.py](file://vnpy/alpha/dataset/template.py#L23-L306)
-- [vnpy/alpha/dataset/utility.py](file://vnpy/alpha/dataset/utility.py#L19-L286)
-- [vnpy/alpha/dataset/ts_function.py](file://vnpy/alpha/dataset/ts_function.py#L12-L330)
-- [vnpy/alpha/dataset/cs_function.py](file://vnpy/alpha/dataset/cs_function.py#L10-L65)
-- [vnpy/alpha/dataset/math_function.py](file://vnpy/alpha/dataset/math_function.py#L10-L168)
-- [vnpy/alpha/dataset/ta_function.py](file://vnpy/alpha/dataset/ta_function.py#L24-L44)
-- [vnpy/alpha/dataset/processor.py](file://vnpy/alpha/dataset/processor.py#L9-L202)
+- [vnpy/alpha/dataset/template.py:23-306](file://vnpy/alpha/dataset/template.py#L23-L306)
+- [vnpy/alpha/dataset/utility.py:19-286](file://vnpy/alpha/dataset/utility.py#L19-L286)
+- [vnpy/alpha/dataset/ts_function.py:12-330](file://vnpy/alpha/dataset/ts_function.py#L12-L330)
+- [vnpy/alpha/dataset/cs_function.py:10-65](file://vnpy/alpha/dataset/cs_function.py#L10-L65)
+- [vnpy/alpha/dataset/math_function.py:10-168](file://vnpy/alpha/dataset/math_function.py#L10-L168)
+- [vnpy/alpha/dataset/ta_function.py:24-44](file://vnpy/alpha/dataset/ta_function.py#L24-L44)
+- [vnpy/alpha/dataset/processor.py:9-202](file://vnpy/alpha/dataset/processor.py#L9-L202)
 
 ### AlphaModel与LassoModel：模型抽象与线性回归示例
 - AlphaModel定义了fit与predict两个抽象方法，统一不同算法的训练与预测接口。
@@ -177,12 +200,12 @@ AlphaModel <|-- LassoModel
 ```
 
 **图示来源**
-- [vnpy/alpha/model/template.py](file://vnpy/alpha/model/template.py#L9-L31)
-- [vnpy/alpha/model/models/lasso_model.py](file://vnpy/alpha/model/models/lasso_model.py#L13-L140)
+- [vnpy/alpha/model/template.py:9-31](file://vnpy/alpha/model/template.py#L9-L31)
+- [vnpy/alpha/model/models/lasso_model.py:13-140](file://vnpy/alpha/model/models/lasso_model.py#L13-L140)
 
 **章节来源**
-- [vnpy/alpha/model/template.py](file://vnpy/alpha/model/template.py#L9-L31)
-- [vnpy/alpha/model/models/lasso_model.py](file://vnpy/alpha/model/models/lasso_model.py#L40-L111)
+- [vnpy/alpha/model/template.py:9-31](file://vnpy/alpha/model/template.py#L9-L31)
+- [vnpy/alpha/model/models/lasso_model.py:40-111](file://vnpy/alpha/model/models/lasso_model.py#L40-L111)
 
 ### AlphaStrategy：策略模板与交易接口
 - 生命周期回调：on_init/on_bars/on_trade由策略实现，引擎在回测过程中按时间片调用。
@@ -209,13 +232,13 @@ Strat->>Engine : "on_trade() 回调"
 ```
 
 **图示来源**
-- [vnpy/alpha/strategy/template.py](file://vnpy/alpha/strategy/template.py#L74-L132)
-- [vnpy/alpha/strategy/template.py](file://vnpy/alpha/strategy/template.py#L133-L186)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L579-L617)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L619-L708)
+- [vnpy/alpha/strategy/template.py:74-132](file://vnpy/alpha/strategy/template.py#L74-L132)
+- [vnpy/alpha/strategy/template.py:133-186](file://vnpy/alpha/strategy/template.py#L133-L186)
+- [vnpy/alpha/strategy/backtesting.py:579-617](file://vnpy/alpha/strategy/backtesting.py#L579-L617)
+- [vnpy/alpha/strategy/backtesting.py:619-708](file://vnpy/alpha/strategy/backtesting.py#L619-L708)
 
 **章节来源**
-- [vnpy/alpha/strategy/template.py](file://vnpy/alpha/strategy/template.py#L15-L206)
+- [vnpy/alpha/strategy/template.py:15-206](file://vnpy/alpha/strategy/template.py#L15-L206)
 
 ### BacktestingEngine：回测引擎与交易模拟
 - 参数与数据加载：set_parameters设置标的、周期、资金、费率等；load_data按vt_symbol批量加载BarData并建立历史映射。
@@ -246,14 +269,14 @@ BE->>BE : "calculate_result()/calculate_statistics()"
 ```
 
 **图示来源**
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L70-L169)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L170-L226)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L228-L402)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L440-L560)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L709-L722)
+- [vnpy/alpha/strategy/backtesting.py:70-169](file://vnpy/alpha/strategy/backtesting.py#L70-L169)
+- [vnpy/alpha/strategy/backtesting.py:170-226](file://vnpy/alpha/strategy/backtesting.py#L170-L226)
+- [vnpy/alpha/strategy/backtesting.py:228-402](file://vnpy/alpha/strategy/backtesting.py#L228-L402)
+- [vnpy/alpha/strategy/backtesting.py:440-560](file://vnpy/alpha/strategy/backtesting.py#L440-L560)
+- [vnpy/alpha/strategy/backtesting.py:709-722](file://vnpy/alpha/strategy/backtesting.py#L709-L722)
 
 **章节来源**
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
+- [vnpy/alpha/strategy/backtesting.py:22-945](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
 
 ### AlphaLab：数据与资产中心
 - 数据存储：save_bar_data/load_bar_data/load_bar_df支持日线/分钟线Parquet存取与范围过滤。
@@ -262,10 +285,10 @@ BE->>BE : "calculate_result()/calculate_statistics()"
 - 信号/模型/数据集：save/load/remove/list系列方法管理信号表、模型与数据集。
 
 **章节来源**
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L51-L154)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L156-L243)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L245-L347)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L349-L481)
+- [vnpy/alpha/lab.py:51-154](file://vnpy/alpha/lab.py#L51-L154)
+- [vnpy/alpha/lab.py:156-243](file://vnpy/alpha/lab.py#L156-L243)
+- [vnpy/alpha/lab.py:245-347](file://vnpy/alpha/lab.py#L245-L347)
+- [vnpy/alpha/lab.py:349-481](file://vnpy/alpha/lab.py#L349-L481)
 
 ### 演示策略EquityDemoStrategy：多因子信号驱动的多股票多头组合
 - 初始化：记录持有天数，写日志。
@@ -289,20 +312,111 @@ Exec --> End(["等待下一时刻"])
 ```
 
 **图示来源**
-- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L38-L102)
+- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py:38-102](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L38-L102)
 
 **章节来源**
-- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L12-L102)
+- [vnpy/alpha/strategy/strategies/equity_demo_strategy.py:12-102](file://vnpy/alpha/strategy/strategies/equity_demo_strategy.py#L12-L102)
+
+## CZSC技术分析集成
+
+### CzscAnalyzer：缠论分析适配器
+**新增**：CzscAnalyzer是CZSC技术分析框架与Alpha策略模块的核心集成组件，提供高级技术分析能力。
+
+- **核心功能**
+  - **缠论分析**：基于vnpy的BarData，自动维护CZSC分析状态，提供笔、分型、中枢识别。
+  - **走势判断**：根据最近笔的方向判断UP/DOWN/CONSOLIDATION走势类型。
+  - **背驰检测**：基于笔幅度对比检测多头/空头背驰信号。
+  - **中枢分析**：提供中枢上下沿、区间最高最低等关键位置信息。
+  - **通道突破**：检测价格突破中枢上沿（做多）或跌破中枢下沿（做空）信号。
+
+- **关键接口**
+  - `update(bar)`：增量更新K线数据，触发缠论分析更新
+  - `is_ready(min_bars)`：检查数据是否就绪
+  - `get_trend_type()`：获取走势类型
+  - `check_divergence()`：背驰检测
+  - `get_last_zs()`：获取最近中枢信息
+  - `check_upper_break(price)`/`check_lower_break(price)`：通道突破检测
+  - `get_distance_to_lower(price)`：计算到中枢下沿距离百分比
+
+```mermaid
+classDiagram
+class CzscAnalyzer {
++freq : int
++czsc_freq : Freq
++max_count : int
++raw_bars : list[RawBar]
++czsc : Optional[CZSC]
++_bar_count : int
++update(bar)
++is_ready(min_bars)
++get_trend_type()
++check_divergence()
++get_last_zs()
++check_upper_break(price)
++check_lower_break(price)
++get_distance_to_lower(price)
+}
+class CZSC {
++bi_list : list
++fx_list : list
++update(raw_bar)
+}
+CzscAnalyzer --> CZSC : uses
+```
+
+**图示来源**
+- [examples/czsc_strategy/czsc_adapter.py:128-484](file://examples/czsc_strategy/czsc_adapter.py#L128-L484)
+
+**章节来源**
+- [examples/czsc_strategy/czsc_adapter.py:1-494](file://examples/czsc_strategy/czsc_adapter.py#L1-L494)
+
+### CzscMultiTimeframeStrategy：多时间周期交易策略
+**新增**：基于CZSC的多时间周期交易策略，实现了完整的"三级分仓+通道突破+结构性止损"系统。
+
+- **多周期架构**
+  - **5分钟级别**：精确入场/快速出场，承担20%仓位
+  - **30分钟级别**：趋势确认/中级止损，承担30%仓位  
+  - **4小时级别**：大趋势判断/终极止损，承担50%仓位
+
+- **核心交易逻辑**
+  - **入场**：5分钟突破中枢上沿 + 距离4H中枢下沿≤30% + 趋势确认 + 笔方向确认 + 无背驰信号
+  - **出场**：分级出场（5分钟→30分钟→4小时）+ 信号过滤 + 利润锁定 + 主观安全网
+  - **以损定量**：根据价格到各级别中枢下沿距离计算仓位比例
+
+```mermaid
+flowchart TD
+Start(["5分钟K线"]) --> UpdateCZSC["更新CzscAnalyzer(5分钟)"]
+UpdateCZSC --> CheckReady{"数据就绪?"}
+CheckReady -- 否 --> Wait["等待更多K线"]
+CheckReady -- 是 --> CheckSubjective["主观止损检查"]
+CheckSubjective --> CheckUncond["无条件止损(4H下轨)"]
+CheckUncond --> CheckProfitLock["利润锁定检查"]
+CheckProfitLock --> CheckExit5m["5分钟出场检查"]
+CheckExit5m --> CheckEntry["入场信号检测"]
+CheckEntry --> CalcPos["以损定量计算仓位"]
+CalcPos --> ExecuteTrade["执行交易"]
+ExecuteTrade --> UpdateState["更新状态"]
+UpdateState --> End(["等待下一时刻"])
+```
+
+**图示来源**
+- [examples/czsc_strategy/czsc_multi_timeframe_strategy.py:181-285](file://examples/czsc_strategy/czsc_multi_timeframe_strategy.py#L181-L285)
+
+**章节来源**
+- [examples/czsc_strategy/czsc_multi_timeframe_strategy.py:1-518](file://examples/czsc_strategy/czsc_multi_timeframe_strategy.py#L1-L518)
+- [examples/czsc_strategy/README.md:1-194](file://examples/czsc_strategy/README.md#L1-L194)
 
 ## 依赖关系分析
 - 模块内聚与耦合
   - AlphaDataset与各类函数模块（ts/cs/math/ta）解耦，通过DataProxy与表达式接口连接，便于扩展新算子。
   - AlphaModel与AlphaDataset解耦，通过Segment与列名约定进行数据交互。
   - BacktestingEngine与AlphaStrategy通过策略接口解耦，策略仅依赖信号与下单接口。
+  - **新增**：CzscAnalyzer与CZSC框架解耦，通过适配层提供统一接口，便于策略层使用。
 - 外部依赖
   - Polars用于高性能数据处理与表达式计算。
   - Scipy/TALib用于统计与技术分析。
   - Plotly/alphalens用于可视化与因子分析。
+  - **新增**：CZSC框架提供缠论技术分析能力，包括笔、分型、中枢识别等。
 
 ```mermaid
 graph LR
@@ -319,26 +433,31 @@ LM --> BT
 LAB["lab.py"] --> DT
 LAB --> LM
 LAB --> BT
+CA["CzscAnalyzer"] --> CZSC["CZSC框架"]
+CS["CzscMultiTimeframeStrategy"] --> CA
+BT --> CS
 ```
 
 **图示来源**
-- [vnpy/alpha/dataset/ts_function.py](file://vnpy/alpha/dataset/ts_function.py#L12-L330)
-- [vnpy/alpha/dataset/cs_function.py](file://vnpy/alpha/dataset/cs_function.py#L10-L65)
-- [vnpy/alpha/dataset/math_function.py](file://vnpy/alpha/dataset/math_function.py#L10-L168)
-- [vnpy/alpha/dataset/ta_function.py](file://vnpy/alpha/dataset/ta_function.py#L24-L44)
-- [vnpy/alpha/dataset/utility.py](file://vnpy/alpha/dataset/utility.py#L203-L255)
-- [vnpy/alpha/dataset/template.py](file://vnpy/alpha/dataset/template.py#L23-L306)
-- [vnpy/alpha/model/template.py](file://vnpy/alpha/model/template.py#L9-L31)
-- [vnpy/alpha/model/models/lasso_model.py](file://vnpy/alpha/model/models/lasso_model.py#L40-L111)
-- [vnpy/alpha/strategy/template.py](file://vnpy/alpha/strategy/template.py#L15-L206)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L20-L481)
+- [vnpy/alpha/dataset/ts_function.py:12-330](file://vnpy/alpha/dataset/ts_function.py#L12-L330)
+- [vnpy/alpha/dataset/cs_function.py:10-65](file://vnpy/alpha/dataset/cs_function.py#L10-L65)
+- [vnpy/alpha/dataset/math_function.py:10-168](file://vnpy/alpha/dataset/math_function.py#L10-L168)
+- [vnpy/alpha/dataset/ta_function.py:24-44](file://vnpy/alpha/dataset/ta_function.py#L24-L44)
+- [vnpy/alpha/dataset/utility.py:203-255](file://vnpy/alpha/dataset/utility.py#L203-L255)
+- [vnpy/alpha/dataset/template.py:23-306](file://vnpy/alpha/dataset/template.py#L23-L306)
+- [vnpy/alpha/model/template.py:9-31](file://vnpy/alpha/model/template.py#L9-L31)
+- [vnpy/alpha/model/models/lasso_model.py:40-111](file://vnpy/alpha/model/models/lasso_model.py#L40-L111)
+- [vnpy/alpha/strategy/template.py:15-206](file://vnpy/alpha/strategy/template.py#L15-L206)
+- [vnpy/alpha/strategy/backtesting.py:22-945](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
+- [vnpy/alpha/lab.py:20-481](file://vnpy/alpha/lab.py#L20-L481)
+- [examples/czsc_strategy/czsc_adapter.py:1-494](file://examples/czsc_strategy/czsc_adapter.py#L1-L494)
 
 **章节来源**
-- [vnpy/alpha/dataset/template.py](file://vnpy/alpha/dataset/template.py#L23-L306)
-- [vnpy/alpha/model/template.py](file://vnpy/alpha/model/template.py#L9-L31)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L20-L481)
+- [vnpy/alpha/dataset/template.py:23-306](file://vnpy/alpha/dataset/template.py#L23-L306)
+- [vnpy/alpha/model/template.py:9-31](file://vnpy/alpha/model/template.py#L9-L31)
+- [vnpy/alpha/strategy/backtesting.py:22-945](file://vnpy/alpha/strategy/backtesting.py#L22-L945)
+- [vnpy/alpha/lab.py:20-481](file://vnpy/alpha/lab.py#L20-L481)
+- [examples/czsc_strategy/czsc_adapter.py:1-494](file://examples/czsc_strategy/czsc_adapter.py#L1-L494)
 
 ## 性能考量
 - 特征计算
@@ -350,12 +469,15 @@ LAB --> BT
 - 回测执行
   - 逐时刻回放，订单撮合在K线级别完成，保证时序一致性。
   - 可视化与统计在回测结束后集中计算，避免实时开销。
+- **新增**：CZSC分析性能
+  - CzscAnalyzer使用循环缓存机制，限制内存占用。
+  - 增量更新失败时自动回退到全量重建，保证分析准确性。
+  - 多周期分析独立运行，避免相互干扰。
 - 建议
   - 对高频信号与长序列场景，优先使用Polars表达式而非Python循环。
   - 合理设置并行度与内存阈值，避免进程间争用。
   - 在策略中尽量减少每时刻的IO与全局状态访问。
-
-[本节为通用性能建议，无需特定文件引用]
+  - **新增**：合理设置CzscAnalyzer的max_count参数，平衡内存与分析质量。
 
 ## 故障排查指南
 - 信号缺失
@@ -370,16 +492,21 @@ LAB --> BT
 - 组件过滤异常
   - 现象：成分股过滤后样本过少。
   - 排查：检查load_component_filters生成的时间窗是否正确；确认vt_symbol命名一致性。
+- **新增**：CZSC分析异常
+  - 现象：CzscAnalyzer报错或分析结果异常。
+  - 排查：检查K线数据质量（价格、成交量是否有效）；确认CZSC版本兼容性；检查max_count设置是否过小。
+- **新增**：多周期同步问题
+  - 现象：不同周期分析状态不一致。
+  - 排查：确认BarGenerator配置正确；检查K线时间戳对齐；验证各周期分析器独立运行。
 
 **章节来源**
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L709-L722)
-- [vnpy/alpha/strategy/backtesting.py](file://vnpy/alpha/strategy/backtesting.py#L619-L708)
-- [vnpy/alpha/lab.py](file://vnpy/alpha/lab.py#L301-L347)
+- [vnpy/alpha/strategy/backtesting.py:709-722](file://vnpy/alpha/strategy/backtesting.py#L709-L722)
+- [vnpy/alpha/strategy/backtesting.py:619-708](file://vnpy/alpha/strategy/backtesting.py#L619-L708)
+- [vnpy/alpha/lab.py:301-347](file://vnpy/alpha/lab.py#L301-L347)
+- [examples/czsc_strategy/czsc_adapter.py:170-187](file://examples/czsc_strategy/czsc_adapter.py#L170-L187)
 
 ## 结论
-Alpha策略模块通过清晰的分层设计与强大的特征工程能力，提供了从因子研发到策略回测的一体化方案。策略模板与回测引擎解耦良好，便于快速迭代与扩展。结合演示策略与AlphaLab的数据管理能力，开发者可以高效地完成从概念验证到实盘部署的全流程工作。
-
-[本节为总结性内容，无需特定文件引用]
+Alpha策略模块通过清晰的分层设计与强大的特征工程能力，提供了从因子研发到策略回测的一体化方案。**新增**：CZSC技术分析框架的深度集成进一步增强了策略的技术分析能力，提供了缠论级别的高级分析工具。策略模板与回测引擎解耦良好，便于快速迭代与扩展。结合演示策略、CZSC适配器与AlphaLab的数据管理能力，开发者可以高效地完成从概念验证到实盘部署的全流程工作，特别是在需要复杂技术分析的量化策略开发中。
 
 ## 附录
 
@@ -388,20 +515,46 @@ Alpha策略模块通过清晰的分层设计与强大的特征工程能力，提
 - 适合快速验证因子有效性与信号稳定性。
 
 **章节来源**
-- [vnpy/alpha/dataset/datasets/alpha_101.py](file://vnpy/alpha/dataset/datasets/alpha_101.py#L6-L331)
+- [vnpy/alpha/dataset/datasets/alpha_101.py:6-331](file://vnpy/alpha/dataset/datasets/alpha_101.py#L6-L331)
+
+### CZSC技术分析API参考
+**新增**：CzscAnalyzer提供的完整API接口
+
+- **基础分析**
+  - `update(bar)`：更新K线数据
+  - `is_ready(min_bars)`：检查数据就绪状态
+  - `get_trend_type()`：获取走势类型（UP/DOWN/CONSOLIDATION）
+
+- **背驰检测**
+  - `check_divergence()`：检测背驰信号，返回DivergenceResult
+
+- **中枢分析**
+  - `get_last_zs()`：获取最近中枢信息，返回ZSInfo
+  - `get_last_bi_direction()`：获取最后一笔方向
+  - `get_last_fx()`：获取最近分型
+
+- **通道突破**
+  - `check_upper_break(price)`：检测是否突破中枢上沿
+  - `check_lower_break(price)`：检测是否跌破中枢下沿
+  - `get_distance_to_lower(price)`：计算到下轨距离百分比
+
+**章节来源**
+- [examples/czsc_strategy/czsc_adapter.py:81-484](file://examples/czsc_strategy/czsc_adapter.py#L81-L484)
 
 ### 策略开发最佳实践
 - 信号生成
   - 使用表达式语言与DataProxy组合，避免显式循环；必要时使用Polars表达式。
   - 先做横截面标准化与去极值，再做时序标准化，降低异常值影响。
+  - **新增**：结合CZSC技术分析信号，提高信号质量与胜率。
 - 风险管理
   - 设置最小持有期与换仓频率上限，避免过度交易。
   - 控制单合约与总仓位集中度，结合止损/止盈与最大回撤控制。
+  - **新增**：利用CZSC的结构性止损机制，让利润充分奔跑。
 - 回测规范
   - 明确训练/验证/测试划分，避免数据泄露。
   - 使用多折验证与滚动窗口评估，关注稳定性指标。
+  - **新增**：考虑技术分析的冷启动期，合理设置预热K线数量。
 - 实盘部署
   - 将信号表与模型版本化管理，确保可追溯。
   - 建立监控告警与日志审计，定期校准滑点与手续费。
-
-[本节为通用实践建议，无需特定文件引用]
+  - **新增**：监控CZSC分析器的运行状态，及时发现数据异常。
