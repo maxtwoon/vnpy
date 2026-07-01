@@ -1,0 +1,1022 @@
+import sys
+from pathlib import Path
+
+
+DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
+if str(DIAG) not in sys.path:
+    sys.path.insert(0, str(DIAG))
+
+from simnow_daily_monitor import (  # noqa: E402
+    action_recommendation,
+    build_20d_report,
+    build_action_summary,
+    build_thresholds,
+    compare_simnow_replay,
+    evaluate_thresholds,
+    load_json,
+    load_thresholds_config,
+    make_record,
+    normalize_daily_metrics,
+    read_ledger,
+    upsert_ledger,
+    write_20d_markdown,
+)
+from simnow_promotion_decision import decide_promotion, write_report  # noqa: E402
+
+
+def _baseline():
+    return {
+        "candidate": "demo",
+        "portfolio_risk": {
+            "max_single_day_loss_pct": -0.30,
+            "max_drawdown_pct": -1.30,
+            "max_gross_exposure": 0.28,
+            "max_net_exposure": 0.28,
+            "max_both_long_short_symbols": 2,
+            "max_consecutive_loss": {"days": 6, "cumulative_return_pct": -0.07},
+            "symbol_concentration": {"top1_abs_share": 0.45},
+            "strategy_concentration": {"top1_abs_share": 0.66},
+        },
+    }
+
+
+def _events():
+    return {
+        "signals": [{"dt": "2026-06-19 14:30", "symbol": "AP888", "strategy": "二买多头", "operate": "LO"}],
+        "trades": [{"dt": "2026-06-19 15:00", "symbol": "AP888", "strategy": "二买多头", "operate": "LO"}],
+        "positions": [{"dt": "2026-06-19 15:00", "symbol": "AP888", "strategy": "二买多头", "operate": "HOLD"}],
+    }
+
+
+def test_thresholds_warn_before_halt():
+    thresholds = build_thresholds(_baseline())
+    warning_metrics = normalize_daily_metrics({
+        "daily_return_pct": -0.28,
+        "drawdown_pct": -1.0,
+        "gross_exposure": 0.20,
+        "net_exposure": 0.20,
+        "both_long_short_symbols": 1,
+        "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.02},
+        "symbol_concentration": {"top1_abs_share": 0.40},
+        "strategy_concentration": {"top1_abs_share": 0.40},
+    })
+    halted_metrics = dict(warning_metrics, gross_exposure=0.29)
+
+    assert evaluate_thresholds(warning_metrics, thresholds)["status"] == "warning"
+    assert evaluate_thresholds(halted_metrics, thresholds)["status"] == "halt"
+
+
+def test_threshold_config_can_override_baseline(tmp_path):
+    path = tmp_path / "thresholds.json"
+    path.write_text(
+        """
+        {
+          "schema_version": 1,
+          "metrics": {
+            "gross_exposure": {
+              "baseline": 0.5,
+              "warning": 0.4,
+              "halt": 0.5,
+              "direction": "high",
+              "unit": ""
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+    thresholds = load_thresholds_config(path)
+    assert thresholds["gross_exposure"].warning == 0.4
+
+    record = make_record(
+        "2026-06-19",
+        _baseline(),
+        simnow=_events(),
+        replay=_events(),
+        risk={"gross_exposure": 0.45},
+        thresholds=thresholds,
+    )
+    assert record["thresholds"]["status"] == "warning"
+
+
+def test_load_json_accepts_utf8_bom(tmp_path):
+    path = tmp_path / "bom.json"
+    path.write_bytes(b"\xef\xbb\xbf" + b'{"meta":{"replay_available":false}}')
+
+    payload = load_json(path)
+
+    assert payload["meta"]["replay_available"] is False
+
+
+def test_compare_simnow_replay_requires_exact_event_surface_match():
+    assert compare_simnow_replay(_events(), _events())["matched"] is True
+
+    changed = _events()
+    changed["trades"] = []
+    result = compare_simnow_replay(changed, _events())
+    assert result["matched"] is False
+    assert result["details"]["trades"]["missing_in_simnow"]
+
+
+def test_compare_simnow_replay_keeps_unavailable_replay_pending():
+    result = compare_simnow_replay(
+        {"signals": [], "trades": [], "positions": []},
+        {"signals": [], "trades": [], "positions": [], "meta": {"replay_available": False}},
+    )
+    assert result["matched"] is False
+    assert result["reason"] == "replay_unavailable"
+
+
+def test_compare_simnow_replay_uses_specific_unavailable_reason():
+    result = compare_simnow_replay(
+        {"signals": [], "trades": [], "positions": []},
+        {
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "meta": {
+                "replay_available": False,
+                "replay_unavailable_reason": "historical_db_lag",
+            },
+        },
+    )
+    assert result["matched"] is False
+    assert result["reason"] == "historical_db_lag"
+
+
+def test_make_record_classifies_disconnect_empty_snapshot_as_skipped():
+    record = make_record(
+        "2026-06-27",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "disconnect 097"}],
+                "ticks": [],
+                "contracts_count": 0,
+                "accounts": [],
+                "positions": [],
+            },
+        },
+        replay={},
+    )
+
+    assert record["status"] == "skipped"
+    assert record["skip_reason"] == "ctp_disconnect_097_no_snapshot"
+    assert record["consistency"]["reason"] == "ctp_disconnect_097_no_snapshot"
+
+
+def test_make_record_classifies_connected_snapshot_without_ticks_as_skipped():
+    record = make_record(
+        "2026-07-02",
+        _baseline(),
+        simnow={
+            "meta": {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []},
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [],
+                "contracts_count": 100,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+                "subscribed": [{"research_symbol": "AP888"}],
+            },
+        },
+        replay={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "meta": {"replay_available": False, "replay_unavailable_reason": "historical_db_lag"},
+        },
+        kline={"missing_symbols": ["AP888"]},
+    )
+
+    assert record["status"] == "skipped"
+    assert record["skip_reason"] == "simnow_no_ticks"
+    assert record["consistency"]["reason"] == "simnow_no_ticks"
+    assert record["valid_observation"] is False
+
+
+def test_make_record_combines_consistency_threshold_and_attribution():
+    simnow = _events()
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-06-19 14:30", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [{"symbol": "AP888"}],
+    }
+    replay = _events()
+    replay["meta"] = {"replay_available": True}
+    simnow["trades"].append({
+        "dt": "2026-06-19 15:00",
+        "symbol": "SC888",
+        "strategy": "三卖空头 short",
+        "operate": "SC",
+        "pnl_pct": -0.01,
+    })
+    replay["trades"] = list(simnow["trades"])
+    record = make_record(
+        "2026-06-19",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        risk={
+            "daily_return_pct": -0.10,
+            "drawdown_pct": -0.20,
+            "gross_exposure": 0.10,
+            "net_exposure": 0.10,
+            "both_long_short_symbols": 0,
+            "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.01},
+            "symbol_concentration": {"top1_abs_share": 0.20},
+            "strategy_concentration": {"top1_abs_share": 0.20},
+        },
+    )
+
+    assert record["status"] == "pass"
+    assert record["consistency"]["matched"] is True
+    assert record["attribution_watch"]["SC_SHORT"]["count"] == 1
+
+
+def test_make_record_reports_missing_enabled_subscriptions_before_replay_lag():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "meta": {
+                "contract_map": {
+                    "AP888": {"enabled": True},
+                    "SC888": {"enabled": True},
+                    "RB888": {"enabled": False},
+                }
+            },
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+                "subscribed": [{"research_symbol": "SC888"}],
+            },
+        },
+        replay={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "meta": {
+                "replay_available": False,
+                "replay_unavailable_reason": "historical_db_lag",
+            },
+        },
+    )
+
+    assert record["status"] == "pending"
+    assert record["consistency"]["reason"] == "subscription_incomplete"
+    assert record["subscription_coverage"]["missing_symbols"] == ["AP888"]
+
+
+def test_make_record_reports_incomplete_kline_coverage_before_replay_lag():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+            },
+        },
+        replay={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "meta": {
+                "replay_available": False,
+                "replay_unavailable_reason": "historical_db_lag",
+            },
+        },
+        kline={
+            "expected_symbols": ["AP888", "SC888"],
+            "symbols": ["SC888"],
+            "missing_symbols": ["AP888"],
+            "coverage_by_symbol": {
+                "SC888": {
+                    "bars": 1,
+                    "tick_count": 1,
+                    "start_datetime": "2026-07-01 15:00:00",
+                    "end_datetime": "2026-07-01 15:00:00",
+                }
+            },
+        },
+    )
+
+    assert record["status"] == "pending"
+    assert record["consistency"]["reason"] == "kline_coverage_incomplete"
+    assert record["kline_coverage"]["missing_symbols"] == ["AP888"]
+
+
+def test_make_record_reports_too_short_kline_coverage_before_replay_lag():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+            },
+        },
+        replay={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "meta": {
+                "replay_available": False,
+                "replay_unavailable_reason": "historical_db_lag",
+            },
+        },
+        kline={
+            "expected_symbols": ["SC888"],
+            "symbols": ["SC888"],
+            "missing_symbols": [],
+            "short_symbols": ["SC888"],
+            "min_bars_per_symbol": 30,
+            "coverage_by_symbol": {
+                "SC888": {
+                    "bars": 1,
+                    "tick_count": 1,
+                    "start_datetime": "2026-07-01 15:00:00",
+                    "end_datetime": "2026-07-01 15:00:00",
+                }
+            },
+        },
+    )
+
+    assert record["status"] == "pending"
+    assert record["consistency"]["reason"] == "kline_coverage_too_short"
+    assert record["consistency"]["kline_short_symbols"] == ["SC888"]
+
+
+def test_make_record_halts_when_workflow_order_safety_is_breached():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "meta": {
+                "read_only": False,
+                "orders_sent_by_workflow": 1,
+                "workflow_order_actions": [{"symbol": "AP888", "action": "send_order"}],
+            },
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+                "orders": [{"symbol": "AP888"}],
+                "trades": [{"symbol": "AP888"}],
+            },
+        },
+        replay={"signals": [], "trades": [], "positions": [], "meta": {"replay_available": True}},
+    )
+
+    assert record["status"] == "halt"
+    assert record["order_safety"]["status"] == "halt"
+    assert record["order_safety"]["orders_sent_by_workflow"] == 1
+    assert record["order_safety"]["observed_raw_orders"] == 1
+    assert record["order_safety"]["observed_raw_trades"] == 1
+    assert record["consistency"]["reason"] == "workflow_order_safety_breach"
+
+
+def test_make_record_allows_observed_account_orders_when_workflow_is_read_only():
+    simnow = _events()
+    simnow["meta"] = {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []}
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [],
+        "orders": [{"symbol": "AP888"}],
+        "trades": [{"symbol": "AP888"}],
+    }
+    replay = _events()
+    replay["meta"] = {"replay_available": True}
+
+    record = make_record("2026-07-01", _baseline(), simnow=simnow, replay=replay)
+
+    assert record["status"] == "pass"
+    assert record["order_safety"]["status"] == "pass"
+    assert record["order_safety"]["observed_raw_orders"] == 1
+    assert record["order_safety"]["observed_raw_trades"] == 1
+
+
+def test_make_record_marks_only_fully_matched_safe_days_as_valid_observations():
+    simnow = _events()
+    simnow["meta"] = {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []}
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [],
+        "subscribed": [{"research_symbol": "AP888"}],
+    }
+    simnow["meta"]["contract_map"] = {"AP888": {"enabled": True}}
+    replay = _events()
+    replay["meta"] = {"replay_available": True}
+
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        kline={
+            "expected_symbols": ["AP888"],
+            "symbols": ["AP888"],
+            "missing_symbols": [],
+            "short_symbols": [],
+            "min_bars_per_symbol": 30,
+        },
+    )
+
+    assert record["status"] == "pass"
+    assert record["valid_observation"] is True
+
+    record["order_safety"]["status"] = "unknown"
+    record["valid_observation"] = False
+    assert record["valid_observation"] is False
+
+
+def test_20d_report_requires_twenty_clean_days():
+    records = [
+        {
+            "date": f"2026-06-{day:02d}",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        }
+        for day in range(1, 21)
+    ]
+    assert build_20d_report(records)["ready_to_expand"] is True
+
+    records[-1]["thresholds"] = {"status": "halt"}
+    assert build_20d_report(records)["ready_to_expand"] is False
+
+
+def test_20d_report_tracks_pending_skipped_reasons_and_clean_streak(tmp_path):
+    records = [
+        {
+            "date": "2026-06-17",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+        {
+            "date": "2026-06-18",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "replay_unavailable"},
+            "thresholds": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": ["AP888"]},
+            "kline_coverage": {"missing_symbols": ["AP888"], "short_symbols": ["SC888"]},
+        },
+        {
+            "date": "2026-06-19",
+            "status": "skipped",
+            "skip_reason": "holiday",
+            "consistency": {"matched": False},
+            "thresholds": {"status": "pass"},
+        },
+        {
+            "date": "2026-06-22",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+    summary = build_20d_report(records, min_days=5)
+    assert summary["valid_observation_days"] == 2
+    assert summary["pending_days"] == 1
+    assert summary["skipped_days"] == 1
+    assert summary["reason_counts"] == {"holiday": 1, "replay_unavailable": 1}
+    assert summary["last_valid_observation_date"] == "2026-06-22"
+    assert summary["consecutive_clean_days"] == 1
+    assert "need_3_more_valid_observation_days" in summary["promotion_blockers"]
+
+    out = tmp_path / "report.md"
+    write_20d_markdown(summary, out)
+    text = out.read_text(encoding="utf-8")
+    assert "## Status Counts" in text
+    assert "## Pending / Skipped / Risk Reasons" in text
+    assert "| replay_unavailable | 1 |" in text
+    assert "| holiday | 1 |" in text
+    assert "kline_missing" in text
+    assert "kline_short" in text
+    assert "subscription_missing" in text
+    assert "valid_observation_days" in text
+    assert "valid" in text
+    assert "AP888" in text
+    assert "SC888" in text
+
+
+def test_upsert_ledger_replaces_same_date_and_keeps_sorted(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    upsert_ledger(path, {"date": "2026-06-20", "status": "pass", "version": 1})
+    upsert_ledger(path, {"date": "2026-06-19", "status": "pass", "version": 1})
+    upsert_ledger(path, {"date": "2026-06-20", "status": "pass", "version": 2})
+
+    rows = read_ledger(path)
+    assert [row["date"] for row in rows] == ["2026-06-19", "2026-06-20"]
+    assert rows[-1]["version"] == 2
+
+
+def test_promotion_decision_reports_ready_only_when_all_days_pass():
+    records = [
+        {
+            "date": f"2026-06-{day:02d}",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        }
+        for day in range(1, 21)
+    ]
+    summary = decide_promotion(records, min_days=20)
+    assert summary["ready_to_expand"] is True
+    assert summary["promotion_blockers"] == []
+    assert summary["valid_observation_days"] == 20
+    assert summary["last_valid_observation_date"] == "2026-06-20"
+
+
+def test_promotion_decision_reports_blockers_and_writes_markdown(tmp_path):
+    records = [
+        {
+            "date": "2026-06-19",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+        {
+            "date": "2026-06-20",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "replay_unavailable"},
+            "thresholds": {"status": "pass"},
+        },
+    ]
+    summary = decide_promotion(records, min_days=20)
+    assert summary["ready_to_expand"] is False
+    assert "need_19_more_valid_observation_days" in summary["promotion_blockers"]
+    assert "pending_days_present" in summary["promotion_blockers"]
+
+    out = tmp_path / "promotion.md"
+    write_report(summary, out)
+    text = out.read_text(encoding="utf-8")
+    assert "# SimNow 20-Day Promotion Decision" in text
+    assert "Candidate cannot expand yet." in text
+    assert "blocker: pending_days_present" in text
+
+
+def _valid_simnow_and_replay():
+    simnow = _events()
+    simnow["meta"] = {
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+        "workflow_order_actions": [],
+        "contract_map": {"AP888": {"enabled": True}},
+    }
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [],
+        "subscribed": [{"research_symbol": "AP888"}],
+    }
+    replay = _events()
+    replay["meta"] = {"replay_available": True}
+    return simnow, replay
+
+
+def test_action_recommendation_pass_valid_counts_for_20d():
+    simnow, replay = _valid_simnow_and_replay()
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        kline={
+            "expected_symbols": ["AP888"],
+            "symbols": ["AP888"],
+            "missing_symbols": [],
+            "short_symbols": [],
+            "min_bars_per_symbol": 30,
+        },
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "pass"
+    assert rec["reason"] == ""
+    assert rec["severity"] == "ok"
+    assert rec["counts_for_20d"] is True
+    assert "计入 20 日有效观察" in rec["action"]
+
+
+def test_action_recommendation_pass_invalid_lists_gaps():
+    simnow, replay = _valid_simnow_and_replay()
+    # Remove read_only declaration so order_safety is unknown
+    simnow["meta"].pop("read_only")
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        kline={
+            "expected_symbols": ["AP888"],
+            "symbols": ["AP888"],
+            "missing_symbols": [],
+            "short_symbols": [],
+            "min_bars_per_symbol": 30,
+        },
+    )
+    assert record["status"] == "pass"
+    assert record["valid_observation"] is False
+    rec = action_recommendation(record)
+    assert rec["severity"] == "warning"
+    assert rec["counts_for_20d"] is False
+    assert "gate" in rec["action"]
+    assert "order_safety" in rec["action"]
+
+
+def test_action_recommendation_skipped_no_ticks():
+    record = make_record(
+        "2026-07-02",
+        _baseline(),
+        simnow={
+            "meta": {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []},
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [],
+                "contracts_count": 100,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+                "subscribed": [{"research_symbol": "AP888"}],
+            },
+        },
+        replay={"signals": [], "trades": [], "positions": [], "meta": {"replay_available": False}},
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "skipped"
+    assert rec["reason"] == "simnow_no_ticks"
+    assert rec["severity"] == "info"
+    assert rec["counts_for_20d"] is False
+    assert "节假日" in rec["action"] or "非交易时段" in rec["action"]
+
+
+def test_action_recommendation_skipped_disconnect():
+    record = make_record(
+        "2026-06-27",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "disconnect 097"}],
+                "ticks": [],
+                "contracts_count": 0,
+                "accounts": [],
+                "positions": [],
+            },
+        },
+        replay={},
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "skipped"
+    assert rec["reason"] == "ctp_disconnect_097_no_snapshot"
+    assert rec["severity"] == "info"
+    assert "CTP 连接失败" in rec["action"]
+
+
+def test_action_recommendation_pending_historical_db_lag():
+    record = make_record(
+        "2026-06-22",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-06-22 15:00", "symbol": "AP888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+            },
+        },
+        replay={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "meta": {
+                "replay_available": False,
+                "replay_unavailable_reason": "historical_db_lag",
+            },
+        },
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "pending"
+    assert rec["reason"] == "historical_db_lag"
+    assert rec["severity"] == "medium"
+    assert rec["counts_for_20d"] is False
+    assert "历史 DB" in rec["action"] and "backfill" in rec["action"]
+
+
+def test_action_recommendation_pending_subscription_incomplete():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "meta": {
+                "contract_map": {
+                    "AP888": {"enabled": True},
+                    "SC888": {"enabled": True},
+                }
+            },
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+                "subscribed": [{"research_symbol": "SC888"}],
+            },
+        },
+        replay={"signals": [], "trades": [], "positions": [], "meta": {"replay_available": True}},
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "pending"
+    assert rec["reason"] == "subscription_incomplete"
+    assert "AP888" in rec["action"]
+    assert "simnow_contract_map.json" in rec["action"]
+
+
+def test_action_recommendation_pending_kline_coverage_incomplete():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+            },
+        },
+        replay={"signals": [], "trades": [], "positions": [], "meta": {"replay_available": True}},
+        kline={
+            "expected_symbols": ["AP888", "SC888"],
+            "symbols": ["SC888"],
+            "missing_symbols": ["AP888"],
+            "short_symbols": [],
+        },
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "pending"
+    assert rec["reason"] == "kline_coverage_incomplete"
+    assert "AP888" in rec["action"]
+    assert "重新采集" in rec["action"]
+
+
+def test_action_recommendation_pending_kline_coverage_too_short():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+            },
+        },
+        replay={"signals": [], "trades": [], "positions": [], "meta": {"replay_available": True}},
+        kline={
+            "expected_symbols": ["SC888"],
+            "symbols": ["SC888"],
+            "missing_symbols": [],
+            "short_symbols": ["SC888"],
+            "min_bars_per_symbol": 30,
+        },
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "pending"
+    assert rec["reason"] == "kline_coverage_too_short"
+    assert "SC888" in rec["action"]
+    assert "30" in rec["action"]
+    assert "DurationSeconds" in rec["action"]
+
+
+def test_action_recommendation_halt_workflow_order_safety_breach():
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow={
+            "meta": {
+                "read_only": False,
+                "orders_sent_by_workflow": 1,
+                "workflow_order_actions": [{"symbol": "AP888", "action": "send_order"}],
+            },
+            "signals": [],
+            "trades": [],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+            },
+        },
+        replay={"signals": [], "trades": [], "positions": [], "meta": {"replay_available": True}},
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "halt"
+    assert rec["reason"] == "workflow_order_safety_breach"
+    assert rec["severity"] == "critical"
+    assert "停止观察" in rec["action"] and "人工审查" in rec["action"]
+
+
+def test_action_recommendation_halt_threshold_breach_lists_metrics():
+    simnow, replay = _valid_simnow_and_replay()
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        risk={
+            "daily_return_pct": -0.10,
+            "drawdown_pct": -0.20,
+            "gross_exposure": 0.35,
+            "net_exposure": 0.10,
+            "both_long_short_symbols": 0,
+            "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.01},
+            "symbol_concentration": {"top1_abs_share": 0.20},
+            "strategy_concentration": {"top1_abs_share": 0.20},
+        },
+    )
+    assert record["status"] == "halt"
+    assert record["thresholds"]["status"] == "halt"
+    rec = action_recommendation(record)
+    assert rec["severity"] == "critical"
+    assert "gross_exposure" in rec["action"]
+    assert "阈值" in rec["action"]
+
+
+def test_build_action_summary_returns_one_row_per_record():
+    records = [
+        make_record(
+            "2026-06-27",
+            _baseline(),
+            simnow={
+                "signals": [],
+                "trades": [],
+                "positions": [],
+                "risk": {},
+                "raw": {
+                    "logs": [{"msg": "disconnect 097"}],
+                    "ticks": [],
+                    "contracts_count": 0,
+                    "accounts": [],
+                    "positions": [],
+                },
+            },
+            replay={},
+        ),
+        make_record(
+            "2026-07-01",
+            _baseline(),
+            simnow={
+                "signals": [],
+                "trades": [],
+                "positions": [],
+                "risk": {},
+                "raw": {
+                    "logs": [{"msg": "connected"}],
+                    "ticks": [{"dt": "2026-07-01 15:00", "symbol": "SC888"}],
+                    "contracts_count": 1,
+                    "accounts": [{"accountid": "demo"}],
+                    "positions": [],
+                },
+            },
+            replay={
+                "signals": [],
+                "trades": [],
+                "positions": [],
+                "meta": {
+                    "replay_available": False,
+                    "replay_unavailable_reason": "historical_db_lag",
+                },
+            },
+        ),
+    ]
+    summary = build_action_summary(records)
+    assert len(summary) == 2
+    assert {row["date"] for row in summary} == {"2026-06-27", "2026-07-01"}
+    assert summary[0]["date"] == "2026-06-27"
+    for row in summary:
+        assert set(row.keys()) >= {"date", "status", "reason", "severity", "action", "counts_for_20d"}
+
+
+def test_write_20d_markdown_includes_action_summary(tmp_path):
+    records = [
+        {
+            "date": "2026-06-27",
+            "status": "skipped",
+            "skip_reason": "ctp_disconnect_097_no_snapshot",
+            "consistency": {"matched": False},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-07-01",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "kline_coverage_incomplete", "kline_missing_symbols": ["AP888"]},
+            "thresholds": {"status": "pass"},
+            "kline_coverage": {"missing_symbols": ["AP888"], "short_symbols": []},
+            "valid_observation": False,
+        },
+    ]
+    summary = build_20d_report(records, min_days=2)
+    out = tmp_path / "report.md"
+    write_20d_markdown(summary, out)
+    text = out.read_text(encoding="utf-8")
+    assert "## Action Summary" in text
+    assert "| date | status | reason | severity | action | counts_for_20d |" in text
+    assert "ctp_disconnect_097_no_snapshot" in text
+    assert "kline_coverage_incomplete" in text
+    assert "AP888" in text
