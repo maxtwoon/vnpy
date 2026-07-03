@@ -45,6 +45,15 @@ Produce a design document that specifies phased remediation for:
 
 Read this file and `docs/design/a34-audit-remediation-roadmap.md` before writing code.
 
+Review findings from Codex on 2026-07-04:
+
+1. Phase 1 / M1 passed verification: `audit_issue_diagnostics_2026-07-03.json` now reports M1 `status=ok`, `consistent=True`, `conflicts=[]`; `BacktestEngine` and `Position` defaults resolve to `BACKTEST_CONFIG`; targeted tests and preflight pass.
+2. Phase 2 is incomplete: new audit diagnostics mark H1 as `research_only=True` and `is_promotion_evidence=False`, but existing historical final-candidate reports are still not declassified. In particular:
+   - `examples/czsc_strategy/diagnostics/portfolio_goal_expanded_short_sc_0847.md` still contains `**GOAL PASSED: `True`**`.
+   - `examples/czsc_strategy/diagnostics/sc_short_weight_neighborhood_final_candidate.md` still presents the `0.847` row as `pass=True` without a research-only / not-promotion-evidence warning.
+   - `examples/czsc_strategy/diagnostics/platform_optimization_round2.md` and `platform_optimization_round8.md` still show `0.847` pass rows without the Phase 2 declassification metadata.
+3. Do not tune parameters or regenerate a new passing candidate. The required fix is to mark these historical artifacts as research-only / not promotion evidence, preserve them as negative/contaminated evidence, and ensure future generators emit the same metadata.
+
 Implementation guardrails:
 
 - Start with Phase 1 and Phase 2 only. Do not implement Phase 3-5 until Phase 1-2 pass review.
@@ -69,6 +78,10 @@ Implementation guardrails:
 | 2026-07-03 | kimi-code -> codex | dev -> review | A33 evidence closure implemented |
 | 2026-07-03 | codex -> codex | review -> done | A33 review passed: H3 signal-history replay and H4 DB metadata evidence verified |
 | 2026-07-04 | codex -> claude-code | done -> design | A34 remediation roadmap started |
+| 2026-07-04 | claude-code -> kimi-code | design -> dev | A34 design complete: audit remediation roadmap |
+| 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
+| 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: A34 Phase 2 incomplete: historical final-candidate reports still show GOAL PASSED/0.847 pass without research-only declassification |
+| 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
 
 ## 交接历史
 
@@ -76,3 +89,5 @@ Implementation guardrails:
 |------|---------|----------|------|
 | 2026-07-04 | claude-code → kimi-code | design → dev | A34 design complete: audit remediation roadmap |
 | 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
+| 2026-07-04 | codex → kimi-code | review → dev | 打回: A34 Phase 2 incomplete: historical final-candidate reports still show GOAL PASSED/0.847 pass without research-only declassification |
+| 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |

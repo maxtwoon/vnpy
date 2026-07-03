@@ -566,3 +566,47 @@ def test_resolve_db_path_explicit_nonexistent_wins(tmp_path, monkeypatch):
     env_path.touch()
     monkeypatch.setenv("CHAN_SQLITE_DB_PATH", str(env_path))
     assert _resolve_db_path(str(explicit)) == explicit
+
+
+def test_historical_reports_are_declassified():
+    from declassify_historical_reports import DECLASSIFY_MARKER, find_candidate_reports
+
+    candidates = find_candidate_reports(DIAG)
+    if not candidates:
+        pytest.skip("no historical reports present in this checkout")
+    missing = [
+        p.name
+        for p in candidates
+        if DECLASSIFY_MARKER not in p.read_text(encoding="utf-8")
+    ]
+    assert not missing, f"historical reports missing declassification: {missing}"
+
+
+def test_declassify_file_is_idempotent(tmp_path):
+    from declassify_historical_reports import DECLASSIFY_MARKER, build_banner, declassify_file
+
+    report = tmp_path / "test_report.md"
+    report.write_text(
+        "# Test Report\n\n| multiplier | pass |\n|---:|---|\n| 0.847 | True |\n",
+        encoding="utf-8",
+    )
+    banner = build_banner()
+    assert declassify_file(report, banner=banner) is True
+    text = report.read_text(encoding="utf-8")
+    assert DECLASSIFY_MARKER in text
+    assert text.count(DECLASSIFY_MARKER) == 1
+    assert declassify_file(report, banner=banner) is False
+    assert report.read_text(encoding="utf-8").count(DECLASSIFY_MARKER) == 1
+
+
+def test_find_candidate_reports_skips_logs_and_audit_diagnostics(tmp_path):
+    from declassify_historical_reports import find_candidate_reports
+
+    (tmp_path / "WORK_LOG.md").write_text("0.847 GOAL PASSED", encoding="utf-8")
+    (tmp_path / "ACCEPTANCE.md").write_text("0.847 GOAL PASSED", encoding="utf-8")
+    (tmp_path / "audit_issue_diagnostics_2026-07-03.md").write_text(
+        "0.847 GOAL PASSED", encoding="utf-8"
+    )
+    (tmp_path / "candidate.md").write_text("0.847 pass", encoding="utf-8")
+    found = find_candidate_reports(tmp_path)
+    assert [p.name for p in found] == ["candidate.md"]
