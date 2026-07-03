@@ -56,3 +56,47 @@ examples/czsc_strategy/diagnostics/simnow_report_*.md
 examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md
 examples/czsc_strategy/diagnostics/simnow_observation_ledger.jsonl
 examples/czsc_strategy/diagnostics/simnow_20d_observation_report.md
+
+# Python cache
+__pycache__/
+
+# Local coverage / mutation testing artifacts
+.coverage
+cosmic-ray.sqlite
+
+# External skill package (extracted archive left locally)
+ai-stock-trading-reviewer.zip
+ai-stock-trading-reviewer/
+
+# Generated diagnostic artifacts (keep only workflow docs/configs)
+examples/czsc_strategy/diagnostics/*.json
+!examples/czsc_strategy/diagnostics/simnow_connection_config.example.json
+!examples/czsc_strategy/diagnostics/simnow_contract_map.json
+!examples/czsc_strategy/diagnostics/simnow_risk_thresholds.json
+!examples/czsc_strategy/diagnostics/platform_base_block1buy_sc075_config.json
+!examples/czsc_strategy/diagnostics/platform_final_candidate_config.json
+examples/czsc_strategy/diagnostics/*.md
+!examples/czsc_strategy/diagnostics/AUTOMATION_PROMPT.md
+!examples/czsc_strategy/diagnostics/ACCEPTANCE.md
+!examples/czsc_strategy/diagnostics/NEXT_WORK.md
+!examples/czsc_strategy/diagnostics/WORK_LOG.md
+!examples/czsc_strategy/diagnostics/simnow_daily_observation_workflow.md
+!examples/czsc_strategy/diagnostics/simnow_connection_probe.md
+!examples/czsc_strategy/diagnostics/simnow_candidate_v1_monitoring.md
+!examples/czsc_strategy/diagnostics/simnow_candidate_v1_robustness_summary.md
+examples/czsc_strategy/diagnostics/*.txt
+examples/czsc_strategy/diagnostics/*.jsonl
+examples/czsc_strategy/diagnostics/signal_history_*.json
+
+# Cached market data
+docs/chanlunnew/codex_chan_audit_pack/expected_outputs/
+docs/chanlunnew/codex_chan_audit_pack/payload/
+docs/chanlunnew/*.pdf
+examples/czsc_strategy/data_cache/*.csv
+examples/czsc_strategy/skill_build/corpus/
+examples/czsc_strategy/skill_build/mapping/*.json
+examples/czsc_strategy/skill_build/mapping/*.jsonl
+examples/czsc_strategy/skill_build/reports/*.jsonl
+examples/czsc_strategy/skill_build/reports/*.json
+examples/czsc_strategy/skill_build/sh000001_daily.csv
+examples/czsc_strategy/skill_build/llm_eval_config.json
