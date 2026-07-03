@@ -100,3 +100,6 @@ examples/czsc_strategy/skill_build/reports/*.jsonl
 examples/czsc_strategy/skill_build/reports/*.json
 examples/czsc_strategy/skill_build/sh000001_daily.csv
 examples/czsc_strategy/skill_build/llm_eval_config.json
+
+# Ignore entire diagnostics directory
+examples/czsc_strategy/diagnostics/
