@@ -1,0 +1,22 @@
+# .synccheck.yml — 本目录（examples/czsc_strategy）作为独立工作流的"仓库根"。
+# 说明：上游 vnpy 仓库不纳入治理范围；sync_check/handoff 均以本目录为 --root 运行。
+
+version_source: VERSION::          # 纯文本单一真相（本子项目无包管理文件）
+
+must_match: []                     # 目前无第二处版本副本；新增硬编码副本时必须登记到此处
+
+changelog:
+  file: CHANGELOG.md               # 必须含当前版本条目
+
+archive_dir: diagnostics/archive/  # 历史诊断文档归档区（缺失仅 WARN）
+
+allow_history_notes: true          # 行尾加 "synccheck:ignore" 可豁免版本扫描（沿革注释等）
+
+handoff:
+  file: HANDOFF.md
+  stages: [design, dev, review, done]
+  owners:                          # 阶段 → 接棒者；推进阶段忘改 owner 会被门禁拦下
+    design: claude-cowork
+    dev: code-agent
+    review: claude-cowork
+  # commands 未配置：本流水线由人工/agent 自触发（handoff.py next / reject）

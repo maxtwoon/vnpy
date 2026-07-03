@@ -23,6 +23,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "czsc==0.9.51",
     "tzlocal>=5.3.1",
     "PySide6==6.8.2.1",
     "pyqtgraph>=0.13.7",
@@ -56,7 +57,14 @@ dev = [
     "scipy-stubs>=1.16.3.0",
     "hatchling>=1.27.0",
     "babel>=2.17.0",
+    "cosmic-ray>=8.4.6",
+    "mutmut>=3.6.0",
 ]
+
+[tool.mutmut]
+paths_to_mutate = ["examples/czsc_strategy/chan_strategy"]
+tests_dir = ["examples/czsc_strategy/tests/unit"]
+runner = "pytest examples/czsc_strategy/tests/unit -q"
 
 [project.urls]
 "Homepage" = "https://www.vnpy.com"

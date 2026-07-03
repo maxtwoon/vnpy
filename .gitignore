@@ -41,3 +41,18 @@ _templates
 # Alpha
 lab/
 /.mypy_cache
+
+# SimNow private configs and local observation artifacts
+examples/czsc_strategy/diagnostics/simnow_connection_config.json
+examples/czsc_strategy/diagnostics/simnow_connection_config_*.json
+examples/czsc_strategy/diagnostics/simnow_connection_probe_report*.json
+examples/czsc_strategy/diagnostics/simnow_export_*.json
+examples/czsc_strategy/diagnostics/simnow_replay_*.json
+examples/czsc_strategy/diagnostics/simnow_replay_readiness_*.json
+examples/czsc_strategy/diagnostics/simnow_backfill_plan*.json
+examples/czsc_strategy/diagnostics/simnow_kline_update_*.json
+examples/czsc_strategy/diagnostics/simnow_record_*.json
+examples/czsc_strategy/diagnostics/simnow_report_*.md
+examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md
+examples/czsc_strategy/diagnostics/simnow_observation_ledger.jsonl
+examples/czsc_strategy/diagnostics/simnow_20d_observation_report.md

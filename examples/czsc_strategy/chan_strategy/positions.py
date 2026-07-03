@@ -1,0 +1,1363 @@
+"""
+缠论择时策略 - Factor/Event/Position 子策略层
+
+架构: Signal → Factor → Event → Position
+使用自定义轻量实现，兼容 czsc 框架的 dict 配置格式
+"""
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Tuple
+from enum import Enum
+from datetime import datetime
+
+from czsc.objects import Direction
+
+from chan_strategy.config import STRATEGY_CONFIG
+
+
+def _daily_trend_filter_signals(direction: str = "long", strict: bool = True) -> dict:
+    """日线趋势过滤信号
+
+    在开仓 Event 的 signals_all/signals_not 中显式引用日线键，
+    使 positions.py 成为日线趋势过滤的直接消费方。
+
+    :param direction: long 使用向上趋势过滤；short 使用向下趋势过滤。
+    :param strict: 是否要求日线方向同向。二买/三买/二卖/三卖属于右侧顺势信号，
+        使用严格过滤；一买/一卖是左侧背驰试仓，只排除高级别明确反向。
+    """
+    if direction not in {"long", "short"}:
+        raise ValueError(f"不支持的日线过滤方向: {direction}")
+    trend = "向上" if direction == "long" else "向下"
+    blocked_position = "中枢下方" if direction == "long" else "中枢上方"
+    return {
+        "signals_all": [
+            f"日线_D1BI_方向V260615_{trend}_任意_任意_0",
+        ] if strict else [],
+        "signals_not": [
+            f"日线_D1ZS_位置V260615_{blocked_position}_任意_任意_0",
+        ],
+    }
+
+
+# ========== 轻量级自定义实现 ==========
+
+class Operate(Enum):
+    """操作类型"""
+    LO = "开多"   # Long Open
+    LC = "平多"   # Long Close
+    SO = "开空"   # Short Open
+    SC = "平空"   # Short Close
+    HO = "持有"   # Hold
+
+
+@dataclass
+class Signal:
+    """信号对象"""
+    value: str  # 完整信号字符串 k1_k2_k3_v1_v2_v3_score
+
+    @property
+    def key(self) -> str:
+        parts = self.value.split("_")
+        return f"{parts[0]}_{parts[1]}_{parts[2]}"
+
+    @property
+    def signal_value(self) -> str:
+        parts = self.value.split("_")
+        return f"{parts[3]}_{parts[4]}_{parts[5]}_{parts[6]}"
+
+    def is_match(self, signals_dict: dict) -> bool:
+        """检查信号是否匹配当前信号字典"""
+        key = self.key
+        if key not in signals_dict:
+            return False
+        # 检查值匹配（支持"任意"通配）
+        expected_parts = self.signal_value.split("_")
+        actual_parts = signals_dict[key].split("_")
+        for exp, act in zip(expected_parts[:3], actual_parts[:3]):
+            if exp != "任意" and exp != act:
+                return False
+        return True
+
+
+@dataclass
+class Factor:
+    """因子 - 信号的组合"""
+    name: str
+    signals_all: List[Signal] = field(default_factory=list)
+    signals_any: List[Signal] = field(default_factory=list)
+    signals_not: List[Signal] = field(default_factory=list)
+
+    def is_match(self, signals_dict: dict) -> bool:
+        """检查因子是否匹配"""
+        # all 条件必须全部满足
+        if self.signals_all:
+            if not all(s.is_match(signals_dict) for s in self.signals_all):
+                return False
+        # any 条件至少满足一个
+        if self.signals_any:
+            if not any(s.is_match(signals_dict) for s in self.signals_any):
+                return False
+        # not 条件必须全部不满足
+        if self.signals_not:
+            if any(s.is_match(signals_dict) for s in self.signals_not):
+                return False
+        return True
+
+    @classmethod
+    def load(cls, config: dict) -> 'Factor':
+        return cls(
+            name=config.get("name", ""),
+            signals_all=[Signal(s) for s in config.get("signals_all", [])],
+            signals_any=[Signal(s) for s in config.get("signals_any", [])],
+            signals_not=[Signal(s) for s in config.get("signals_not", [])],
+        )
+
+
+@dataclass
+class Event:
+    """事件 - Factor组合 + 操作"""
+    name: str
+    operate: Operate
+    factors: List[Factor] = field(default_factory=list)
+    signals_all: List[Signal] = field(default_factory=list)
+    signals_any: List[Signal] = field(default_factory=list)
+    signals_not: List[Signal] = field(default_factory=list)
+
+    def is_match(self, signals_dict: dict) -> bool:
+        """检查事件是否触发"""
+        # 事件级别的信号条件
+        if self.signals_all:
+            if not all(s.is_match(signals_dict) for s in self.signals_all):
+                return False
+        if self.signals_any:
+            if not any(s.is_match(signals_dict) for s in self.signals_any):
+                return False
+        if self.signals_not:
+            if any(s.is_match(signals_dict) for s in self.signals_not):
+                return False
+
+        # 至少一个因子满足
+        if self.factors:
+            return any(f.is_match(signals_dict) for f in self.factors)
+        return True
+
+    @classmethod
+    def load(cls, config: dict) -> 'Event':
+        operate_map = {
+            "开多": Operate.LO, "平多": Operate.LC,
+            "开空": Operate.SO, "平空": Operate.SC,
+        }
+        return cls(
+            name=config.get("name", ""),
+            operate=operate_map.get(config.get("operate", ""), Operate.HO),
+            factors=[Factor.load(f) for f in config.get("factors", [])],
+            signals_all=[Signal(s) for s in config.get("signals_all", [])],
+            signals_any=[Signal(s) for s in config.get("signals_any", [])],
+            signals_not=[Signal(s) for s in config.get("signals_not", [])],
+        )
+
+
+@dataclass
+class TradeRecord:
+    """交易记录"""
+    dt: datetime
+    operate: Operate
+    price: float
+    volume: float = 1.0
+    reason: str = ""
+
+
+REASON_CODE_MAP = {
+    "移动止损": "trailing_stop",
+    "绉诲姩姝㈡崯": "trailing_stop",
+    "止损": "stop_loss",
+    "姝㈡崯": "stop_loss",
+    "超时": "timeout",
+    "瓒呮椂": "timeout",
+}
+
+
+def normalize_exit_reason(reason: str) -> str:
+    """Normalize human-readable exit reason to a stable enum-like code."""
+    if reason in REASON_CODE_MAP:
+        return REASON_CODE_MAP[reason]
+    if reason.startswith("信号平仓") or reason.startswith("淇″彿骞仓"):
+        return "signal_exit"
+    if "风控" in reason or "风险" in reason:
+        return "risk_exit"
+    if reason:
+        return "other"
+    return "unknown"
+
+
+def _research_symbol_key(symbol: str) -> str:
+    """Normalize symbol for research-only per-symbol config maps."""
+    return str(symbol or "").upper().split(".")[0]
+
+
+def _research_trailing_params(symbol: str) -> tuple[int, float]:
+    """Return trailing params, optionally overridden per symbol for diagnostics."""
+    overrides = STRATEGY_CONFIG.get("trailing_overrides") or {}
+    item = overrides.get(_research_symbol_key(symbol), None)
+    if isinstance(item, dict):
+        return (
+            item.get("trailing_start_bp", STRATEGY_CONFIG.get("trailing_start_bp", 300)),
+            item.get("trailing_drawback_pct", STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25)),
+        )
+    if isinstance(item, (list, tuple)) and len(item) == 2:
+        return item[0], item[1]
+    return (
+        STRATEGY_CONFIG.get("trailing_start_bp", 300),
+        STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25),
+    )
+
+
+def _research_second_buy_allowed(symbol: str, buy1_anchor: Optional[dict], execution_price: Optional[float]) -> bool:
+    """Research-only gate for second-buy opens; defaults to allowing all symbols."""
+    enabled = STRATEGY_CONFIG.get("enable_2buy_symbols")
+    if enabled is not None:
+        enabled_keys = {_research_symbol_key(x) for x in enabled}
+        if _research_symbol_key(symbol) not in enabled_keys:
+            return False
+
+    max_entry = STRATEGY_CONFIG.get("max_2buy_entry_vs_anchor_pct")
+    if max_entry is not None and buy1_anchor and buy1_anchor.get("price") and execution_price:
+        entry_vs_anchor = execution_price / buy1_anchor["price"] - 1
+        if entry_vs_anchor > max_entry + 1e-12:
+            return False
+
+    return True
+
+
+def _research_first_buy_allowed(symbol: str, signals_dict: dict) -> bool:
+    """Research-only gate for first-buy opens; defaults to allowing all symbols."""
+    enabled = STRATEGY_CONFIG.get("enable_1buy_symbols")
+    if enabled is not None:
+        enabled_keys = {_research_symbol_key(x) for x in enabled}
+        if _research_symbol_key(symbol) not in enabled_keys:
+            return False
+
+    daily_direction = signals_dict.get("日线_D1BI_方向V260615", "")
+    daily_position = signals_dict.get("日线_D1ZS_位置V260615", "")
+
+    if STRATEGY_CONFIG.get("block_1buy_daily_down") and daily_direction.startswith("向下"):
+        return False
+    if STRATEGY_CONFIG.get("block_1buy_daily_not_up") and not daily_direction.startswith("向上"):
+        return False
+    if STRATEGY_CONFIG.get("block_1buy_daily_below_zs") and daily_position.startswith("中枢下方"):
+        return False
+    return True
+
+
+class Position:
+    """
+    持仓子策略
+
+    【仓位模式说明】
+    当前为"信号研究模式"：
+    - pos 只表示方向: 1=持有多头, -1=持有空头, 0=空仓
+    - volume 恒为 1 手（不计算实际手数）
+    - 盈亏以百分比(pnl_pct)记录，不涉及合约乘数或资金管理
+    - 实际资金加权在 BacktestEngine 的权益曲线中完成（事后加权）
+
+    这种设计适用于:
+    - 信号验证阶段：验证买卖点信号是否有效
+    - 策略研究阶段：评估策略的方向判断能力
+    - 参数优化阶段：快速迭代无需精确资金建模
+
+    如需升级为"资金管理模式"（实盘/仿真前）：
+    - 需添加 capital_per_unit、contract_multiplier 参数
+    - volume 应基于 capital * weight / (price * multiplier) 动态计算
+    - 需实现资金上限检查和复利再投资逻辑
+
+    支持移动止损（trailing stop）机制
+    """
+
+    def __init__(
+        self,
+        name: str,
+        symbol: str,
+        opens: List[Event],
+        exits: List[Event] = None,
+        interval: int = 0,
+        timeout: int = 1000,
+        stop_loss: int = 1000,
+        trailing_start: int = 150,           # 启动移动止损的盈利阈值(BP) 1.5%
+        trailing_drawback_pct: float = 0.4,  # 移动止损回撤容忍比例(40%=从最高回撤40%平仓)
+        T0: bool = False,
+        commission_rate: float = 0.0001,     # 手续费率(万一)
+        slippage: float = 0.0005,            # 滑点(0.05%)
+    ):
+        self.name = name
+        self.symbol = symbol
+        self.opens = opens
+        self.exits = exits or []
+        self.interval = interval  # 同类开仓间隔（秒）
+        # timeout 按交易周期 bar 计数；当前交易周期为 30 分钟
+        self.timeout = timeout    # 超时K线数（交易周期级别，如 600 根 30 分钟 K 线 ≈ 12.5 个交易日）
+        self.stop_loss = stop_loss  # 止损BP (1BP=0.01%)
+        self.trailing_start = trailing_start  # 移动止损启动阈值(BP)
+        self.trailing_drawback_pct = trailing_drawback_pct  # 移动止损回撤容忍比例
+        self.T0 = T0
+        self.commission_rate = commission_rate
+        self.slippage = slippage
+
+        # 运行状态
+        self.pos = 0  # 当前仓位
+        self.cost = 0.0  # 持仓成本
+        self.bars_since_open = 0  # 开仓后经过的K线数
+        self.last_open_dt = None  # 最后开仓时间
+        self.trades: List[TradeRecord] = []  # 交易记录
+        self.pairs: List[dict] = []  # 配对交易
+
+        # 移动止损状态
+        self.max_profit_bp = 0  # 持仓期间最大盈利(BP)
+        self.trailing_active = False  # 移动止损是否激活
+
+    def update(self, signals_dict: dict, price: float, dt: datetime,
+               bar_count: int = 1, execution_price: float = None):
+        """
+        根据当前信号更新持仓状态
+
+        :param signals_dict: 当前信号字典
+        :param price: 当前价格（用于风控检查和未实现盈亏）
+        :param dt: 当前时间
+        :param bar_count: K线计数增量
+        :param execution_price: 信号驱动交易的成交价（延迟成交时为下一根开盘价）
+                                如果为None，则使用price作为成交价（向后兼容）
+        """
+        trade_price = execution_price if execution_price is not None else price
+        operate, event_name = self._get_operate(signals_dict, price, dt)
+
+        if operate == Operate.LO and self.pos == 0:
+            self._open_long(trade_price, dt, event_name)
+        elif operate == Operate.LC and self.pos > 0:
+            self._close_long(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
+        elif operate == Operate.SO and self.pos == 0:
+            self._open_short(trade_price, dt, event_name)
+        elif operate == Operate.SC and self.pos < 0:
+            self._close_short(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
+
+        # 更新K线计数和移动止损
+        if self.pos != 0:
+            self.bars_since_open += bar_count
+
+            # 更新最大盈利追踪（用实际价格，非成交价）
+            self._update_trailing(price)
+
+            # 检查移动止损（优先级最高）- 风控用当前价格立即执行
+            if self._check_trailing_stop(price):
+                if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                    self._close_long(price, dt, "移动止损")
+                elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                    self._close_short(price, dt, "移动止损")
+            # 检查固定止损 - 风控用当前价格立即执行
+            elif self._check_stop_loss(price):
+                if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                    self._close_long(price, dt, "止损")
+                elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                    self._close_short(price, dt, "止损")
+            # 检查超时 - 风控立即执行
+            elif self.bars_since_open >= self.timeout:
+                if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                    self._close_long(price, dt, "超时")
+                elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                    self._close_short(price, dt, "超时")
+
+    def _get_operate(self, signals_dict: dict, price: float, dt: datetime) -> Tuple[Optional[Operate], str]:
+        """获取当前应执行的操作"""
+        # 先检查平仓事件（优先级高）
+        if self.pos != 0:
+            for event in self.exits:
+                if event.is_match(signals_dict):
+                    if self.pos > 0:
+                        return Operate.LC, event.name  # 返回操作和事件名
+                    elif self.pos < 0:  # pragma: no branch - position sign is fixed entering this block
+                        return Operate.SC, event.name
+
+        # 再检查开仓事件
+        if self.pos == 0:
+            # 检查开仓间隔
+            if self.last_open_dt and self.interval > 0:
+                elapsed = (dt - self.last_open_dt).total_seconds()
+                if elapsed < self.interval:
+                    return None, ""
+
+            for event in self.opens:
+                if event.is_match(signals_dict):
+                    return event.operate, event.name
+
+        return None, ""
+
+    def _update_trailing(self, price: float):
+        """更新移动止损追踪"""
+        if self.cost == 0:
+            return
+        if self.pos > 0:
+            profit_bp = (price - self.cost) / self.cost * 10000
+        elif self.pos < 0:
+            profit_bp = (self.cost - price) / self.cost * 10000
+        else:
+            return
+
+        if profit_bp > self.max_profit_bp:
+            self.max_profit_bp = profit_bp
+
+        # 激活移动止损
+        if self.max_profit_bp >= self.trailing_start:
+            self.trailing_active = True
+
+    def _check_trailing_stop(self, price: float) -> bool:
+        """检查是否触发移动止损（百分比回撤）"""
+        if not self.trailing_active or self.cost == 0:
+            return False
+
+        if self.pos > 0:
+            profit_bp = (price - self.cost) / self.cost * 10000
+        elif self.pos < 0:
+            profit_bp = (self.cost - price) / self.cost * 10000
+        else:
+            return False
+
+        # 从最高盈利回撤超过 max_profit * drawback_pct 则触发
+        # 例如: 最高盈利300BP, 回撤容忍40%, 则回撤120BP即平仓
+        drawback = self.max_profit_bp - profit_bp
+        tolerance = self.max_profit_bp * self.trailing_drawback_pct
+        return drawback >= tolerance
+
+    def _check_stop_loss(self, price: float) -> bool:
+        """检查是否触发固定止损"""
+        if self.cost == 0:
+            return False
+        if self.pos > 0:
+            loss_bp = (self.cost - price) / self.cost * 10000
+            return loss_bp >= self.stop_loss
+        elif self.pos < 0:
+            loss_bp = (price - self.cost) / self.cost * 10000
+            return loss_bp >= self.stop_loss
+        return False
+
+    def _open_long(self, price: float, dt: datetime, reason: str = "开多"):
+        self.pos = 1
+        self.cost = price
+        self.bars_since_open = 0
+        self.last_open_dt = dt
+        self.max_profit_bp = 0
+        self.trailing_active = False
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, reason=reason))
+
+    def _close_long(self, price: float, dt: datetime, reason: str = ""):
+        gross_pnl = (price - self.cost) / self.cost
+        transaction_cost = 2 * self.commission_rate + self.slippage  # 开平两次手续费 + 滑点
+        pnl = gross_pnl - transaction_cost
+        self.pairs.append({
+            "open_dt": self.last_open_dt,
+            "close_dt": dt,
+            "open_price": self.cost,
+            "close_price": price,
+            "pnl_pct": pnl,
+            "bars_held": self.bars_since_open,
+            "reason": reason,
+            "reason_code": normalize_exit_reason(reason),
+        })
+        self.pos = 0
+        self.cost = 0
+        self.bars_since_open = 0
+        self.max_profit_bp = 0
+        self.trailing_active = False
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, reason=reason))
+
+    def _open_short(self, price: float, dt: datetime, reason: str = "开空"):
+        self.pos = -1
+        self.cost = price
+        self.bars_since_open = 0
+        self.last_open_dt = dt
+        self.max_profit_bp = 0
+        self.trailing_active = False
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, reason=reason))
+
+    def _close_short(self, price: float, dt: datetime, reason: str = ""):
+        gross_pnl = (self.cost - price) / self.cost
+        transaction_cost = 2 * self.commission_rate + self.slippage
+        pnl = gross_pnl - transaction_cost
+        self.pairs.append({
+            "open_dt": self.last_open_dt,
+            "close_dt": dt,
+            "open_price": self.cost,
+            "close_price": price,
+            "pnl_pct": pnl,
+            "bars_held": self.bars_since_open,
+            "reason": reason,
+            "reason_code": normalize_exit_reason(reason),
+        })
+        self.pos = 0
+        self.cost = 0
+        self.bars_since_open = 0
+        self.max_profit_bp = 0
+        self.trailing_active = False
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, reason=reason))
+
+    def evaluate(self) -> dict:
+        """评估策略绩效"""
+        if not self.pairs:
+            return {"total_trades": 0, "win_rate": 0, "profit_factor": 0}
+
+        wins = [p for p in self.pairs if p["pnl_pct"] > 0]
+        losses = [p for p in self.pairs if p["pnl_pct"] <= 0]
+
+        total_profit = sum(p["pnl_pct"] for p in wins) if wins else 0
+        total_loss = abs(sum(p["pnl_pct"] for p in losses)) if losses else 0
+
+        return {
+            "total_trades": len(self.pairs),
+            "win_count": len(wins),
+            "loss_count": len(losses),
+            "win_rate": len(wins) / len(self.pairs) if self.pairs else 0,
+            "avg_profit": total_profit / len(wins) if wins else 0,
+            "avg_loss": total_loss / len(losses) if losses else 0,
+            "profit_factor": total_profit / total_loss if total_loss > 0 else float('inf'),
+            "max_pnl": max(p["pnl_pct"] for p in self.pairs),
+            "min_pnl": min(p["pnl_pct"] for p in self.pairs),
+            "avg_bars_held": sum(p["bars_held"] for p in self.pairs) / len(self.pairs),
+        }
+
+
+# ========== 持仓子策略创建函数 ==========
+
+def create_first_buy_position(symbol: str, freq: str = "30分钟",
+                              commission_rate: float = 0.0001,
+                              slippage: float = 0.0005,
+                              enable_daily_filter: bool = True) -> Position:
+    """
+    一买多头持仓子策略
+
+    定位: 左侧试仓
+    特点: 小仓位、较紧止损、较短超时
+
+    :param commission_rate: 手续费率（由外部传入，统一使用config值）
+    :param slippage: 滑点（由外部传入，统一使用config值）
+    :param enable_daily_filter: 是否启用日线趋势过滤（默认 True）
+    """
+    daily_filter = (
+        _daily_trend_filter_signals(strict=False)
+        if enable_daily_filter else {"signals_all": [], "signals_not": []}
+    )
+    opens = [
+        Event.load({
+            "name": "一买确认开多",
+            "operate": "开多",
+            "signals_all": [
+                f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
+                f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
+                *daily_filter.get("signals_all", []),
+            ],
+            "signals_any": [],
+            "signals_not": [
+                *daily_filter.get("signals_not", []),
+            ],
+            "factors": [{
+                "name": "一买底背驰确认",
+                "signals_all": [
+                    f"{freq}_D1BSP_一买V260615_一买确认_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    exits = [
+        Event.load({
+            "name": "一买平多",
+            "operate": "平多",
+            "signals_all": [],
+            "signals_any": [
+                f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+                f"{freq}_D1BSP_风控V260615_震荡超限_任意_任意_0",
+            ],
+            "signals_not": [],
+            "factors": [{
+                "name": "方向反转平仓",
+                "signals_all": [
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                ],
+                "signals_any": [
+                    f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                ],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    trailing_start, trailing_drawback = _research_trailing_params(symbol)
+
+    return Position(
+        name="一买多头",
+        symbol=symbol,
+        opens=opens,
+        exits=exits,
+        interval=STRATEGY_CONFIG.get("interval_1buy", 3600 * 24),
+        timeout=STRATEGY_CONFIG.get("timeout_1buy", 600),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_1buy", 200),
+        trailing_start=trailing_start,
+        trailing_drawback_pct=trailing_drawback,
+        T0=STRATEGY_CONFIG.get("T0", False),
+        commission_rate=commission_rate,
+        slippage=slippage,
+    )
+
+
+def create_second_buy_position(symbol: str, freq: str = "30分钟",
+                               commission_rate: float = 0.0001,
+                               slippage: float = 0.0005,
+                               enable_daily_filter: bool = True) -> Position:
+    """
+    二买多头持仓子策略
+
+    定位: 回抽确认
+    特点: 以一买低点为结构失效位
+
+    优化要点:
+    1. 排除中枢下方开多（趋势过滤）
+    2. 二买本身由一买锚点与回抽不破低确认，不额外要求当前背驰
+    3. 加大开仓间隔减少过度交易
+    4. 收紧止损提高盈亏比
+
+    :param commission_rate: 手续费率（由外部传入，统一使用config值）
+    :param slippage: 滑点（由外部传入，统一使用config值）
+    :param enable_daily_filter: 是否启用日线趋势过滤（默认 True）
+    """
+    daily_filter = (
+        _daily_trend_filter_signals(strict=True)
+        if enable_daily_filter else {"signals_all": [], "signals_not": []}
+    )
+    opens = [
+        Event.load({
+            "name": "二买确认开多",
+            "operate": "开多",
+            "signals_all": [
+                f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
+                f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
+                *daily_filter.get("signals_all", []),
+            ],
+            "signals_any": [
+                # 必须在中枢上方或中枢内（趋势配合方向）
+                f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+            ],
+            "signals_not": [
+                # 排除中枢下方开多
+                f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                # 排除无中枢状态
+                f"{freq}_D1ZS_位置V260615_无中枢_任意_任意_0",
+                *daily_filter.get("signals_not", []),
+            ],
+            "factors": [{
+                "name": "二买回抽确认",
+                "signals_all": [
+                    f"{freq}_D1BSP_二买V260615_二买确认_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    exits = [
+        Event.load({
+            "name": "二买平多",
+            "operate": "平多",
+            "signals_all": [],
+            "signals_any": [
+                f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+            ],
+            "signals_not": [],
+            "factors": [{
+                "name": "跌破一买低点",
+                "signals_all": [
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                    f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }, {
+                "name": "方向反转且在中枢内",
+                "signals_all": [
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                    f"{freq}_D1BI_背驰V260615_失效_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    trailing_start, trailing_drawback = _research_trailing_params(symbol)
+
+    return Position(
+        name="二买多头",
+        symbol=symbol,
+        opens=opens,
+        exits=exits,
+        interval=STRATEGY_CONFIG.get("interval_2buy", 3600 * 24),
+        timeout=STRATEGY_CONFIG.get("timeout_2buy", 1000),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_2buy", 300),
+        trailing_start=trailing_start,
+        trailing_drawback_pct=trailing_drawback,
+        T0=STRATEGY_CONFIG.get("T0", False),
+        commission_rate=commission_rate,
+        slippage=slippage,
+    )
+
+
+def create_third_buy_position(symbol: str, freq: str = "30分钟",
+                              commission_rate: float = 0.0001,
+                              slippage: float = 0.0005,
+                              enable_daily_filter: bool = True) -> Position:
+    """
+    三买多头持仓子策略
+
+    定位: 趋势跟随
+    特点: 以中枢ZG或回抽低点为失效位
+
+    优化要点:
+    1. 放宽条件: "回抽不入中枢"阶段即可开仓（不需要等三买确认）
+    2. 增加"离开中枢"+"向上"作为更宽松的触发条件
+    3. 不要求同时满足位置信号（三买信号本身已隐含位置）
+
+    :param commission_rate: 手续费率（由外部传入，统一使用config值）
+    :param slippage: 滑点（由外部传入，统一使用config值）
+    :param enable_daily_filter: 是否启用日线趋势过滤（默认 True）
+    """
+    daily_filter = (
+        _daily_trend_filter_signals(strict=True)
+        if enable_daily_filter else {"signals_all": [], "signals_not": []}
+    )
+    opens = [
+        Event.load({
+            "name": "三买确认开多",
+            "operate": "开多",
+            "signals_all": [
+                f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
+                f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
+                *daily_filter.get("signals_all", []),
+            ],
+            "signals_any": [],
+            "signals_not": [
+                # 排除中枢下方
+                f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                *daily_filter.get("signals_not", []),
+            ],
+            "factors": [{
+                "name": "三买完整确认",
+                "signals_all": [
+                    f"{freq}_D1BSP_三买阶段V260615_三买确认_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    exits = [
+        Event.load({
+            "name": "三买平多",
+            "operate": "平多",
+            "signals_all": [],
+            "signals_any": [
+                f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+            ],
+            "signals_not": [],
+            "factors": [{
+                "name": "回落入中枢",
+                "signals_all": [
+                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }, {
+                "name": "跌破中枢",
+                "signals_all": [
+                    f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    trailing_start, trailing_drawback = _research_trailing_params(symbol)
+
+    return Position(
+        name="三买多头",
+        symbol=symbol,
+        opens=opens,
+        exits=exits,
+        interval=STRATEGY_CONFIG.get("interval_3buy", 3600 * 24),
+        timeout=STRATEGY_CONFIG.get("timeout_3buy", 1500),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_3buy", 350),
+        trailing_start=trailing_start,
+        trailing_drawback_pct=trailing_drawback,
+        T0=STRATEGY_CONFIG.get("T0", False),
+        commission_rate=commission_rate,
+        slippage=slippage,
+    )
+
+
+def create_first_sell_position(symbol: str, freq: str = "30分钟",
+                               commission_rate: float = 0.0001,
+                               slippage: float = 0.0005,
+                               enable_daily_filter: bool = True) -> Position:
+    """一卖空头持仓子策略；一卖为顶部左侧试仓，只排除日线明确强势。"""
+    daily_filter = (
+        _daily_trend_filter_signals(direction="short", strict=False)
+        if enable_daily_filter else {"signals_all": [], "signals_not": []}
+    )
+    opens = [
+        Event.load({
+            "name": "一卖确认开空",
+            "operate": "开空",
+            "signals_all": [
+                f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
+                f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
+                *daily_filter.get("signals_all", []),
+            ],
+            "signals_any": [],
+            "signals_not": [
+                *daily_filter.get("signals_not", []),
+            ],
+            "factors": [{
+                "name": "一卖顶背驰确认",
+                "signals_all": [
+                    f"{freq}_D1BSP_一卖V260615_一卖确认_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    exits = [
+        Event.load({
+            "name": "一卖平空",
+            "operate": "平空",
+            "signals_all": [],
+            "signals_any": [
+                f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+                f"{freq}_D1BSP_空头风控V260615_震荡超限_任意_任意_0",
+            ],
+            "signals_not": [],
+            "factors": [{
+                "name": "方向反转平空",
+                "signals_all": [
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                ],
+                "signals_any": [
+                    f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                ],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    trailing_start, trailing_drawback = _research_trailing_params(symbol)
+
+    return Position(
+        name="一卖空头",
+        symbol=symbol,
+        opens=opens,
+        exits=exits,
+        interval=STRATEGY_CONFIG.get("interval_1sell", STRATEGY_CONFIG.get("interval_1buy", 3600 * 24)),
+        timeout=STRATEGY_CONFIG.get("timeout_1sell", STRATEGY_CONFIG.get("timeout_1buy", 600)),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_1sell", STRATEGY_CONFIG.get("stop_loss_1buy", 200)),
+        trailing_start=trailing_start,
+        trailing_drawback_pct=trailing_drawback,
+        T0=STRATEGY_CONFIG.get("T0", False),
+        commission_rate=commission_rate,
+        slippage=slippage,
+    )
+
+
+def create_second_sell_position(symbol: str, freq: str = "30分钟",
+                                commission_rate: float = 0.0001,
+                                slippage: float = 0.0005,
+                                enable_daily_filter: bool = True) -> Position:
+    """二卖空头持仓子策略；必须有一卖锚点上下文支撑。"""
+    daily_filter = (
+        _daily_trend_filter_signals(direction="short", strict=True)
+        if enable_daily_filter else {"signals_all": [], "signals_not": []}
+    )
+    opens = [
+        Event.load({
+            "name": "二卖确认开空",
+            "operate": "开空",
+            "signals_all": [
+                f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
+                f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
+                *daily_filter.get("signals_all", []),
+            ],
+            "signals_any": [
+                f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+            ],
+            "signals_not": [
+                f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_无中枢_任意_任意_0",
+                f"{freq}_D1BI_背驰V260615_无_任意_任意_0",
+                *daily_filter.get("signals_not", []),
+            ],
+            "factors": [{
+                "name": "二卖反抽确认",
+                "signals_all": [
+                    f"{freq}_D1BSP_二卖V260615_二卖确认_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    exits = [
+        Event.load({
+            "name": "二卖平空",
+            "operate": "平空",
+            "signals_all": [],
+            "signals_any": [
+                f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+            ],
+            "signals_not": [],
+            "factors": [{
+                "name": "突破一卖高点",
+                "signals_all": [
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                    f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }, {
+                "name": "方向反转且在中枢内",
+                "signals_all": [
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                    f"{freq}_D1BI_背驰V260615_失效_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    trailing_start, trailing_drawback = _research_trailing_params(symbol)
+
+    return Position(
+        name="二卖空头",
+        symbol=symbol,
+        opens=opens,
+        exits=exits,
+        interval=STRATEGY_CONFIG.get("interval_2sell", STRATEGY_CONFIG.get("interval_2buy", 3600 * 24)),
+        timeout=STRATEGY_CONFIG.get("timeout_2sell", STRATEGY_CONFIG.get("timeout_2buy", 1000)),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_2sell", STRATEGY_CONFIG.get("stop_loss_2buy", 300)),
+        trailing_start=trailing_start,
+        trailing_drawback_pct=trailing_drawback,
+        T0=STRATEGY_CONFIG.get("T0", False),
+        commission_rate=commission_rate,
+        slippage=slippage,
+    )
+
+
+def create_third_sell_position(symbol: str, freq: str = "30分钟",
+                               commission_rate: float = 0.0001,
+                               slippage: float = 0.0005,
+                               enable_daily_filter: bool = True) -> Position:
+    """三卖空头持仓子策略；趋势跟随型向下离开后反抽确认。"""
+    daily_filter = (
+        _daily_trend_filter_signals(direction="short", strict=True)
+        if enable_daily_filter else {"signals_all": [], "signals_not": []}
+    )
+    opens = [
+        Event.load({
+            "name": "三卖确认开空",
+            "operate": "开空",
+            "signals_all": [
+                f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
+                f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
+                *daily_filter.get("signals_all", []),
+            ],
+            "signals_any": [],
+            "signals_not": [
+                f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                *daily_filter.get("signals_not", []),
+            ],
+            "factors": [{
+                "name": "三卖完整确认",
+                "signals_all": [
+                    f"{freq}_D1BSP_三卖阶段V260615_三卖确认_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    exits = [
+        Event.load({
+            "name": "三卖平空",
+            "operate": "平空",
+            "signals_all": [],
+            "signals_any": [
+                f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+            ],
+            "signals_not": [],
+            "factors": [{
+                "name": "反弹入中枢",
+                "signals_all": [
+                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }, {
+                "name": "突破中枢",
+                "signals_all": [
+                    f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                ],
+                "signals_any": [],
+                "signals_not": [],
+            }],
+        }),
+    ]
+
+    trailing_start, trailing_drawback = _research_trailing_params(symbol)
+
+    return Position(
+        name="三卖空头",
+        symbol=symbol,
+        opens=opens,
+        exits=exits,
+        interval=STRATEGY_CONFIG.get("interval_3sell", STRATEGY_CONFIG.get("interval_3buy", 3600 * 24)),
+        timeout=STRATEGY_CONFIG.get("timeout_3sell", STRATEGY_CONFIG.get("timeout_3buy", 1500)),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_3sell", STRATEGY_CONFIG.get("stop_loss_3buy", 350)),
+        trailing_start=trailing_start,
+        trailing_drawback_pct=trailing_drawback,
+        T0=STRATEGY_CONFIG.get("T0", False),
+        commission_rate=commission_rate,
+        slippage=slippage,
+    )
+
+
+# ========== 策略基类 ==========
+
+class ChanTimingStrategy:
+    """
+    缠论择时策略
+
+    组合多个独立的Position子策略
+
+    一买上下文机制:
+    - 维护buy1_history记录已确认的一买信号
+    - 二买子策略仅在一买子策略有过历史交易记录后才生效
+    - 这确保了"二买回抽确认"有真实的一买锚点支撑
+
+    一卖上下文机制:
+    - 维护sell1_history记录已确认的一卖信号
+    - 二卖子策略仅在一卖子策略有过历史交易记录后才生效
+    """
+
+    def __init__(self, symbol: str, freq: str = "30分钟",
+                 commission_rate: float = None, slippage: float = None,
+                 enable_daily_filter: Optional[bool] = None,
+                 enable_short: Optional[bool] = None):
+        """
+        初始化缠论择时策略
+
+        :param symbol: 品种代码
+        :param freq: 交易周期频率名
+        :param commission_rate: 手续费率（从config或engine传入，不再硬编码）
+        :param slippage: 滑点（从config或engine传入，不再硬编码）
+        :param enable_daily_filter: 是否启用日线趋势过滤；None 时按配置决定
+        :param enable_short: 是否启用一卖/二卖/三卖空头子策略；None 时按配置决定
+        """
+        from chan_strategy.config import BACKTEST_CONFIG
+        self.symbol = symbol
+        self.freq = freq
+        self.enable_daily_filter = (
+            STRATEGY_CONFIG.get("filter_freq") == "日线"
+            if enable_daily_filter is None else enable_daily_filter
+        )
+        self.enable_short = (
+            STRATEGY_CONFIG.get("enable_short", False)
+            if enable_short is None else enable_short
+        )
+        if enable_short is None and self.enable_short:
+            enabled_short_symbols = STRATEGY_CONFIG.get("enable_short_symbols")
+            if enabled_short_symbols is not None:
+                enabled_keys = {_research_symbol_key(x) for x in enabled_short_symbols}
+                self.enable_short = _research_symbol_key(symbol) in enabled_keys
+        # 修复问题4: 从外部接收成本参数，而非硬编码
+        self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
+        self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]
+        self._positions = None
+        # 一买历史记录（用于二买上下文判断）
+        # 记录完整锚点信息: dt, price, zs_zd, zs_zg
+        self.buy1_history: List[dict] = []
+        self._last_buy1_anchor: Optional[dict] = None
+        # 一卖历史记录（用于二卖上下文判断）
+        # 记录完整锚点信息: dt, price, zs_zd, zs_zg
+        self.sell1_history: List[dict] = []
+        self._last_sell1_anchor: Optional[dict] = None
+
+    def get_last_buy1_anchor(self) -> Optional[dict]:
+        """获取最近的一买锚点信息（供二买信号绑定使用）"""
+        return self._last_buy1_anchor
+
+    def get_last_sell1_anchor(self) -> Optional[dict]:
+        """获取最近的一卖锚点信息（供二卖信号绑定使用）"""
+        return self._last_sell1_anchor
+
+    def _log_daily_trend(self, signals_dict: dict, dt: datetime):
+        """记录日线趋势状态（供调试与验证过滤是否生效）"""
+        if STRATEGY_CONFIG.get("filter_freq") != "日线":
+            return
+
+        bi_key = "日线_D1BI_方向V260615"
+        zs_key = "日线_D1ZS_位置V260615"
+        if bi_key not in signals_dict:
+            return
+
+        direction = signals_dict[bi_key].split("_")[0]
+        position = signals_dict.get(zs_key, "").split("_")[0] or "无"
+        bullish = direction == "向上" and position != "中枢下方"
+        status = "看多" if bullish else "不看多"
+        # 仅在状态变化时打印，避免日志刷屏
+        if getattr(self, "_last_daily_trend_status", None) != status:
+            self._last_daily_trend_status = status
+            self.write_log(f"[日线趋势] {dt}: 方向={direction}, 位置={position} -> {status}")
+
+    def _record_buy1_anchor(self, signals_dict: dict, price: float, dt: datetime,
+                             czsc_obj=None):
+        """记录一买锚点信息
+
+        修复: 原实现记录 bar.close 作为一买锚点价格，但一买锚点应是一买结构中
+        向下离开笔的真实低点。现在优先从 CZSC 对象的 bi_list 中提取最近向下笔的低点。
+        """
+        # 检查一买确认信号
+        for k, v in signals_dict.items():
+            if "一买V260615" in k and "一买确认" in v:
+                # 优先从 CZSC 对象提取一买结构真实低点和结束时间
+                anchor_price = price
+                anchor_dt = dt
+                if czsc_obj is not None:  # pragma: no branch - fallback path is covered through direct price anchoring
+                    # 与信号层保持同一口径，剔除可能仍在延伸的末笔
+                    from chan_strategy.signals import _get_confirmed_bi_list
+                    bis = _get_confirmed_bi_list(czsc_obj)
+                    # 寻找最近的向下笔，取其低点和结束时间作为一买锚点
+                    for bi in reversed(bis):  # pragma: no branch - loop exits on first confirmed down bi
+                        if bi.direction == Direction.Down:
+                            anchor_price = bi.low
+                            anchor_dt = bi.edt
+                            break
+
+                # 避免重复记录同一时刻的一买
+                if self.buy1_history and self.buy1_history[-1]["dt"] == anchor_dt:
+                    return
+
+                anchor = {
+                    "dt": anchor_dt,
+                    "price": anchor_price,
+                    "zs_zd": None,   # 将在 update 中补充
+                    "zs_zg": None,   # 将在 update 中补充
+                }
+                self.buy1_history.append(anchor)
+                self._last_buy1_anchor = anchor
+                return
+
+    def _record_sell1_anchor(self, signals_dict: dict, price: float, dt: datetime,
+                             czsc_obj=None):
+        """记录一卖锚点信息；锚点价格取一卖结构中向上离开笔的真实高点。"""
+        for k, v in signals_dict.items():
+            if "一卖V260615" in k and "一卖确认" in v:
+                anchor_price = price
+                anchor_dt = dt
+                if czsc_obj is not None:
+                    from chan_strategy.signals import _get_confirmed_bi_list
+                    bis = _get_confirmed_bi_list(czsc_obj)
+                    for bi in reversed(bis):
+                        if bi.direction == Direction.Up:
+                            anchor_price = bi.high
+                            anchor_dt = bi.edt
+                            break
+
+                if self.sell1_history and self.sell1_history[-1]["dt"] == anchor_dt:
+                    return
+
+                anchor = {
+                    "dt": anchor_dt,
+                    "price": anchor_price,
+                    "zs_zd": None,
+                    "zs_zg": None,
+                }
+                self.sell1_history.append(anchor)
+                self._last_sell1_anchor = anchor
+                return
+
+    @property
+    def positions(self) -> List[Position]:
+        if self._positions is None:
+            positions = [
+                create_first_buy_position(self.symbol, self.freq,
+                                          self.commission_rate, self.slippage,
+                                          enable_daily_filter=self.enable_daily_filter),
+                create_second_buy_position(self.symbol, self.freq,
+                                           self.commission_rate, self.slippage,
+                                           enable_daily_filter=self.enable_daily_filter),
+                create_third_buy_position(self.symbol, self.freq,
+                                          self.commission_rate, self.slippage,
+                                          enable_daily_filter=self.enable_daily_filter),
+            ]
+            if self.enable_short:
+                positions.extend([
+                    create_first_sell_position(self.symbol, self.freq,
+                                               self.commission_rate, self.slippage,
+                                               enable_daily_filter=self.enable_daily_filter),
+                    create_second_sell_position(self.symbol, self.freq,
+                                                self.commission_rate, self.slippage,
+                                                enable_daily_filter=self.enable_daily_filter),
+                    create_third_sell_position(self.symbol, self.freq,
+                                               self.commission_rate, self.slippage,
+                                               enable_daily_filter=self.enable_daily_filter),
+                ])
+            self._positions = positions
+        return self._positions
+
+    def update(self, signals_dict: dict, price: float, dt: datetime,
+               execution_price: float = None, czsc_obj=None):
+        """
+        更新所有持仓子策略
+
+        :param signals_dict: 当前信号字典
+        :param price: 当前价格（用于风控）
+        :param dt: 当前时间
+        :param execution_price: 信号驱动交易的成交价（延迟成交时为下一根开盘价）
+        :param czsc_obj: 可选的 CZSC 对象，用于补充一买锚点中的中枢信息
+        """
+        # 记录日线趋势状态（便于验证日线过滤是否生效）
+        self._log_daily_trend(signals_dict, dt)
+
+        # 记录一买/一卖锚点（在信号生成后、策略更新前）
+        self._record_buy1_anchor(signals_dict, price, dt, czsc_obj=czsc_obj)
+        self._record_sell1_anchor(signals_dict, price, dt, czsc_obj=czsc_obj)
+
+        # 如果有 CZSC 对象，补充最近一买锚点的中枢信息
+        if czsc_obj is not None and self._last_buy1_anchor is not None:
+            if self._last_buy1_anchor.get("zs_zd") is None:
+                from chan_strategy.signals import build_zhongshu_from_bis, _get_confirmed_bi_list
+                bi_list = _get_confirmed_bi_list(czsc_obj)
+                zhongshu_list = build_zhongshu_from_bis(bi_list) if bi_list else []
+                anchor_low = self._last_buy1_anchor.get("price")
+                if zhongshu_list and anchor_low is not None:  # pragma: no branch - empty structures keep anchor unfilled by design
+                    # 修复: 一买锚点应绑定到“被向下离开突破”的那个中枢，
+                    # 即满足 zs_zd > anchor_low 的最近中枢。
+                    matched_zs = None
+                    for zs in reversed(zhongshu_list):
+                        if zs["zd"] > anchor_low:
+                            matched_zs = zs
+                            break
+                    if matched_zs is None:
+                        # fallback：如果没有中枢满足条件，使用最近中枢
+                        matched_zs = zhongshu_list[-1]
+                    self._last_buy1_anchor["zs_zd"] = matched_zs["zd"]
+                    self._last_buy1_anchor["zs_zg"] = matched_zs["zg"]
+
+        # 如果有 CZSC 对象，补充最近一卖锚点的中枢信息
+        if czsc_obj is not None and self._last_sell1_anchor is not None:
+            if self._last_sell1_anchor.get("zs_zg") is None:
+                from chan_strategy.signals import build_zhongshu_from_bis, _get_confirmed_bi_list
+                bi_list = _get_confirmed_bi_list(czsc_obj)
+                zhongshu_list = build_zhongshu_from_bis(bi_list) if bi_list else []
+                anchor_high = self._last_sell1_anchor.get("price")
+                if zhongshu_list and anchor_high is not None:
+                    # 一卖锚点应绑定到“被向上离开突破”的那个中枢，
+                    # 即满足 zs_zg < anchor_high 的最近中枢。
+                    matched_zs = None
+                    for zs in reversed(zhongshu_list):
+                        if zs["zg"] < anchor_high:
+                            matched_zs = zs
+                            break
+                    if matched_zs is None:
+                        matched_zs = zhongshu_list[-1]
+                    self._last_sell1_anchor["zs_zd"] = matched_zs["zd"]
+                    self._last_sell1_anchor["zs_zg"] = matched_zs["zg"]
+
+        # 更新各子策略
+        buy1_pos = self.positions[0]  # 一买子策略
+        buy2_pos = self.positions[1]  # 二买子策略
+        buy3_pos = self.positions[2]  # 三买子策略
+
+        # 一买和三买正常更新
+        if buy1_pos.pos != 0 or _research_first_buy_allowed(self.symbol, signals_dict):
+            buy1_pos.update(signals_dict, price, dt, execution_price=execution_price)
+        else:
+            buy1_pos.update({}, price, dt, execution_price=execution_price)
+        buy3_pos.update(signals_dict, price, dt, execution_price=execution_price)
+
+        # 二买需要一买上下文: 仅当一买子策略有过历史交易记录或有一买锚点时才生效
+        if buy1_pos.pairs or self.buy1_history:
+            # 有一买交易记录或一买信号历史，二买可以正常运行；
+            # 研究参数只拦截新开仓，已有二买持仓仍接收退出/风控信号。
+            trade_price = execution_price if execution_price is not None else price
+            if buy2_pos.pos != 0 or _research_second_buy_allowed(self.symbol, self._last_buy1_anchor, trade_price):
+                buy2_pos.update(signals_dict, price, dt, execution_price=execution_price)
+            else:
+                buy2_pos.update({}, price, dt, execution_price=execution_price)
+        else:
+            # 无一买上下文，二买仅执行风控（传空信号，不触发开仓）
+            buy2_pos.update({}, price, dt, execution_price=execution_price)
+
+        if self.enable_short:
+            sell1_pos = self.positions[3]  # 一卖子策略
+            sell2_pos = self.positions[4]  # 二卖子策略
+            sell3_pos = self.positions[5]  # 三卖子策略
+
+            # 一卖和三卖正常更新
+            sell1_pos.update(signals_dict, price, dt, execution_price=execution_price)
+            sell3_pos.update(signals_dict, price, dt, execution_price=execution_price)
+
+            # 二卖需要一卖上下文
+            if sell1_pos.pairs or self.sell1_history:
+                sell2_pos.update(signals_dict, price, dt, execution_price=execution_price)
+            else:
+                sell2_pos.update({}, price, dt, execution_price=execution_price)
+
+    def get_total_pos(self) -> int:
+        """获取总仓位方向"""
+        return sum(p.pos for p in self.positions)
+
+    def evaluate_all(self) -> dict:
+        """评估所有子策略"""
+        results = {}
+        for pos in self.positions:
+            results[pos.name] = pos.evaluate()
+        return results
+
+    def get_combined_trades(self) -> List[dict]:
+        """获取所有子策略的配对交易"""
+        all_pairs = []
+        for pos in self.positions:
+            for pair in pos.pairs:
+                pair_copy = pair.copy()
+                pair_copy["strategy"] = pos.name
+                all_pairs.append(pair_copy)
+        return sorted(all_pairs, key=lambda x: x["open_dt"])
+
+    def write_log(self, msg: str):
+        """打印策略日志"""
+        print(msg)

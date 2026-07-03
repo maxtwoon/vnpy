@@ -6,10 +6,9 @@ DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
 if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
+from simnow_action_summary import action_recommendation, build_action_summary  # noqa: E402
 from simnow_daily_monitor import (  # noqa: E402
-    action_recommendation,
     build_20d_report,
-    build_action_summary,
     build_thresholds,
     compare_simnow_replay,
     evaluate_thresholds,
@@ -1020,3 +1019,138 @@ def test_write_20d_markdown_includes_action_summary(tmp_path):
     assert "ctp_disconnect_097_no_snapshot" in text
     assert "kline_coverage_incomplete" in text
     assert "AP888" in text
+
+
+def test_promotion_decision_report_includes_action_summary_with_reason_actions(tmp_path):
+    records = [
+        {
+            "date": "2026-06-22",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "historical_db_lag"},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-07-01",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "kline_coverage_incomplete", "kline_missing_symbols": ["AP888"]},
+            "thresholds": {"status": "pass"},
+            "kline_coverage": {"missing_symbols": ["AP888"], "short_symbols": []},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-06-20",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+    summary = decide_promotion(records, min_days=3)
+    out = tmp_path / "promotion.md"
+    write_report(summary, out)
+    text = out.read_text(encoding="utf-8")
+    assert "## Action Summary" in text
+    assert "| date | status | reason | severity | action | counts_for_20d |" in text
+    assert "historical_db_lag" in text
+    assert "backfill" in text
+    assert "kline_coverage_incomplete" in text
+    assert "重新采集" in text
+    assert "计入 20 日有效观察" in text
+
+
+def test_promotion_decision_summary_includes_valid_days_and_blocking_actions():
+    records = [
+        {
+            "date": "2026-06-22",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "historical_db_lag"},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-06-23",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "historical_db_lag"},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-07-01",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "kline_coverage_incomplete"},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-06-20",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+    summary = decide_promotion(records, min_days=4)
+    assert summary["valid_observation_days"] == 1
+    assert summary["action_summary_count"] == 4
+    assert summary["top_blocking_actions"] == [
+        {"reason": "historical_db_lag", "count": 2},
+        {"reason": "kline_coverage_incomplete", "count": 1},
+    ]
+
+
+def test_promotion_decision_pass_valid_shows_counts_for_20d_true(tmp_path):
+    records = [
+        {
+            "date": "2026-06-20",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+    summary = decide_promotion(records, min_days=1)
+    out = tmp_path / "promotion.md"
+    write_report(summary, out)
+    text = out.read_text(encoding="utf-8")
+    assert "counts_for_20d" in text
+    assert "计入 20 日有效观察" in text
+    assert "| 2026-06-20 | pass |" in text
+    assert "| ok |" in text
+    assert "| True |" in text
+
+
+def test_promotion_decision_does_not_import_daily_monitor():
+    import simnow_promotion_decision as promo_mod
+
+    src = Path(promo_mod.__file__).read_text(encoding="utf-8")
+    assert "from simnow_daily_monitor" not in src
+    assert "import simnow_daily_monitor" not in src
+
+
+def test_daily_monitor_imports_action_summary_instead_of_defining_it():
+    import simnow_daily_monitor as monitor_mod
+
+    src = Path(monitor_mod.__file__).read_text(encoding="utf-8")
+    assert "from simnow_action_summary import" in src
+    assert "def action_recommendation" not in src
+    assert "def build_action_summary" not in src
+    assert "def _pass_gaps" not in src
+
+
+def test_both_modules_share_the_same_action_summary_function():
+    import simnow_action_summary as action_mod
+    import simnow_daily_monitor as monitor_mod
+    import simnow_promotion_decision as promo_mod
+
+    assert monitor_mod.build_action_summary is action_mod.build_action_summary
+    assert promo_mod.build_action_summary is action_mod.build_action_summary

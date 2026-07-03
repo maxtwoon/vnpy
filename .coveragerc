@@ -1,0 +1,18 @@
+[run]
+branch = True
+source =
+    examples/czsc_strategy/chan_strategy
+
+omit =
+    */validation.py
+    */run_*.py
+    */__init__.py
+    */utils.py
+
+[report]
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError

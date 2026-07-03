@@ -1,0 +1,3 @@
+# Version guard for chan_strategy signal semantics.
+# _get_confirmed_bi_list depends on CZSC exposing finished_bis / last_bi_extend.
+czsc==0.9.51

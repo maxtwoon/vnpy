@@ -1,0 +1,14 @@
+# Python 缓存
+__pycache__/
+*.pyc
+scripts/__pycache__/
+
+# 本地 LLM 密钥配置（不要提交真实 API key）
+llm_eval_config.json
+
+# 生成产物（数据/中间件，不入库）
+corpus/
+mapping/
+*.csv
+*.db
+reference/few_shot/auto/
