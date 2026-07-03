@@ -11,7 +11,7 @@ from datetime import datetime
 
 from czsc.objects import Direction
 
-from chan_strategy.config import STRATEGY_CONFIG
+from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG
 
 
 def _daily_trend_filter_signals(direction: str = "long", strict: bool = True) -> dict:
@@ -284,8 +284,8 @@ class Position:
         trailing_start: int = 150,           # 启动移动止损的盈利阈值(BP) 1.5%
         trailing_drawback_pct: float = 0.4,  # 移动止损回撤容忍比例(40%=从最高回撤40%平仓)
         T0: bool = False,
-        commission_rate: float = 0.0001,     # 手续费率(万一)
-        slippage: float = 0.0005,            # 滑点(0.05%)
+        commission_rate: float | None = None,     # 手续费率(万一)
+        slippage: float | None = None,            # 滑点(0.05%)
     ):
         self.name = name
         self.symbol = symbol
@@ -298,8 +298,8 @@ class Position:
         self.trailing_start = trailing_start  # 移动止损启动阈值(BP)
         self.trailing_drawback_pct = trailing_drawback_pct  # 移动止损回撤容忍比例
         self.T0 = T0
-        self.commission_rate = commission_rate
-        self.slippage = slippage
+        self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
+        self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]
 
         # 运行状态
         self.pos = 0  # 当前仓位
@@ -524,8 +524,8 @@ class Position:
 # ========== 持仓子策略创建函数 ==========
 
 def create_first_buy_position(symbol: str, freq: str = "30分钟",
-                              commission_rate: float = 0.0001,
-                              slippage: float = 0.0005,
+                              commission_rate: float | None = None,
+                              slippage: float | None = None,
                               enable_daily_filter: bool = True) -> Position:
     """
     一买多头持仓子策略
@@ -609,8 +609,8 @@ def create_first_buy_position(symbol: str, freq: str = "30分钟",
 
 
 def create_second_buy_position(symbol: str, freq: str = "30分钟",
-                               commission_rate: float = 0.0001,
-                               slippage: float = 0.0005,
+                               commission_rate: float | None = None,
+                               slippage: float | None = None,
                                enable_daily_filter: bool = True) -> Position:
     """
     二买多头持仓子策略
@@ -714,8 +714,8 @@ def create_second_buy_position(symbol: str, freq: str = "30分钟",
 
 
 def create_third_buy_position(symbol: str, freq: str = "30分钟",
-                              commission_rate: float = 0.0001,
-                              slippage: float = 0.0005,
+                              commission_rate: float | None = None,
+                              slippage: float | None = None,
                               enable_daily_filter: bool = True) -> Position:
     """
     三买多头持仓子策略
@@ -810,8 +810,8 @@ def create_third_buy_position(symbol: str, freq: str = "30分钟",
 
 
 def create_first_sell_position(symbol: str, freq: str = "30分钟",
-                               commission_rate: float = 0.0001,
-                               slippage: float = 0.0005,
+                               commission_rate: float | None = None,
+                               slippage: float | None = None,
                                enable_daily_filter: bool = True) -> Position:
     """一卖空头持仓子策略；一卖为顶部左侧试仓，只排除日线明确强势。"""
     daily_filter = (
@@ -886,8 +886,8 @@ def create_first_sell_position(symbol: str, freq: str = "30分钟",
 
 
 def create_second_sell_position(symbol: str, freq: str = "30分钟",
-                                commission_rate: float = 0.0001,
-                                slippage: float = 0.0005,
+                                commission_rate: float | None = None,
+                                slippage: float | None = None,
                                 enable_daily_filter: bool = True) -> Position:
     """二卖空头持仓子策略；必须有一卖锚点上下文支撑。"""
     daily_filter = (
@@ -974,8 +974,8 @@ def create_second_sell_position(symbol: str, freq: str = "30分钟",
 
 
 def create_third_sell_position(symbol: str, freq: str = "30分钟",
-                               commission_rate: float = 0.0001,
-                               slippage: float = 0.0005,
+                               commission_rate: float | None = None,
+                               slippage: float | None = None,
                                enable_daily_filter: bool = True) -> Position:
     """三卖空头持仓子策略；趋势跟随型向下离开后反抽确认。"""
     daily_filter = (

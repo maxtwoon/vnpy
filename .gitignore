@@ -106,3 +106,6 @@ examples/czsc_strategy/diagnostics/
 
 # Skill evaluation report generated locally
 SKILL_audit_report.md
+
+# Local handoff tool log
+.handoff_run.log

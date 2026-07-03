@@ -1,6 +1,7 @@
 import pandas as pd
 
 from chan_strategy.backtest_engine import BacktestEngine, run_batch_backtest, run_single_backtest
+from chan_strategy.config import BACKTEST_CONFIG
 
 
 def test_freq_helpers_and_print_report(capsys):
@@ -29,6 +30,12 @@ def test_freq_helpers_and_print_report(capsys):
 def test_backtest_engine_accepts_enable_short():
     engine = BacktestEngine("T", enable_short=True)
     assert engine.enable_short is True
+
+
+def test_backtest_engine_default_costs_match_config():
+    engine = BacktestEngine("T")
+    assert engine.commission_rate == BACKTEST_CONFIG["commission_rate"]
+    assert engine.slippage == BACKTEST_CONFIG["slippage"]
 
 
 def test_run_single_and_batch_forward_enable_short(monkeypatch):

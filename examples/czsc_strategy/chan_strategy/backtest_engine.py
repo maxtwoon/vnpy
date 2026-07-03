@@ -66,8 +66,8 @@ class BacktestEngine:
         start_date: str = None,
         end_date: str = None,
         initial_capital: float = 1000000,
-        commission_rate: float = 0.0003,
-        slippage: float = 0.001,
+        commission_rate: float | None = None,
+        slippage: float | None = None,
         db_path: str = None,
         table_name: str = None,
         enable_short: Optional[bool] = None,
@@ -90,8 +90,8 @@ class BacktestEngine:
         self.start_date = start_date or BACKTEST_CONFIG["start_date"]
         self.end_date = end_date or BACKTEST_CONFIG["end_date"]
         self.initial_capital = initial_capital
-        self.commission_rate = commission_rate
-        self.slippage = slippage
+        self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
+        self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]
         self.db_path = db_path or SQLITE_DB_PATH
         self.table_name = table_name
         self.enable_short = enable_short
@@ -515,6 +515,8 @@ class BacktestEngine:
         print(f"回测区间: {report['period']}")
         print(f"K线总数: {report['total_bars']}")
         print(f"交易K线: {report['traded_bars']}")
+        print(f"手续费率: {self.commission_rate}")
+        print(f"滑点: {self.slippage}")
         print("-" * 60)
         print(f"总交易次数: {report['total_trades']}")
         print(f"胜率: {report.get('win_rate', 0)*100:.1f}%")

@@ -47,7 +47,18 @@ def build_report(db_path: Path, symbols: list[str]) -> dict[str, Any]:
     import portfolio_goal_evaluator as evaluator
 
     original_scenario_params = evaluator._scenario_params
-    payload = {"goal": GOAL, "multipliers": {}}
+    payload = {
+        "goal": GOAL,
+        "used_data_windows": [f"{OOS_START}~{OOS_END}"],
+        "decision_data_windows": ["2026-04-24~present", "SimNow observation"],
+        "is_promotion_evidence": False,
+        "research_only": True,
+        "note": (
+            "High-precision weight scans (e.g. 0.847) are research-only and shall not "
+            "be used as promotion evidence."
+        ),
+        "multipliers": {},
+    }
     try:
         for multiplier in MULTIPLIERS:
             scenario = f"sc_short_{multiplier:g}"
@@ -76,6 +87,12 @@ def build_report(db_path: Path, symbols: list[str]) -> dict[str, Any]:
 def write_markdown(payload: dict[str, Any], out: Path) -> None:
     lines = [
         "# SC Short Weight Neighborhood",
+        "",
+        f"- **used_data_windows**: {payload.get('used_data_windows')}",
+        f"- **decision_data_windows**: {payload.get('decision_data_windows')}",
+        f"- **is_promotion_evidence**: {payload.get('is_promotion_evidence')}",
+        f"- **research_only**: {payload.get('research_only')}",
+        f"- **note**: {payload.get('note')}",
         "",
         "| multiplier | pass | trades | PF | drawdown | sharpe | calmar | WF | bh_sharpe | bh_calmar |",
         "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|",

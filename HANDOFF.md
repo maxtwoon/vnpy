@@ -1,65 +1,77 @@
 ---
-task: A33 Audit Diagnostics Evidence Closure
+task: A34 Audit Remediation Roadmap
 version: 4.4.0
-stage: done
-owner: codex
-updated: 2026-07-03
+stage: dev
+owner: kimi-code
+updated: 2026-07-04
 deliverables:
   - HANDOFF.md
-  - docs/design/a33-audit-diagnostics-evidence-closure.md
+  - docs/design/a34-audit-remediation-roadmap.md
 blockers: []
 ---
 
 ## Background
 
-A33 is the design stage for closing the H3/H4 evidence gaps in `examples/czsc_strategy/diagnostics/audit_issue_diagnostics.py`.
+A31-A33 turned the major audit findings in `examples/czsc_strategy/AUDIT_REPORT_2026-07-03.md` into repeatable evidence.
 
-- H3 ("背驰失效" branch reachability) was `unavailable` because no real signal-history artifact existed.
-- H4 (888 continuous-contract assumptions) was `unknown` because no DB path was wired into the diagnostic.
+- H1 is `detected`: high-precision weight evidence exists, including the SC `0.847` family.
+- H2 is `detected`: stop-loss overshoot exists, with worst loss near `-12.60%` versus a nominal `-3.0%` stop.
+- H3 is `detected`: real signal-history replay found `背驰V260615_失效` count `0`.
+- H4 is `found_spliced`: SQLite metadata shows 888 tables switch `real_symbol`.
+- M1 is `detected`: `BACKTEST_CONFIG` and `BacktestEngine` defaults disagree on costs.
 
-A32 already closed H1, H2, and M1 using real project inputs. A33 must produce a concrete plan so the next dev agent can wire real DB metadata and real signal replay into the audit diagnostic.
+A34 must produce a remediation roadmap so the next dev agent fixes the issues in a controlled order without continuing to optimize historical OOS results.
 
 ## Goal
 
-Produce a design document that specifies:
+Produce a design document that specifies phased remediation for:
 
-1. How to generate real `signal_history` from a 1-minute SQLite replay without creating fake bi structures.
-2. How to resolve the SQLite DB path and inspect 888 table metadata for rollover/adjustment evidence.
-3. The exact file/interface changes, test design, and acceptance criteria.
+1. M1 cost single source of truth.
+2. H1 parameter freeze and declassification of old promotion evidence.
+3. H2 stop-loss overshoot stress diagnostics.
+4. H3 dead-branch repair/delete/deprecation decision.
+5. H4 rollover/raw-splice pollution diagnostics.
 
 ## Acceptance Criteria
 
-- `docs/design/a33-audit-diagnostics-evidence-closure.md` exists and covers H3, H4, file changes, tests, and acceptance criteria.
-- The design relies only on existing strategy code paths (no new signal/position logic).
-- H4 status values are unambiguous (`found_adjusted`, `found_spliced`, `found_single_contract`, `no_evidence`, `unavailable`, `unknown`).
-- H3 artifact schema matches the existing `collect_signal_records_from_diagnostics` collector.
+- `docs/design/a34-audit-remediation-roadmap.md` exists and covers H1/H2/H3/H4/M1.
+- The design explicitly says A34 does not implement strategy fixes, tune parameters, or optimize returns.
+- The design recommends Phase 1 = M1 cost single source and Phase 2 = H1 freeze/declassification before H2/H3/H4 remediation.
+- The design includes concrete acceptance criteria for each phase.
+- The design forbids changing SimNow order/cancel/trading interfaces and forbids new old-OOS optimization.
 - `python tools/handoff.py next` succeeds and advances the stage to `dev`.
 
 ## Notes for the Next Agent
 
-Read this file and `docs/design/a33-audit-diagnostics-evidence-closure.md` before writing code.
+Read this file and `docs/design/a34-audit-remediation-roadmap.md` before writing code.
 
 Implementation guardrails:
 
-- Do **not** modify `chan_strategy/signals.py`, `chan_strategy/positions.py`, `chan_strategy/backtest_engine.py`, or any SimNow order interface.
-- Keep changes minimal and focused on `audit_issue_diagnostics.py`, the new `generate_signal_history.py`, and tests.
-- After implementation, run the generator, the audit diagnostic, and the unit tests before advancing the handoff.
+- Start with Phase 1 and Phase 2 only. Do not implement Phase 3-5 until Phase 1-2 pass review.
+- Do **not** modify SimNow order or cancel interfaces.
+- Do **not** tune `0.847` or any neighboring parameter to recover a pass.
+- Do **not** use the old OOS window for new parameter selection.
+- Do **not** claim `GOAL PASSED`.
+- Keep prior negative diagnostics as evidence.
 
 ## Decision Log
 
 - 2026-07-03 - Initialized the sync-guardian workflow in the repository root.
-- 2026-07-03 - A33 design stage: chose a real-bar replay for H3 (bypassing `BacktestEngine` to avoid 100-bar sampling) and DB metadata heuristics for H4.
+- 2026-07-03 - A33 design stage: chose a real-bar replay for H3 and DB metadata heuristics for H4.
+- 2026-07-04 - A34 design stage: chose a phased remediation roadmap, with M1/H1 first and H2/H3/H4 deferred behind explicit diagnostics.
 
 ## Handoff History
 
 | Date | From -> To | Stage Change | Summary |
 |------|------------|--------------|---------|
 | 2026-07-03 | none -> claude-code | none -> design | Workflow initialized |
+| 2026-07-03 | claude-code -> kimi-code | design -> dev | A33 design: H3 signal-history replay + H4 DB metadata inspection specified |
+| 2026-07-03 | kimi-code -> codex | dev -> review | A33 evidence closure implemented |
+| 2026-07-03 | codex -> codex | review -> done | A33 review passed: H3 signal-history replay and H4 DB metadata evidence verified |
+| 2026-07-04 | codex -> claude-code | done -> design | A34 remediation roadmap started |
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-03 | claude-code → kimi-code | design → dev | A33 design: H3 signal-history replay + H4 DB metadata inspection specified |
-| 2026-07-03 | kimi-code → codex | dev → review | A33 evidence closure implemented |
-| 2026-07-03 | codex → codex | review → done | A33 review passed: H3 signal-history replay and H4 DB metadata evidence verified |
+| 2026-07-04 | claude-code → kimi-code | design → dev | A34 design complete: audit remediation roadmap |

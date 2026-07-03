@@ -21,6 +21,7 @@ _CZSC_STRATEGY_ROOT = Path(__file__).resolve().parent.parent
 if str(_CZSC_STRATEGY_ROOT) not in sys.path:
     sys.path.insert(0, str(_CZSC_STRATEGY_ROOT))
 
+from chan_strategy.config import BACKTEST_CONFIG
 from chan_strategy.data_adapter import SqliteDataAdapter
 
 
@@ -710,6 +711,8 @@ def _extract_init_defaults(filepath: Path, class_name: str) -> dict[str, Any] | 
 
 def collect_cost_inputs_from_project(repo_root: Path) -> dict[str, Any]:
     """Introspect BACKTEST_CONFIG, BacktestEngine defaults and Position defaults."""
+    from chan_strategy.config import BACKTEST_CONFIG
+
     chan = repo_root / "examples" / "czsc_strategy" / "chan_strategy"
     config = _extract_dict_defaults(chan / "config.py", "BACKTEST_CONFIG") or {}
     engine_init = _extract_init_defaults(chan / "backtest_engine.py", "BacktestEngine") or {}
@@ -721,10 +724,26 @@ def collect_cost_inputs_from_project(repo_root: Path) -> dict[str, Any]:
             "slippage": d.get("slippage"),
         }
 
+    # If an __init__ default is None, it resolves to BACKTEST_CONFIG at runtime.
+    # Resolve it here so the consistency check compares the actual values.
+    config_renamed = rename(config)
+    engine_renamed = rename(engine_init)
+    position_renamed = rename(position_init)
+    baseline_commission = BACKTEST_CONFIG.get("commission_rate")
+    baseline_slippage = BACKTEST_CONFIG.get("slippage")
+    if engine_renamed.get("commission") is None:
+        engine_renamed["commission"] = baseline_commission
+    if engine_renamed.get("slippage") is None:
+        engine_renamed["slippage"] = baseline_slippage
+    if position_renamed.get("commission") is None:
+        position_renamed["commission"] = baseline_commission
+    if position_renamed.get("slippage") is None:
+        position_renamed["slippage"] = baseline_slippage
+
     return {
-        "BACKTEST_CONFIG": rename(config),
-        "engine_defaults": rename(engine_init),
-        "position_defaults": rename(position_init),
+        "BACKTEST_CONFIG": config_renamed,
+        "engine_defaults": engine_renamed,
+        "position_defaults": position_renamed,
     }
 
 
@@ -944,6 +963,12 @@ def build_audit_issue_report(
     """Aggregate all H1/H2/H3/H4/M1 diagnostics into one report."""
     used_diagnostics_dir = diagnostics_dir or evidence_dir
 
+    # Report-level data-provenance metadata (H1 freeze / declassification)
+    used_data_windows = [f"{BACKTEST_CONFIG['start_date']}~{BACKTEST_CONFIG['end_date']}"]
+    decision_data_windows = ["2026-04-24~present", "SimNow observation"]
+    is_promotion_evidence = False
+    research_only = True
+
     # H1
     h1_data_source = "caller_input"
     h1_params = params
@@ -959,6 +984,15 @@ def build_audit_issue_report(
     if h1_evidence_files and not h1.get("evidence_files"):
         h1["evidence_files"] = h1_evidence_files
     h1["data_source"] = h1_data_source
+    h1["is_promotion_evidence"] = is_promotion_evidence
+    h1["research_only"] = research_only
+    h1["used_data_windows"] = used_data_windows
+    h1["decision_data_windows"] = decision_data_windows
+    h1["note"] = (
+        "High-precision weight scans (e.g. 0.847) are research-only and shall not "
+        "be used as promotion evidence. Future validation must use 2026-04-24 onward "
+        "incremental data plus SimNow observation."
+    )
 
     # H2
     h2_data_source = "caller_input"
@@ -1014,6 +1048,10 @@ def build_audit_issue_report(
         "date": date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "disclaimer": "Diagnostic only, not a trading recommendation.",
+        "used_data_windows": used_data_windows,
+        "decision_data_windows": decision_data_windows,
+        "is_promotion_evidence": is_promotion_evidence,
+        "research_only": research_only,
         "issues": {
             "H1": h1,
             "H2": h2,

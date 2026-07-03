@@ -38,6 +38,14 @@ def final_candidate_params(multiplier: float = DEFAULT_SC_SHORT_MULTIPLIER, symb
 def candidate_summary() -> dict[str, Any]:
     return {
         "candidate": CANDIDATE_NAME,
+        "used_data_windows": ["2022-01-01~2026-04-24"],
+        "decision_data_windows": ["2026-04-24~present", "SimNow observation"],
+        "is_promotion_evidence": False,
+        "research_only": True,
+        "note": (
+            "This candidate is research-only and not promotion evidence until "
+            "validated on post-2026-04-24 incremental data and SimNow observation."
+        ),
         "base": {
             "block_1buy_daily_down": True,
             "sc_short_multiplier": DEFAULT_SC_SHORT_MULTIPLIER,

@@ -30,6 +30,8 @@ from audit_issue_diagnostics import (
     write_json_report,
     write_markdown_report,
 )
+from chan_strategy.config import BACKTEST_CONFIG
+from platform_final_candidate import candidate_summary
 
 
 def test_detect_high_precision_weights_flags_847():
@@ -201,7 +203,7 @@ def test_contains_sensitive_data_detects_leak():
 # A32: real project input collectors
 
 
-def test_collect_cost_inputs_from_project_detects_conflict():
+def test_collect_cost_inputs_from_project_resolves_none_to_config():
     inputs = collect_cost_inputs_from_project(REPO_ROOT)
     assert "BACKTEST_CONFIG" in inputs
     assert "engine_defaults" in inputs
@@ -210,12 +212,19 @@ def test_collect_cost_inputs_from_project_detects_conflict():
         assert "commission" in inputs[source]
         assert "slippage" in inputs[source]
 
+    # After Phase 1, None defaults resolve to BACKTEST_CONFIG, so M1 is consistent.
+    assert inputs["engine_defaults"]["commission"] == BACKTEST_CONFIG["commission_rate"]
+    assert inputs["engine_defaults"]["slippage"] == BACKTEST_CONFIG["slippage"]
+    assert inputs["position_defaults"]["commission"] == BACKTEST_CONFIG["commission_rate"]
+    assert inputs["position_defaults"]["slippage"] == BACKTEST_CONFIG["slippage"]
+
     result = analyze_cost_consistency(
         inputs["BACKTEST_CONFIG"],
         inputs["engine_defaults"],
         inputs["position_defaults"],
     )
-    assert result["status"] != "unavailable"
+    assert result["consistent"] is True
+    assert result["conflicts"] == []
     assert result["recommended_source"] == "BACKTEST_CONFIG"
 
 
@@ -322,6 +331,51 @@ def test_build_audit_issue_report_with_auto_collection_m1_not_unavailable(tmp_pa
     assert "data_source" in report["issues"]["M1"]
     assert report["issues"]["H1"]["status"] in ("unknown", "detected")
     assert report["issues"]["H4"]["status"] in ("unknown", "unavailable")
+
+
+def test_build_audit_issue_report_m1_consistent_with_repo_root(tmp_path):
+    report = build_audit_issue_report(
+        date="2026-07-03",
+        repo_root=REPO_ROOT,
+        diagnostics_dir=tmp_path,
+        symbols=["AP888"],
+    )
+    assert report["issues"]["M1"]["consistent"] is True
+    assert report["issues"]["M1"]["conflicts"] == []
+
+
+def test_build_audit_issue_report_contains_declassification_metadata():
+    report = build_audit_issue_report(
+        date="2026-07-03",
+        repo_root=REPO_ROOT,
+        diagnostics_dir=Path(__file__).resolve().parents[2] / "diagnostics",
+        symbols=["AP888"],
+    )
+    assert report["is_promotion_evidence"] is False
+    assert report["research_only"] is True
+    assert "used_data_windows" in report
+    assert "decision_data_windows" in report
+    assert BACKTEST_CONFIG["start_date"] in report["used_data_windows"][0]
+    assert BACKTEST_CONFIG["end_date"] in report["used_data_windows"][0]
+    assert "2026-04-24~present" in report["decision_data_windows"]
+
+    h1 = report["issues"]["H1"]
+    assert h1["is_promotion_evidence"] is False
+    assert h1["research_only"] is True
+    assert "used_data_windows" in h1
+    assert "decision_data_windows" in h1
+    assert "promotion evidence" in h1["note"].lower()
+
+
+def test_platform_final_candidate_summary_has_declassification_metadata():
+    summary = candidate_summary()
+    assert summary["is_promotion_evidence"] is False
+    assert summary["research_only"] is True
+    assert "used_data_windows" in summary
+    assert "decision_data_windows" in summary
+    assert "note" in summary
+    assert "2026-04-24" in summary["note"]
+    assert "SimNow" in summary["note"]
 
 
 # A33: signal-history replay and H4 DB metadata inspection
