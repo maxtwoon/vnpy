@@ -103,3 +103,6 @@ examples/czsc_strategy/skill_build/llm_eval_config.json
 
 # Ignore entire diagnostics directory
 examples/czsc_strategy/diagnostics/
+
+# Skill evaluation report generated locally
+SKILL_audit_report.md
