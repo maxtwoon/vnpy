@@ -1,8 +1,8 @@
 ---
 task: A34 Audit Remediation Roadmap
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-04
 deliverables:
   - HANDOFF.md
@@ -75,3 +75,4 @@ Implementation guardrails:
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-04 | claude-code → kimi-code | design → dev | A34 design complete: audit remediation roadmap |
+| 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
