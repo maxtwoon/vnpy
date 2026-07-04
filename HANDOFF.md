@@ -1,7 +1,7 @@
 ---
 task: A34 Audit Remediation Roadmap
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-04
 deliverables:
@@ -97,6 +97,7 @@ Implementation guardrails:
 | 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
 | 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: A34 Phase 2 still leaves bare GOAL PASSED True in portfolio_goal_expanded_short_sc_0847.md |
 | 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 second remediation: bare GOAL PASSED lines rewritten, regression tests added |
+| 2026-07-04 | codex -> codex | review -> done | A34 review passed: M1 cost truth and H1 historical report declassification verified |
 
 ## 交接历史
 
@@ -108,3 +109,4 @@ Implementation guardrails:
 | 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
 | 2026-07-04 | codex → kimi-code | review → dev | 打回: A34 Phase 2 still leaves bare GOAL PASSED True in portfolio_goal_expanded_short_sc_0847.md |
 | 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 二次修复：改写裸 GOAL PASSED 行，新增回归测试 |
+| 2026-07-04 | codex → codex | review → done | A34 review passed: M1 cost truth and H1 historical report declassification verified |
