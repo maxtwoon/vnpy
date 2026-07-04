@@ -189,6 +189,9 @@ def test_missing_db_does_not_silently_pass(tmp_path):
         stop_loss_bp=300,
     )
     assert report["status"] == "partial"
+    assert report["raw_trade_count"] == 1
+    assert report["unique_trade_count"] == 1
+    assert report["duplicate_trade_count"] == 0
     assert report["scenarios"]["observed_close"]["status"] == "ok"
     assert report["scenarios"]["observed_close"]["trade_count"] == 1
     assert report["scenarios"]["intrabar_trigger"]["status"] == "unavailable"
@@ -220,6 +223,9 @@ def test_build_report_contains_required_fields(tmp_path):
     assert report["disclaimer"]
     assert "status" in report
     assert "stop_loss_bp" in report
+    assert "raw_trade_count" in report
+    assert "unique_trade_count" in report
+    assert "duplicate_trade_count" in report
     assert "data_source" in report
     assert "scenarios" in report
     assert "worst_trades" in report
@@ -347,9 +353,38 @@ def test_collect_stop_loss_pairs_finds_stop_loss_records(tmp_path):
         ),
         encoding="utf-8",
     )
-    pairs = collect_stop_loss_pairs(diagnostics_dir)
+    pairs, counts = collect_stop_loss_pairs(diagnostics_dir)
     assert len(pairs) == 1
     assert pairs[0]["pnl_pct"] == pytest.approx(-8.0)
+    assert counts["raw"] == 1
+    assert counts["unique"] == 1
+    assert counts["duplicates"] == 0
+
+
+def test_collect_stop_loss_pairs_deduplicates_identical_records(tmp_path):
+    diagnostics_dir = tmp_path / "diagnostics"
+    diagnostics_dir.mkdir()
+    record = {
+        "symbol": "TEST",
+        "open_dt": "2024-01-01 09:00:00",
+        "close_dt": "2024-01-01 10:00:00",
+        "open_price": 100.0,
+        "close_price": 92.0,
+        "pnl_pct": -0.08,
+        "reason_code": "stop_loss",
+        "direction": "long",
+    }
+    (diagnostics_dir / "a.json").write_text(
+        json.dumps({"records": [record]}), encoding="utf-8"
+    )
+    (diagnostics_dir / "b.json").write_text(
+        json.dumps({"records": [record]}), encoding="utf-8"
+    )
+    pairs, counts = collect_stop_loss_pairs(diagnostics_dir)
+    assert len(pairs) == 1
+    assert counts["raw"] == 2
+    assert counts["unique"] == 1
+    assert counts["duplicates"] == 1
 
 
 class _StaticBarLoader:

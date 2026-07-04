@@ -89,6 +89,7 @@ python tools\handoff.py next --summary "A35 stop-loss stress diagnostics impleme
 - 2026-07-04 - A35 started after A34 reached `done`.
 - 2026-07-04 - Chose H2 stop-loss stress diagnostics as the next task because it is the highest remaining tail-risk issue and can be measured without changing trading logic.
 - 2026-07-04 - Chose diagnostic-first scope: no Position logic changes, no strategy tuning, no SimNow trading changes.
+- 2026-07-04 - Review rejection: duplicated stop-loss records across diagnostics JSON files and stale generated reports. Fixed by canonicalizing exit reasons, deduplicating trades, exposing raw/unique/duplicate counts, regenerating JSON/Markdown, and rerunning tests + preflight.
 
 ## Handoff History
 
@@ -97,6 +98,8 @@ python tools\handoff.py next --summary "A35 stop-loss stress diagnostics impleme
 | 2026-07-04 | codex -> claude-code | done -> design | A35 stop-loss stress diagnostics started |
 | 2026-07-04 | claude-code -> kimi-code | design -> dev | A35 design complete: stop-loss stress diagnostics |
 | 2026-07-04 | kimi-code -> codex | dev -> review | A35 stop-loss stress diagnostics implemented |
+| 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: duplicated stop-loss records and stale generated artifacts |
+| 2026-07-04 | kimi-code -> codex | dev -> review | A35 remediation: deduplicated trades, exposed raw/unique/duplicate counts, regenerated reports, tests + preflight pass |
 
 ## 交接历史
 
@@ -104,3 +107,5 @@ python tools\handoff.py next --summary "A35 stop-loss stress diagnostics impleme
 |------|---------|----------|------|
 | 2026-07-04 | claude-code → kimi-code | design → dev | A35 design complete: stop-loss stress diagnostics |
 | 2026-07-04 | kimi-code → codex | dev → review | A35 stop-loss stress diagnostics implemented |
+| 2026-07-04 | codex → kimi-code | review → dev | 打回：止损交易对在多份 diagnostics JSON 中重复，且生成的报告 artifact 已过期；要求去重、暴露 raw/unique/duplicate 计数、重新生成 JSON/Markdown、重跑测试与 preflight |
+| 2026-07-04 | kimi-code → codex | dev → review | A35 修复完成：去重止损交易对，暴露 raw/unique/duplicate 计数，重新生成报告，测试与 preflight 全部通过 |

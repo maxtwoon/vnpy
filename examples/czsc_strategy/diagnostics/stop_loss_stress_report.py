@@ -66,6 +66,15 @@ def _is_stop_loss_record(record: dict[str, Any]) -> bool:
     return False
 
 
+def _canonical_exit_reason(record: dict[str, Any]) -> str | None:
+    """Return a normalized stop-loss reason string for deduplication."""
+    for key in EXIT_REASON_KEYS:
+        value = str(record.get(key, "")).lower()
+        if any(token in value for token in STOP_LOSS_REASON_TOKENS):
+            return "stop_loss"
+    return None
+
+
 def _iter_dict_candidates(obj: Any) -> Any:
     if isinstance(obj, dict):
         for value in obj.values():
@@ -114,13 +123,29 @@ def _infer_direction(pnl_pct: float, open_price: float, close_price: float) -> s
     return "short"
 
 
+def _trade_key(pair: dict[str, Any]) -> tuple[str, ...]:
+    """Stable key for deduplicating stop-loss records across JSON files."""
+    return (
+        str(pair.get("symbol")),
+        str(pair.get("strategy")),
+        str(pair.get("open_dt")),
+        str(pair.get("close_dt")),
+        f"{pair.get('pnl_pct'):.6f}" if pair.get("pnl_pct") is not None else "",
+        str(pair.get("exit_reason")),
+    )
+
+
 def collect_stop_loss_pairs(
     diagnostics_dir: Path,
     max_file_mb: float = 50.0,
-) -> list[dict[str, Any]]:
-    """Scan diagnostics JSON files for stop-loss trade records."""
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Scan diagnostics JSON files for stop-loss trade records.
+
+    Returns the deduplicated list of trades plus a metadata dict with
+    raw, unique, and duplicate counts.
+    """
     if not diagnostics_dir or not diagnostics_dir.exists():
-        return []
+        return [], {"raw": 0, "unique": 0, "duplicates": 0}
 
     pairs: list[dict[str, Any]] = []
     max_bytes = max_file_mb * 1024 * 1024
@@ -162,12 +187,23 @@ def collect_stop_loss_pairs(
                     "open_price": open_price,
                     "close_price": close_price,
                     "pnl_pct": _normalize_pnl_pct(pnl_pct),
-                    "exit_reason": _extract_value(record, EXIT_REASON_KEYS),
+                    "exit_reason": _canonical_exit_reason(record),
                     "direction": direction,
                     "source_file": str(path.relative_to(diagnostics_dir)),
                 }
             )
-    return pairs
+
+    seen: set[tuple[str, ...]] = set()
+    unique: list[dict[str, Any]] = []
+    for pair in pairs:
+        key = _trade_key(pair)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(pair)
+
+    counts = {"raw": len(pairs), "unique": len(unique), "duplicates": len(pairs) - len(unique)}
+    return unique, counts
 
 
 class BarLoader:
@@ -594,7 +630,7 @@ def build_report(
     generated_at = datetime.now(timezone.utc).isoformat()
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    pairs = collect_stop_loss_pairs(diagnostics_dir)
+    pairs, pair_counts = collect_stop_loss_pairs(diagnostics_dir)
     for i, pair in enumerate(pairs):
         pair["_index"] = i
     bar_loader = BarLoader(db_path)
@@ -676,6 +712,9 @@ def build_report(
         "status": _top_level_status(scenarios),
         "stop_loss_bp": stop_loss_bp,
         "penalty_bp": penalty_bp,
+        "raw_trade_count": pair_counts["raw"],
+        "unique_trade_count": pair_counts["unique"],
+        "duplicate_trade_count": pair_counts["duplicates"],
         "data_source": {
             "pairs": "diagnostics_json_scan",
             "bars": str(db_path) if db_path and db_path.exists() else "unavailable",
@@ -727,6 +766,16 @@ def write_markdown_report(report: dict[str, Any], out_path: Path) -> None:
             f"{_fmt_pct(summary['avg_loss_pct'])} |"
         )
     lines.append("")
+    lines.extend(
+        [
+            "## Trade Counts",
+            "",
+            f"- raw_trade_count: `{report.get('raw_trade_count', 'N/A')}`",
+            f"- unique_trade_count: `{report.get('unique_trade_count', 'N/A')}`",
+            f"- duplicate_trade_count: `{report.get('duplicate_trade_count', 'N/A')}`",
+            "",
+        ]
+    )
 
     for name, summary in report["scenarios"].items():
         lines.extend(
