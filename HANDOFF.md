@@ -1,13 +1,18 @@
 ---
 task: A35 Stop-Loss Stress Diagnostics
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-04
 deliverables:
   - HANDOFF.md
   - docs/design/a35-stop-loss-stress-diagnostics.md
 blockers: []
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -90,9 +95,12 @@ python tools\handoff.py next --summary "A35 stop-loss stress diagnostics impleme
 | Date | From -> To | Stage Change | Summary |
 |------|------------|--------------|---------|
 | 2026-07-04 | codex -> claude-code | done -> design | A35 stop-loss stress diagnostics started |
+| 2026-07-04 | claude-code -> kimi-code | design -> dev | A35 design complete: stop-loss stress diagnostics |
+| 2026-07-04 | kimi-code -> codex | dev -> review | A35 stop-loss stress diagnostics implemented |
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-04 | claude-code → kimi-code | design → dev | A35 design complete: stop-loss stress diagnostics |
+| 2026-07-04 | kimi-code → codex | dev → review | A35 stop-loss stress diagnostics implemented |
