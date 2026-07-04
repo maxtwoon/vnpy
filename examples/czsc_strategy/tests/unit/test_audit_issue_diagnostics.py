@@ -610,3 +610,34 @@ def test_find_candidate_reports_skips_logs_and_audit_diagnostics(tmp_path):
     (tmp_path / "candidate.md").write_text("0.847 pass", encoding="utf-8")
     found = find_candidate_reports(tmp_path)
     assert [p.name for p in found] == ["candidate.md"]
+
+
+def test_declassified_reports_do_not_contain_bare_goal_passed():
+    from declassify_historical_reports import find_candidate_reports
+
+    candidates = find_candidate_reports(DIAG)
+    if not candidates:
+        pytest.skip("no historical reports present in this checkout")
+
+    offenders: list[str] = []
+    for path in candidates:
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "**GOAL PASSED:" in line:
+                offenders.append(f"{path.name}:{lineno}: {line.strip()}")
+    assert not offenders, f"bare GOAL PASSED lines found: {offenders}"
+
+
+def test_sanitize_goal_passed_lines_rewrites_bare_claims(tmp_path):
+    from declassify_historical_reports import sanitize_goal_passed_lines
+
+    report = tmp_path / "report.md"
+    report.write_text(
+        "# Report\n\n**GOAL PASSED: `True`**\n\n**GOAL PASSED: `False`**\n",
+        encoding="utf-8",
+    )
+    assert sanitize_goal_passed_lines(report) is True
+    text = report.read_text(encoding="utf-8")
+    assert "**GOAL PASSED:" not in text
+    assert "HISTORICAL GATE RESULT: `True` (DECLASSIFIED; NOT PROMOTION EVIDENCE)" in text
+    assert "HISTORICAL GATE RESULT: `False` (DECLASSIFIED; NOT PROMOTION EVIDENCE)" in text
+    assert sanitize_goal_passed_lines(report) is False

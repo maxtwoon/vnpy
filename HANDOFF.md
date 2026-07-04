@@ -54,6 +54,19 @@ Review findings from Codex on 2026-07-04:
    - `examples/czsc_strategy/diagnostics/platform_optimization_round2.md` and `platform_optimization_round8.md` still show `0.847` pass rows without the Phase 2 declassification metadata.
 3. Do not tune parameters or regenerate a new passing candidate. The required fix is to mark these historical artifacts as research-only / not promotion evidence, preserve them as negative/contaminated evidence, and ensure future generators emit the same metadata.
 
+Second Codex review on 2026-07-04:
+
+1. Gate checks passed: `python tools/sync_check.py`, targeted audit/backtest tests, and `run_next_work.ps1 -Preflight` all pass.
+2. The declassification marker is now present on all candidate Markdown reports containing `0.847` or `GOAL PASSED`; `declassify_historical_reports.py --dry-run` reports `changed=0 already_marked=20`.
+3. Remaining blocker: `examples/czsc_strategy/diagnostics/portfolio_goal_expanded_short_sc_0847.md` still contains the bare line `**GOAL PASSED: `True`**`. This violates the A34 design safety acceptance: "No report claims `GOAL PASSED` from the old OOS window." Keep the historical evidence, but rewrite the line so it cannot be read as an active promotion claim, for example `**HISTORICAL GATE RESULT: `True` (DECLASSIFIED; NOT PROMOTION EVIDENCE)**`, and add a regression test that fails on bare `**GOAL PASSED: `True`**` in declassified reports.
+
+Second remediation on 2026-07-04:
+
+1. Extended `declassify_historical_reports.py` to sanitize all bare `**GOAL PASSED: `X`**` lines into `**HISTORICAL GATE RESULT: `X` (DECLASSIFIED; NOT PROMOTION EVIDENCE)**` while preserving the historical metric tables.
+2. Ran the updated script on all candidate reports; `declassify_historical_reports.py --dry-run` now reports `changed=0 already_marked=20`.
+3. Added regression tests that fail on any bare `**GOAL PASSED:` line in declassified historical reports.
+4. Full unit suite passes: `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → 251 passed.
+
 Implementation guardrails:
 
 - Start with Phase 1 and Phase 2 only. Do not implement Phase 3-5 until Phase 1-2 pass review.
@@ -82,6 +95,8 @@ Implementation guardrails:
 | 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
 | 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: A34 Phase 2 incomplete: historical final-candidate reports still show GOAL PASSED/0.847 pass without research-only declassification |
 | 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
+| 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: A34 Phase 2 still leaves bare GOAL PASSED True in portfolio_goal_expanded_short_sc_0847.md |
+| 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 second remediation: bare GOAL PASSED lines rewritten, regression tests added |
 
 ## 交接历史
 
@@ -91,3 +106,5 @@ Implementation guardrails:
 | 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
 | 2026-07-04 | codex → kimi-code | review → dev | 打回: A34 Phase 2 incomplete: historical final-candidate reports still show GOAL PASSED/0.847 pass without research-only declassification |
 | 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
+| 2026-07-04 | codex → kimi-code | review → dev | 打回: A34 Phase 2 still leaves bare GOAL PASSED True in portfolio_goal_expanded_short_sc_0847.md |
+| 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 二次修复：改写裸 GOAL PASSED 行，新增回归测试 |
