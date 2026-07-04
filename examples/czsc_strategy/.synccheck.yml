@@ -1,7 +1,7 @@
 # .synccheck.yml — 本目录（examples/czsc_strategy）作为独立工作流的"仓库根"。
 # 说明：上游 vnpy 仓库不纳入治理范围；sync_check/handoff 均以本目录为 --root 运行。
 
-version_source: VERSION::          # 纯文本单一真相（本子项目无包管理文件）
+version_source: "VERSION::"        # 纯文本单一真相（本子项目无包管理文件）
 
 must_match: []                     # 目前无第二处版本副本；新增硬编码副本时必须登记到此处
 
