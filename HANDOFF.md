@@ -1,112 +1,98 @@
 ---
-task: A34 Audit Remediation Roadmap
+task: A35 Stop-Loss Stress Diagnostics
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-04
 deliverables:
   - HANDOFF.md
-  - docs/design/a34-audit-remediation-roadmap.md
+  - docs/design/a35-stop-loss-stress-diagnostics.md
 blockers: []
 ---
 
 ## Background
 
-A31-A33 turned the major audit findings in `examples/czsc_strategy/AUDIT_REPORT_2026-07-03.md` into repeatable evidence.
+A31-A34 converted the major audit findings into repeatable evidence and declassified old promotion claims.
 
-- H1 is `detected`: high-precision weight evidence exists, including the SC `0.847` family.
-- H2 is `detected`: stop-loss overshoot exists, with worst loss near `-12.60%` versus a nominal `-3.0%` stop.
-- H3 is `detected`: real signal-history replay found `背驰V260615_失效` count `0`.
-- H4 is `found_spliced`: SQLite metadata shows 888 tables switch `real_symbol`.
-- M1 is `detected`: `BACKTEST_CONFIG` and `BacktestEngine` defaults disagree on costs.
+The next unresolved high-severity issue is H2: fixed stop-loss exits are checked and filled at bar close, so actual losses can materially exceed nominal stop levels. The latest audit diagnostic reports:
 
-A34 must produce a remediation roadmap so the next dev agent fixes the issues in a controlled order without continuing to optimize historical OOS results.
+- H2 `status=detected`.
+- Nominal stop-loss baseline: `300bp` / `-3.0%`.
+- Worst observed stop-loss loss: about `-12.60%`.
+- Max overshoot multiple: about `4.20x`.
+- Overshoot count: `12`.
+
+A35 must design a read-only stress diagnostic. It must measure the tail-risk gap before any trading or Position logic is changed.
 
 ## Goal
 
-Produce a design document that specifies phased remediation for:
+Design a reproducible stop-loss stress report for the Chan strategy workspace.
 
-1. M1 cost single source of truth.
-2. H1 parameter freeze and declassification of old promotion evidence.
-3. H2 stop-loss overshoot stress diagnostics.
-4. H3 dead-branch repair/delete/deprecation decision.
-5. H4 rollover/raw-splice pollution diagnostics.
+The diagnostic must compare existing close-based stop-loss outcomes with alternative stress assumptions:
+
+1. Current close-based observed outcome.
+2. Intrabar low/high trigger model.
+3. Gap/open-exit model.
+4. Optional penalty-slippage model.
 
 ## Acceptance Criteria
 
-- `docs/design/a34-audit-remediation-roadmap.md` exists and covers H1/H2/H3/H4/M1.
-- The design explicitly says A34 does not implement strategy fixes, tune parameters, or optimize returns.
-- The design recommends Phase 1 = M1 cost single source and Phase 2 = H1 freeze/declassification before H2/H3/H4 remediation.
-- The design includes concrete acceptance criteria for each phase.
-- The design forbids changing SimNow order/cancel/trading interfaces and forbids new old-OOS optimization.
-- `python tools/handoff.py next` succeeds and advances the stage to `dev`.
+- `docs/design/a35-stop-loss-stress-diagnostics.md` exists.
+- The design states A35 is diagnostic-only and does not change strategy, Position, SimNow, order, cancel, or gateway logic.
+- The design specifies a script named `examples/czsc_strategy/diagnostics/stop_loss_stress_report.py`.
+- The design specifies generated outputs:
+  - `examples/czsc_strategy/diagnostics/stop_loss_stress_report_YYYY-MM-DD.json`
+  - `examples/czsc_strategy/diagnostics/stop_loss_stress_report_YYYY-MM-DD.md`
+- The design defines required report fields:
+  - `worst_loss_pct`
+  - `overshoot_count`
+  - `max_overshoot_multiple`
+  - `affected_trade_count`
+  - `affected_symbols`
+  - baseline and stress scenario summaries
+- The design defines deterministic behavior when SQLite K-line data is unavailable: mark intrabar/gap scenarios as `unavailable`, keep baseline diagnostics, and do not silently pass.
+- The design includes unit-test acceptance for pure stress calculations, missing data handling, and report rendering.
+- The design forbids new parameter tuning, old-OOS optimization, `GOAL PASSED`, and any SimNow trading interface changes.
+- `python tools/sync_check.py` passes.
+- `python tools/handoff.py next --summary "A35 design complete: stop-loss stress diagnostics"` succeeds and advances to `dev`.
 
 ## Notes for the Next Agent
 
-Read this file and `docs/design/a34-audit-remediation-roadmap.md` before writing code.
+Read this file and `docs/design/a35-stop-loss-stress-diagnostics.md` before writing code.
 
-Review findings from Codex on 2026-07-04:
+Implement only the diagnostic described there. Do not fix stop-loss logic yet. The intended implementation is:
 
-1. Phase 1 / M1 passed verification: `audit_issue_diagnostics_2026-07-03.json` now reports M1 `status=ok`, `consistent=True`, `conflicts=[]`; `BacktestEngine` and `Position` defaults resolve to `BACKTEST_CONFIG`; targeted tests and preflight pass.
-2. Phase 2 is incomplete: new audit diagnostics mark H1 as `research_only=True` and `is_promotion_evidence=False`, but existing historical final-candidate reports are still not declassified. In particular:
-   - `examples/czsc_strategy/diagnostics/portfolio_goal_expanded_short_sc_0847.md` still contains `**GOAL PASSED: `True`**`.
-   - `examples/czsc_strategy/diagnostics/sc_short_weight_neighborhood_final_candidate.md` still presents the `0.847` row as `pass=True` without a research-only / not-promotion-evidence warning.
-   - `examples/czsc_strategy/diagnostics/platform_optimization_round2.md` and `platform_optimization_round8.md` still show `0.847` pass rows without the Phase 2 declassification metadata.
-3. Do not tune parameters or regenerate a new passing candidate. The required fix is to mark these historical artifacts as research-only / not promotion evidence, preserve them as negative/contaminated evidence, and ensure future generators emit the same metadata.
+- Add a read-only script `examples/czsc_strategy/diagnostics/stop_loss_stress_report.py`.
+- Reuse existing evidence collection where reasonable, especially stop-loss pair scanning from `audit_issue_diagnostics.py`.
+- Add focused tests in `examples/czsc_strategy/tests/unit/test_stop_loss_stress_report.py`.
+- Generate JSON and Markdown reports with clear `Diagnostic only, not a trading recommendation.` disclaimers.
+- If DB/K-line data is unavailable, keep the report explicit: baseline is available, intrabar/gap scenarios are unavailable.
+- Do not tune parameters or regenerate strategy-performance claims.
+- Do not touch SimNow order/cancel/send-order paths.
 
-Second Codex review on 2026-07-04:
+Suggested verification commands for dev:
 
-1. Gate checks passed: `python tools/sync_check.py`, targeted audit/backtest tests, and `run_next_work.ps1 -Preflight` all pass.
-2. The declassification marker is now present on all candidate Markdown reports containing `0.847` or `GOAL PASSED`; `declassify_historical_reports.py --dry-run` reports `changed=0 already_marked=20`.
-3. Remaining blocker: `examples/czsc_strategy/diagnostics/portfolio_goal_expanded_short_sc_0847.md` still contains the bare line `**GOAL PASSED: `True`**`. This violates the A34 design safety acceptance: "No report claims `GOAL PASSED` from the old OOS window." Keep the historical evidence, but rewrite the line so it cannot be read as an active promotion claim, for example `**HISTORICAL GATE RESULT: `True` (DECLASSIFIED; NOT PROMOTION EVIDENCE)**`, and add a regression test that fails on bare `**GOAL PASSED: `True`**` in declassified reports.
-
-Second remediation on 2026-07-04:
-
-1. Extended `declassify_historical_reports.py` to sanitize all bare `**GOAL PASSED: `X`**` lines into `**HISTORICAL GATE RESULT: `X` (DECLASSIFIED; NOT PROMOTION EVIDENCE)**` while preserving the historical metric tables.
-2. Ran the updated script on all candidate reports; `declassify_historical_reports.py --dry-run` now reports `changed=0 already_marked=20`.
-3. Added regression tests that fail on any bare `**GOAL PASSED:` line in declassified historical reports.
-4. Full unit suite passes: `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → 251 passed.
-
-Implementation guardrails:
-
-- Start with Phase 1 and Phase 2 only. Do not implement Phase 3-5 until Phase 1-2 pass review.
-- Do **not** modify SimNow order or cancel interfaces.
-- Do **not** tune `0.847` or any neighboring parameter to recover a pass.
-- Do **not** use the old OOS window for new parameter selection.
-- Do **not** claim `GOAL PASSED`.
-- Keep prior negative diagnostics as evidence.
+```powershell
+python -m pytest examples\czsc_strategy\tests\unit\test_stop_loss_stress_report.py -q
+python -m pytest examples\czsc_strategy\tests\unit\test_audit_issue_diagnostics.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\handoff.py next --summary "A35 stop-loss stress diagnostics implemented"
+```
 
 ## Decision Log
 
-- 2026-07-03 - Initialized the sync-guardian workflow in the repository root.
-- 2026-07-03 - A33 design stage: chose a real-bar replay for H3 and DB metadata heuristics for H4.
-- 2026-07-04 - A34 design stage: chose a phased remediation roadmap, with M1/H1 first and H2/H3/H4 deferred behind explicit diagnostics.
+- 2026-07-04 - A35 started after A34 reached `done`.
+- 2026-07-04 - Chose H2 stop-loss stress diagnostics as the next task because it is the highest remaining tail-risk issue and can be measured without changing trading logic.
+- 2026-07-04 - Chose diagnostic-first scope: no Position logic changes, no strategy tuning, no SimNow trading changes.
 
 ## Handoff History
 
 | Date | From -> To | Stage Change | Summary |
 |------|------------|--------------|---------|
-| 2026-07-03 | none -> claude-code | none -> design | Workflow initialized |
-| 2026-07-03 | claude-code -> kimi-code | design -> dev | A33 design: H3 signal-history replay + H4 DB metadata inspection specified |
-| 2026-07-03 | kimi-code -> codex | dev -> review | A33 evidence closure implemented |
-| 2026-07-03 | codex -> codex | review -> done | A33 review passed: H3 signal-history replay and H4 DB metadata evidence verified |
-| 2026-07-04 | codex -> claude-code | done -> design | A34 remediation roadmap started |
-| 2026-07-04 | claude-code -> kimi-code | design -> dev | A34 design complete: audit remediation roadmap |
-| 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
-| 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: A34 Phase 2 incomplete: historical final-candidate reports still show GOAL PASSED/0.847 pass without research-only declassification |
-| 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
-| 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: A34 Phase 2 still leaves bare GOAL PASSED True in portfolio_goal_expanded_short_sc_0847.md |
-| 2026-07-04 | kimi-code -> codex | dev -> review | A34 Phase 2 second remediation: bare GOAL PASSED lines rewritten, regression tests added |
-| 2026-07-04 | codex -> codex | review -> done | A34 review passed: M1 cost truth and H1 historical report declassification verified |
+| 2026-07-04 | codex -> claude-code | done -> design | A35 stop-loss stress diagnostics started |
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-04 | claude-code → kimi-code | design → dev | A34 design complete: audit remediation roadmap |
-| 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 1-2 implemented: M1 cost truth + H1 freeze/declassification metadata, tests pass |
-| 2026-07-04 | codex → kimi-code | review → dev | 打回: A34 Phase 2 incomplete: historical final-candidate reports still show GOAL PASSED/0.847 pass without research-only declassification |
-| 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 remediation: historical final-candidate reports declassified, reproducible declassify script + tests added |
-| 2026-07-04 | codex → kimi-code | review → dev | 打回: A34 Phase 2 still leaves bare GOAL PASSED True in portfolio_goal_expanded_short_sc_0847.md |
-| 2026-07-04 | kimi-code → codex | dev → review | A34 Phase 2 二次修复：改写裸 GOAL PASSED 行，新增回归测试 |
-| 2026-07-04 | codex → codex | review → done | A34 review passed: M1 cost truth and H1 historical report declassification verified |
+| 2026-07-04 | claude-code → kimi-code | design → dev | A35 design complete: stop-loss stress diagnostics |
