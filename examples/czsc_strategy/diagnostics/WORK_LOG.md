@@ -2544,7 +2544,7 @@ powershell.exe -ExecutionPolicy Bypass -File "examples/czsc_strategy\diagnostics
 - No automatic orders were observed; `meta.read_only=true`, `orders_sent_by_workflow=0`, `workflow_order_actions=[]`.
 - Required export keys are present: `meta`, `signals`, `trades`, `positions`, `risk`, `raw`.
 - Risk fields are present and `threshold_status=pass`.
-- Daily record status is `pending` with reason `historical_db_lag`; `consistency_matched=false`.
+- Run summary normalizes record.reason to `historical_db_lag`; `consistency_matched=false`.
 - Replay remained unavailable for the same day because the historical DB lags the observation date. Current replay metadata reports `latest_db_date=2026-07-01`, so `2026-07-03` still cannot be replay-matched.
 - Run summary machine judgment:
   - `automation_status=pending`
@@ -2679,3 +2679,84 @@ Result:
 - No orders were sent and no trading interface was called.
 - The diagnostic script now self-excludes previously generated `audit_issue_diagnostics*.json` files to prevent feedback loops.
 - A1-A32 SimNow observation and audit diagnostics stack is complete.
+
+## 2026-07-06 Daily Observation Smoke Rerun
+
+### Goal
+
+Execute the daily SimNow read-only observation workflow, keep the run non-trading, and record today's machine-readable outcome.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `125 passed`.
+- Pending replay backfill plan still shows `2026-06-22`, `2026-06-29`, `2026-07-02`, and `2026-07-03` as `waiting_for_db`.
+
+Rejected by guardrail as designed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The workflow rejected the command because `300 < 30 * 60`.
+- Root cause is the formal kline gate, not a connection or script defect.
+- The script requires `-SkipKlineUpdate` for a 300-second smoke test.
+
+Passed after switching to the documented smoke-test variant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Output files created/refreshed:
+  - `simnow_export_2026-07-06.json`
+  - `simnow_record_2026-07-06.json`
+  - `simnow_report_2026-07-06.md`
+  - `simnow_run_summary_2026-07-06.json`
+  - `simnow_daily_brief_2026-07-06.md`
+  - `simnow_ledger_summary.json`
+- SimNow read-only connection/login succeeded.
+- Contract query succeeded with `contracts_count=18409`.
+- Enabled subscriptions remained complete: `5/5`; `subscription_missing=0`.
+- Tick count: `7`.
+- Accounts: `1`.
+- Positions: `1`.
+- Orders: `0`.
+- Trades: `0`.
+- No automatic orders were observed; `meta.read_only=true`, `orders_sent_by_workflow=0`, `workflow_order_actions=[]`, `order_safety.status=pass`.
+- Required export keys are present: `meta`, `signals`, `trades`, `positions`, `risk`, `raw`.
+- Risk fields are present with `9` threshold rows; `threshold_status=pass`.
+- Daily record status is `pending` with reason `historical_db_lag`; `consistency_matched=false`.
+- Run summary machine judgment:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=historical_db_lag`
+  - `automation_action=resolve pending gate before counting`
+- Ledger summary after upsert:
+  - `total_rows=7`
+  - `valid_observation_days=0`
+  - `pending_days=6`
+  - `skipped_days=1`
+  - `ready_to_expand=false`
+
+### Notes
+
+- Today's initial `-LiveCapture -DurationSeconds 300` failure was an expected safety gate, not a code regression.
+- The rerun stayed read-only and did not place or simulate any workflow orders.
+- Today's blocker remains replay coverage: the replay metadata reports `latest_db_date=2026-07-01`, so `2026-07-06` cannot be consistency-matched yet.
+- This smoke run does not count toward the 20-day valid-observation gate.
+
+### Next Action
+
+Wait for the historical DB to cover `2026-07-06`, then rerun replay/backfill so the pending day can be evaluated for consistency instead of remaining `historical_db_lag`.

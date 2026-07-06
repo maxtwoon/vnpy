@@ -1,112 +1,102 @@
 ---
-task: A35 Stop-Loss Stress Diagnostics
+task: A36 SimNow Replay Backfill Closure
 version: 4.4.0
-stage: done
-owner: codex
-updated: 2026-07-04
+stage: dev
+owner: kimi-code
+updated: 2026-07-06
 deliverables:
   - HANDOFF.md
-  - docs/design/a35-stop-loss-stress-diagnostics.md
+  - docs/design/a36-simnow-replay-backfill-closure.md
 blockers: []
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-A31-A34 converted the major audit findings into repeatable evidence and declassified old promotion claims.
+A35 (stop-loss stress diagnostics) has reached `done`. The remaining open item is a single SimNow observation day that is stuck in `pending/historical_db_lag`:
 
-The next unresolved high-severity issue is H2: fixed stop-loss exits are checked and filled at bar close, so actual losses can materially exceed nominal stop levels. The latest audit diagnostic reports:
+- `simnow_run_summary_2026-07-06.json` reports:
+  - `automation_status = pending`
+  - `record.reason = historical_db_lag`
+  - `record.valid_observation = false`
+  - `record.consistency_matched = false`
+- `simnow_ledger_summary.json` reports `valid_observation_days = 0`.
 
-- H2 `status=detected`.
-- Nominal stop-loss baseline: `300bp` / `-3.0%`.
-- Worst observed stop-loss loss: about `-12.60%`.
-- Max overshoot multiple: about `4.20x`.
-- Overshoot count: `12`.
-
-A35 must design a read-only stress diagnostic. It must measure the tail-risk gap before any trading or Position logic is changed.
+The read-only capture for `2026-07-06` is already complete; the only blocker is that the historical SQLite DB did not yet cover the observation date when the replay was first attempted. Once the DB catches up, the existing backfill tooling can close the day.
 
 ## Goal
 
-Design a reproducible stop-loss stress report for the Chan strategy workspace.
+Move the `2026-07-06` SimNow observation from `pending/historical_db_lag` to `valid/matched`, and make the 20-day observation ledger show at least one valid day.
 
-The diagnostic must compare existing close-based stop-loss outcomes with alternative stress assumptions:
+Quantified target:
 
-1. Current close-based observed outcome.
-2. Intrabar low/high trigger model.
-3. Gap/open-exit model.
-4. Optional penalty-slippage model.
+- `simnow_run_summary_2026-07-06.json`:
+  - `automation_status = valid`
+  - `record.valid_observation = true`
+  - `record.consistency_matched = true`
+- `simnow_ledger_summary.json`:
+  - `valid_observation_days >= 1`
 
 ## Acceptance Criteria
 
-- `docs/design/a35-stop-loss-stress-diagnostics.md` exists.
-- The design states A35 is diagnostic-only and does not change strategy, Position, SimNow, order, cancel, or gateway logic.
-- The design specifies a script named `examples/czsc_strategy/diagnostics/stop_loss_stress_report.py`.
-- The design specifies generated outputs:
-  - `examples/czsc_strategy/diagnostics/stop_loss_stress_report_YYYY-MM-DD.json`
-  - `examples/czsc_strategy/diagnostics/stop_loss_stress_report_YYYY-MM-DD.md`
-- The design defines required report fields:
-  - `worst_loss_pct`
-  - `overshoot_count`
-  - `max_overshoot_multiple`
-  - `affected_trade_count`
-  - `affected_symbols`
-  - baseline and stress scenario summaries
-- The design defines deterministic behavior when SQLite K-line data is unavailable: mark intrabar/gap scenarios as `unavailable`, keep baseline diagnostics, and do not silently pass.
-- The design includes unit-test acceptance for pure stress calculations, missing data handling, and report rendering.
-- The design forbids new parameter tuning, old-OOS optimization, `GOAL PASSED`, and any SimNow trading interface changes.
+- Historical DB covers `2026-07-06` (`simnow_replay_readiness.py --date 2026-07-06` returns `ready = true`).
+- `simnow_run_summary_2026-07-06.json` shows `automation_status = valid`.
+- `record.valid_observation = true`.
+- `record.consistency_matched = true`.
+- `simnow_ledger_summary.json` shows `valid_observation_days >= 1`.
+- No workflow orders are sent (`meta.read_only = true`, `orders_sent_by_workflow = 0`, `workflow_order_actions = []`).
 - `python tools/sync_check.py` passes.
-- `python tools/handoff.py next --summary "A35 design complete: stop-loss stress diagnostics"` succeeds and advances to `dev`.
+- `python tools/sync_check.py --root examples/czsc_strategy` passes.
+- `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
 
 ## Notes for the Next Agent
 
-Read this file and `docs/design/a35-stop-loss-stress-diagnostics.md` before writing code.
+Read `docs/design/a36-simnow-replay-backfill-closure.md` before doing any work.
 
-Implement only the diagnostic described there. Do not fix stop-loss logic yet. The intended implementation is:
+This is primarily a **data-driven closure** using existing tools:
 
-- Add a read-only script `examples/czsc_strategy/diagnostics/stop_loss_stress_report.py`.
-- Reuse existing evidence collection where reasonable, especially stop-loss pair scanning from `audit_issue_diagnostics.py`.
-- Add focused tests in `examples/czsc_strategy/tests/unit/test_stop_loss_stress_report.py`.
-- Generate JSON and Markdown reports with clear `Diagnostic only, not a trading recommendation.` disclaimers.
-- If DB/K-line data is unavailable, keep the report explicit: baseline is available, intrabar/gap scenarios are unavailable.
-- Do not tune parameters or regenerate strategy-performance claims.
-- Do not touch SimNow order/cancel/send-order paths.
+1. Verify DB coverage:
+   ```powershell
+   python examples/czsc_strategy/diagnostics/simnow_replay_readiness.py --date 2026-07-06
+   ```
+2. If ready, execute backfill:
+   ```powershell
+   python examples/czsc_strategy/diagnostics/simnow_backfill_pending_replays.py `
+     --date 2026-07-06 `
+     --execute `
+     --out-json examples/czsc_strategy/diagnostics/simnow_backfill_plan.json
+   ```
+3. Verify closure:
+   ```powershell
+   python examples/czsc_strategy/diagnostics/simnow_run_summary.py --date 2026-07-06
+   ```
 
-Suggested verification commands for dev:
+Guardrails:
 
-```powershell
-python -m pytest examples\czsc_strategy\tests\unit\test_stop_loss_stress_report.py -q
-python -m pytest examples\czsc_strategy\tests\unit\test_audit_issue_diagnostics.py -q
-powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
-python tools\handoff.py next --summary "A35 stop-loss stress diagnostics implemented"
-```
+- Do not patch or fabricate historical DB data.
+- Do not change SimNow order/cancel/trading interfaces.
+- Do not tune strategy parameters.
+- Do not claim `GOAL PASSED`.
+- If `simnow_replay_readiness.py` is not ready, stop and report the actual `latest_db_date`.
 
 ## Decision Log
 
-- 2026-07-04 - A35 started after A34 reached `done`.
-- 2026-07-04 - Chose H2 stop-loss stress diagnostics as the next task because it is the highest remaining tail-risk issue and can be measured without changing trading logic.
-- 2026-07-04 - Chose diagnostic-first scope: no Position logic changes, no strategy tuning, no SimNow trading changes.
-- 2026-07-04 - Review rejection: duplicated stop-loss records across diagnostics JSON files and stale generated reports. Fixed by canonicalizing exit reasons, deduplicating trades, exposing raw/unique/duplicate counts, regenerating JSON/Markdown, and rerunning tests + preflight.
+- 2026-07-06 - A36 started after A35 reached `done`.
+- 2026-07-06 - Chose to reuse `simnow_backfill_pending_replays.py` and `simnow_replay_readiness.py` instead of building a new replay engine.
 
 ## Handoff History
 
 | Date | From -> To | Stage Change | Summary |
 |------|------------|--------------|---------|
-| 2026-07-04 | codex -> claude-code | done -> design | A35 stop-loss stress diagnostics started |
-| 2026-07-04 | claude-code -> kimi-code | design -> dev | A35 design complete: stop-loss stress diagnostics |
-| 2026-07-04 | kimi-code -> codex | dev -> review | A35 stop-loss stress diagnostics implemented |
-| 2026-07-04 | codex -> kimi-code | review -> dev | Rejected: duplicated stop-loss records and stale generated artifacts |
-| 2026-07-04 | kimi-code -> codex | dev -> review | A35 remediation: deduplicated trades, exposed raw/unique/duplicate counts, regenerated reports, tests + preflight pass |
+| 2026-07-06 | codex -> claude-code | done -> design | A36 SimNow replay backfill closure started |
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-04 | claude-code → kimi-code | design → dev | A35 design complete: stop-loss stress diagnostics |
-| 2026-07-04 | kimi-code → codex | dev → review | A35 stop-loss stress diagnostics implemented |
-| 2026-07-04 | codex → kimi-code | review → dev | 打回：止损交易对在多份 diagnostics JSON 中重复，且生成的报告 artifact 已过期；要求去重、暴露 raw/unique/duplicate 计数、重新生成 JSON/Markdown、重跑测试与 preflight |
-| 2026-07-04 | kimi-code → codex | dev → review | A35 修复完成：去重止损交易对，暴露 raw/unique/duplicate 计数，重新生成报告，测试与 preflight 全部通过 |
-| 2026-07-04 | codex → codex | review → done | A35 review passed: stop-loss stress diagnostics accepted |
+| 2026-07-06 | codex → claude-code | done → design | A36 SimNow replay backfill closure started |
+| 2026-07-06 | claude-code → kimi-code | design → dev | A36 design complete: SimNow replay backfill closure |
