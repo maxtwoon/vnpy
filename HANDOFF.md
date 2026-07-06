@@ -7,7 +7,8 @@ updated: 2026-07-06
 deliverables:
   - HANDOFF.md
   - docs/design/a36-simnow-replay-backfill-closure.md
-blockers: []
+blockers:
+  - Historical SQLite DB does not yet cover 2026-07-06 (latest_db_date=2026-07-01; all 5 symbols lagged). A36 cannot execute backfill until the external DB is refreshed.
 last_transition_actor: claude-code
 last_transition_from_stage: design
 last_transition_to_stage: dev
