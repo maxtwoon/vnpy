@@ -1,18 +1,19 @@
 ---
 task: A37 Exit-Event Boolean Restructure
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-07
 deliverables:
   - HANDOFF.md
   - docs/design/a37-exit-event-restructure.md
 blockers: []
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
+last_transition_kind: next
 ---
 
 ## Background
@@ -139,3 +140,4 @@ Guardrails (reject-on-violation, see design §8):
 | 2026-07-07 | claude-code → kimi-code | design → dev | A37 设计完成：三阶段（只读诊断 → 行为中性删除 → 开关门控重构），默认基线不变 |
 | 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2) |
 | 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 diagnostic scripts and proof artifacts are ignored by git, so the review evidence is not reproducible from a clean checkout |
+| 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2); diagnostic scripts now tracked |
