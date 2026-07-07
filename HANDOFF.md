@@ -1,18 +1,18 @@
 ---
 task: A37 Exit-Event Boolean Restructure
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-07
 deliverables:
   - HANDOFF.md
   - docs/design/a37-exit-event-restructure.md
 blockers: []
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -52,6 +52,58 @@ Implement A37 exactly as specified in `docs/design/a37-exit-event-restructure.md
 - `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight` passes.
 - `python tools/handoff.py next --summary "A37 exit-event restructure implemented (phases 0-2)"` advances to review.
 
+## Review Findings
+
+2026-07-07 codex review result: **rejected to dev**.
+
+Blocking issue:
+
+- The implementation commit `4ef90b88` added tracked unit tests that import
+  `diagnostics.exit_event_reachability_report` and
+  `diagnostics.phase1_dead_factor_equivalence`, but both diagnostic scripts and
+  the generated Phase 0 / Phase 1 proof artifacts are ignored by
+  `.gitignore:105` (`examples/czsc_strategy/diagnostics/`) and are not tracked
+  by git. Local tests pass only because those ignored files exist on this
+  machine; a clean checkout of the commit would miss the scripts and cannot
+  reproduce the acceptance evidence.
+
+Evidence:
+
+```powershell
+git ls-files examples/czsc_strategy/diagnostics/exit_event_reachability_report.py `
+  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py `
+  examples/czsc_strategy/diagnostics/exit_event_reachability_report_2026-07-07.json `
+  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence_2025.json
+# no output
+
+git status --short --ignored examples/czsc_strategy/diagnostics/exit_event_reachability_report.py `
+  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py `
+  examples/czsc_strategy/diagnostics/exit_event_reachability_report_2026-07-07.json `
+  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence_2025.json
+# !! examples/czsc_strategy/diagnostics/exit_event_reachability_report.py
+# !! examples/czsc_strategy/diagnostics/exit_event_reachability_report_2026-07-07.json
+# !! examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py
+# !! examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence_2025.json
+```
+
+Additional concern:
+
+- The generated Phase 0 JSON currently marks only `AP888` as `ok`; `RB888`,
+  `SC888`, `A888`, and `ZN888` are `unavailable` because of insufficient
+  30-minute bars in the selected window. That may be acceptable only if the
+  design explicitly allows a partial Phase 0 sample; otherwise rerun Phase 0 on
+  a window that covers the intended symbol set.
+
+Required remediation:
+
+1. Track the Phase 0 / Phase 1 diagnostic scripts despite the diagnostics
+   directory ignore rule, or move reusable scripts to a tracked package/module.
+2. Track the machine-checkable proof artifacts required by A37 acceptance, or
+   add an explicitly tracked summary artifact that contains the same evidence.
+3. Update `HANDOFF.md` deliverables to include the actual scripts, reports, and
+   tests used for acceptance.
+4. Re-run the full A37 acceptance commands and hand off again to review.
+
 ## Notes for the Next Agent
 
 Read `docs/design/a37-exit-event-restructure.md` before writing code. The full dev prompt is in its §9.
@@ -86,3 +138,4 @@ Guardrails (reject-on-violation, see design §8):
 | 2026-07-07 | codex → claude-code | done → design | A37 出场事件布尔结构重构 启动 |
 | 2026-07-07 | claude-code → kimi-code | design → dev | A37 设计完成：三阶段（只读诊断 → 行为中性删除 → 开关门控重构），默认基线不变 |
 | 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2) |
+| 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 diagnostic scripts and proof artifacts are ignored by git, so the review evidence is not reproducible from a clean checkout |

@@ -2814,3 +2814,85 @@ Results:
 ### Next Action
 
 A36 is complete. Continue normal daily SimNow observation starting from the next trading day.
+
+## 2026-07-07 Daily Observation Smoke Rerun
+
+### Goal
+
+Execute the daily SimNow read-only observation workflow, keep the run non-trading, and record today's machine-readable outcome.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `128 passed`.
+- Pending replay backfill plan shows `2026-06-22`, `2026-06-29`, `2026-07-02`, and `2026-07-03` as `ready_to_backfill`.
+
+Rejected by guardrail as designed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The workflow rejected the command because `300 < 30 * 60`.
+- Root cause is the formal kline gate, not a connection or script defect.
+- The script requires `-SkipKlineUpdate` for a 300-second smoke test.
+
+Passed after switching to the documented smoke-test variant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Output files created/refreshed:
+  - `simnow_export_2026-07-07.json`
+  - `simnow_record_2026-07-07.json`
+  - `simnow_report_2026-07-07.md`
+  - `simnow_run_summary_2026-07-07.json`
+  - `simnow_daily_brief_2026-07-07.md`
+  - `simnow_ledger_summary.json`
+- SimNow read-only connection/login succeeded.
+- Contract query succeeded with `contracts_count=18511`.
+- Enabled subscriptions remained complete: `5/5`; `subscription_missing=0`.
+- Tick count: `4`.
+- Accounts: `1`.
+- Positions: `2` raw rows, with one non-zero long position on `sc2608`.
+- Orders: `2`.
+- Trades: `2`.
+- No automatic orders were observed; `meta.read_only=true`, `orders_sent_by_workflow=0`, `workflow_order_actions=[]`, `order_safety.status=pass`.
+- The observed `raw_orders/raw_trades` came from account snapshots (`sc2608` at `2026-07-07 09:14:59+08:00`), not from workflow order actions.
+- Required export keys are present: `meta`, `signals`, `trades`, `positions`, `risk`, `raw`.
+- Risk fields are present with `9` threshold rows; `threshold_status=pass`.
+- Daily record status is `pending` with reason `historical_db_lag`; `consistency_matched=false`.
+- Replay remained unavailable for the same day because `AP888` and `A888` tables still lag the observation date even though the DB contains same-day data for other symbols.
+- Run summary machine judgment:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=historical_db_lag`
+  - `automation_action=resolve pending gate before counting`
+- Ledger summary after upsert:
+  - `total_rows=8`
+  - `valid_observation_days=1`
+  - `pending_days=6`
+  - `skipped_days=1`
+  - `ready_to_expand=false`
+
+### Notes
+
+- Today's initial `-LiveCapture -DurationSeconds 300` failure was an expected safety gate, not a code regression.
+- The rerun stayed read-only and did not place or simulate any workflow orders.
+- Today's blocker remains replay coverage for `AP888` and `A888`, so this smoke run does not count toward the 20-day valid-observation gate.
+
+### Next Action
+
+Wait for the historical DB to cover `2026-07-07` for all required symbols, then rerun replay/backfill so the pending day can be evaluated for consistency instead of remaining `historical_db_lag`.
