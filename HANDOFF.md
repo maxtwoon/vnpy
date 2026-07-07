@@ -1,19 +1,31 @@
 ---
 task: A37 Exit-Event Boolean Restructure
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-07
 deliverables:
   - HANDOFF.md
   - docs/design/a37-exit-event-restructure.md
+  - docs/design/a37-proof-evidence.md
+  - examples/czsc_strategy/chan_strategy/config.py
+  - examples/czsc_strategy/chan_strategy/positions.py
+  - examples/czsc_strategy/chan_strategy/signals.py
+  - examples/czsc_strategy/chan_strategy/sell_signals.py
+  - examples/czsc_strategy/chan_strategy/validation.py
+  - examples/czsc_strategy/chan_strategy/backtest_engine.py
+  - examples/czsc_strategy/diagnostics/exit_event_reachability_report.py
+  - examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py
+  - examples/czsc_strategy/tests/unit/test_exit_event_reachability_report.py
+  - examples/czsc_strategy/tests/unit/test_exit_event_restructure.py
+  - examples/czsc_strategy/tests/unit/test_phase1_dead_factor_equivalence.py
 blockers: []
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
-last_transition_kind: next
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
+last_transition_kind: reject
 ---
 
 ## Background
@@ -105,6 +117,45 @@ Required remediation:
    tests used for acceptance.
 4. Re-run the full A37 acceptance commands and hand off again to review.
 
+2026-07-07 codex second review result: **rejected to dev**.
+
+Progress since the first rejection:
+
+- `examples/czsc_strategy/diagnostics/exit_event_reachability_report.py` is now tracked.
+- `examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py` is now tracked.
+- Targeted A37 tests pass locally: `55 passed`.
+- Full unit suite passes locally: `332 passed`.
+- Root and child `sync_check` pass.
+- `run_next_work.ps1 -Preflight` passes with `128 passed`.
+
+Remaining blockers:
+
+- `HANDOFF.md` deliverables still list only `HANDOFF.md` and the design
+  document, omitting the actual A37 implementation/test/proof files used for
+  acceptance. This violates the previous remediation item and makes the handoff
+  state under-report the real contract.
+- The machine-checkable proof artifacts remain ignored and untracked:
+  `exit_event_reachability_report_2026-07-07.json` and
+  `phase1_dead_factor_equivalence_2025.json`. Either force-track these proof
+  artifacts, or add a tracked summary artifact containing the same evidence
+  (dead signal count, per-symbol availability, long-leg diff, short-enabled diff,
+  and equivalence=true). Do not rely only on ignored local files.
+- The Phase 0 partial coverage issue remains unresolved in the handoff notes:
+  only `AP888` is `ok`; `RB888`, `SC888`, `A888`, and `ZN888` are
+  `unavailable`. Either rerun on a suitable window or explicitly record why this
+  partial Phase 0 sample satisfies the acceptance contract.
+
+Required remediation before the next review:
+
+1. Update `deliverables` to include every actual tracked A37 source/test/doc
+   artifact used for acceptance.
+2. Add tracked proof evidence for Phase 0 and Phase 1, or update the design /
+   handoff contract to explicitly make regenerated ignored outputs acceptable
+   and provide the exact regeneration commands.
+3. Address the Phase 0 partial-coverage concern with either a rerun or an
+   explicit documented rationale.
+4. Re-run the full A37 acceptance commands and hand off again to review.
+
 ## Notes for the Next Agent
 
 Read `docs/design/a37-exit-event-restructure.md` before writing code. The full dev prompt is in its §9.
@@ -141,3 +192,4 @@ Guardrails (reject-on-violation, see design §8):
 | 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2) |
 | 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 diagnostic scripts and proof artifacts are ignored by git, so the review evidence is not reproducible from a clean checkout |
 | 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2); diagnostic scripts now tracked |
+| 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 deliverables and tracked proof evidence remain incomplete after remediation |
