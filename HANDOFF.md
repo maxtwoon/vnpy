@@ -1,135 +1,88 @@
 ---
-task: A36 SimNow Replay Backfill Closure
+task: A37 Exit-Event Boolean Restructure
 version: 4.4.0
-stage: done
+stage: review
 owner: codex
 updated: 2026-07-07
 deliverables:
   - HANDOFF.md
-  - docs/design/a36-simnow-replay-backfill-closure.md
-  - examples/czsc_strategy/chan_strategy/data_adapter.py
-  - examples/czsc_strategy/diagnostics/backtest_matrix_report.py
-  - examples/czsc_strategy/diagnostics/simnow_daily_monitor.py
-  - examples/czsc_strategy/diagnostics/export_simnow_replay_snapshot.py
-  - examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py
-  - examples/czsc_strategy/tests/unit/test_data_adapter.py
-  - examples/czsc_strategy/tests/unit/test_simnow_daily_monitor.py
+  - docs/design/a37-exit-event-restructure.md
 blockers: []
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
 last_transition_to_owner: codex
 ---
 
 ## Background
 
-A35 (stop-loss stress diagnostics) has reached `done`. The remaining open item is a single SimNow observation day that is stuck in `pending/historical_db_lag`:
+A36 closed the SimNow replay backfill. The 2026-07-07 win-rate audit identified the highest-leverage remaining structural defect (R1/R2): losing trades have no reachable structural exit path.
 
-- `simnow_run_summary_2026-07-06.json` reports:
-  - `automation_status = pending`
-  - `record.reason = historical_db_lag`
-  - `record.valid_observation = false`
-  - `record.consistency_matched = false`
-- `simnow_ledger_summary.json` reports `valid_observation_days = 0`.
+Evidence (full sample, `diagnostics/pnl_attribution_20220101_20260424.md`, 358 trades):
 
-The read-only capture for `2026-07-06` is already complete; the only blocker is that the historical SQLite DB did not yet cover the observation date when the replay was first attempted. Once the DB catches up, the existing backfill tooling can close the day.
+- `stop_loss`: 155 trades, 0% win rate, cumulative about `-489%` (pnl_pct sum).
+- `trailing_stop`: 114 trades, 99.1% win rate, about `+411%`.
+- `signal_exit`: only 88 trades, about `+8.4%`.
+- `timeout`: 1 trade.
+
+Structural causes, confirmed at source level:
+
+1. All six exit events use AND semantics: `(结构失效 [∨ 震荡超限]) ∧ (directional/position factor)` (`Event.is_match`, `chan_strategy/positions.py:125-141`; exits at `:569-591`, `:668-696`, `:766-792`, `:846-860`, `:928-955`, `:1011-1030`). A standalone `结构失效` never closes a position, contradicting `signals.py:682-683` ("两者并存，先触发者执行").
+2. `结构失效` uses the segment-mode center (`signals.py:696`, `sell_signals.py:237`) while the position factors use the recent-mode center (`zhongshu.py`), so the AND combines conditions about two different structures.
+3. The 二买平多 / 二卖平空 factors depending on `背驰V260615_失效` (`positions.py:685-694`, `:946-954`) are dead code (H3: classification count = 0 on real data).
 
 ## Goal
 
-Move the `2026-07-06` SimNow observation from `pending/historical_db_lag` to `valid/matched`, and make the 20-day observation ledger show at least one valid day.
+Implement A37 exactly as specified in `docs/design/a37-exit-event-restructure.md`, in phase order:
 
-Quantified target:
-
-- `simnow_run_summary_2026-07-06.json`:
-  - `automation_status = valid`
-  - `record.valid_observation = true`
-  - `record.consistency_matched = true`
-- `simnow_ledger_summary.json`:
-  - `valid_observation_days >= 1`
+- Phase 0: read-only exit-blocked reachability diagnostic (`exit_event_reachability_report.py`), counting `legacy_fired` / `struct_alone` / `factor_alone` per exit event per symbol.
+- Phase 1: behavior-neutral removal of the two dead exit factors, with a machine-checkable equivalence proof (empty before/after trade-pair diff, including one `enable_short=True` replay leg).
+- Phase 2: `STRATEGY_CONFIG["exit_event_semantics"]` switch (`"legacy"` default, byte-identical baseline; `"restructured"` emits standalone structural-exit events plus standalone directional-exit events, with `结构失效` recomputed from a recent-mode signal `风控RV260615` / `空头风控RV260615`).
 
 ## Acceptance Criteria
 
-- Historical DB covers `2026-07-06` (`simnow_replay_readiness.py --date 2026-07-06` returns `ready = true`).
-- `simnow_run_summary_2026-07-06.json` shows `automation_status = valid`.
-- `record.valid_observation = true`.
-- `record.consistency_matched = true`.
-- `simnow_ledger_summary.json` shows `valid_observation_days >= 1`.
-- No workflow orders are sent (`meta.read_only = true`, `orders_sent_by_workflow = 0`, `workflow_order_actions = []`).
-- `python tools/sync_check.py` passes.
-- `python tools/sync_check.py --root examples/czsc_strategy` passes.
-- `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-
-## Result
-
-- 2026-07-06 moved from `pending/historical_db_lag` to `valid/matched`.
-- `simnow_run_summary_2026-07-06.json` now reports:
-  - `automation_status = valid`
-  - `record.valid_observation = true`
-  - `record.consistency_matched = true`
-- `simnow_ledger_summary.json` now reports `valid_observation_days = 1`.
-
-Root causes fixed:
-
-1. `chan_strategy/data_adapter.py` used a date-only `end_date` filter (`<= '2026-07-06'`),
-   which excluded all intraday timestamps on the target day. It now appends
-   `23:59:59` for date-only end bounds so the full day is included.
-2. `diagnostics/backtest_matrix_report.py::_dominant_symbol` selected the most
-   frequent `symbol` value in a table, even when that series stopped before the
-   target date (e.g. `AP888` stopped on 2026-02-13 while `ap888` continued to
-   2026-07-06). It now prefers the symbol whose latest bar covers `end`,
-   falling back to the latest bar if none cover.
-3. `diagnostics/simnow_daily_monitor.py::compare_simnow_replay` now treats a
-   no-trade day where both the live capture and the replay have no actionable
-   events as matched, with reason `no_actionable_events_on_either_side`.
+- `docs/design/a37-exit-event-restructure.md` acceptance gates all pass, per phase and in order.
+- Phase 0 reports exist (`exit_event_reachability_report_YYYY-MM-DD.json/.md`) with the standard disclaimer; missing DB coverage marked `unavailable`, never silently passed; `背驰V260615_失效` replay count reported (expected 0).
+- Phase 1 equivalence: before/after trade-pair diff empty on >=2 symbols x 1 year (long baseline) AND >=1 symbol x 1 year with `enable_short=True`; test fixtures gain the "confirmed BI directions alternate" invariant.
+- Phase 2: switch defaults to `legacy`; with `legacy` the emitted event structures are identical to Phase 1 output (unit-tested); new signal keys registered in `validation.py` exhaustiveness sets; backtest report header prints the active switch value.
+- No numeric threshold tuned (`stop_loss_pct=0.05` copied verbatim); no selection justified by pre-2026-04-24 data; no `GOAL PASSED`; no SimNow order/cancel/trading interface changes; `Position` stop/trailing/timeout logic and `BacktestEngine.run` ordering untouched.
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
+- `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight` passes.
+- `python tools/handoff.py next --summary "A37 exit-event restructure implemented (phases 0-2)"` advances to review.
 
 ## Notes for the Next Agent
 
-Read `docs/design/a36-simnow-replay-backfill-closure.md` before doing any work.
+Read `docs/design/a37-exit-event-restructure.md` before writing code. The full dev prompt is in its §9.
 
-This was originally expected to be a **data-driven closure** using existing tools:
+Guardrails (reject-on-violation, see design §8):
 
-1. Verify DB coverage:
-   ```powershell
-   python examples/czsc_strategy/diagnostics/simnow_replay_readiness.py --date 2026-07-06
-   ```
-2. If ready, execute backfill:
-   ```powershell
-   python examples/czsc_strategy/diagnostics/simnow_backfill_pending_replays.py `
-     --date 2026-07-06 `
-     --execute `
-     --out-json examples/czsc_strategy/diagnostics/simnow_backfill_plan.json
-   ```
-3. Verify closure:
-   ```powershell
-   python examples/czsc_strategy/diagnostics/simnow_run_summary.py --date 2026-07-06
-   ```
-
-Guardrails:
-
-- Do not patch or fabricate historical DB data.
-- Do not change SimNow order/cancel/trading interfaces.
-- Do not tune strategy parameters.
-- Do not claim `GOAL PASSED`.
-- If `simnow_replay_readiness.py` is not ready, stop and report the actual `latest_db_date`.
+- Implement phases strictly in order; Phase 2 must not ship before the Phase 1 equivalence diff is empty.
+- Do not tune parameters or thresholds; do not use pre-2026-04-24 data for any selection.
+- Do not "fix" the dead `失效` branch in `signal_divergence_status` in this task — consumer-side removal only; the signal-side repair/delete decision is explicitly deferred.
+- Do not touch SimNow order/cancel/send-order paths.
+- Do not claim `GOAL PASSED`; result reports carry the RESEARCH-ONLY banner.
+- The local SQLite DB exists on this machine (verified 2026-07-07), so Phase 0/1 replays are executable locally.
 
 ## Decision Log
 
-- 2026-07-06 - A36 started after A35 reached `done`.
-- 2026-07-06 - Chose to reuse `simnow_backfill_pending_replays.py` and `simnow_replay_readiness.py` instead of building a new replay engine.
+- 2026-07-07 - A37 started after A36 reached `done`; scope chosen from the win-rate audit's top recommendation (R1/R2 exit-event restructure).
+- 2026-07-07 - Chose diagnostic-first phasing (Phase 0 counts blocked exits before any behavior change), mirroring A34/A35 discipline.
+- 2026-07-07 - Chose OR semantics for `restructured` mode on traceability grounds (restores documented "先触发者执行" and 三买 "回落入中枢" intent), gated behind a default-off config switch; churn explosion on new data is a defined rejection outcome.
+- 2026-07-07 - Design review fixed two gaps before dev handoff: pinned exact short-side exit anchors, and made the `enable_short=True` equivalence replay leg mandatory (baseline `enable_short=False` would otherwise vacuously pass the 二卖 removal).
 
 ## Handoff History
 
 | Date | From -> To | Stage Change | Summary |
 |------|------------|--------------|---------|
-| 2026-07-06 | codex -> claude-code | done -> design | A36 SimNow replay backfill closure started |
-| 2026-07-07 | kimi-code -> codex | dev -> review | A36 implementation complete; awaiting codex review before done |
+| 2026-07-07 | codex -> claude-code | done -> design | A37 exit-event restructure started |
+| 2026-07-07 | claude-code -> kimi-code | design -> dev | A37 design complete: exit-event boolean restructure (3 phases, gated) |
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-06 | codex → claude-code | done → design | A36 SimNow replay backfill closure started |
-| 2026-07-06 | claude-code → kimi-code | design → dev | A36 design complete: SimNow replay backfill closure |
-| 2026-07-07 | kimi-code → codex | dev → review | A36 implementation complete; awaiting codex review before done |
-| 2026-07-07 | codex → codex | review → done | A36 review passed: SimNow replay backfill closure accepted |
+| 2026-07-07 | codex → claude-code | done → design | A37 出场事件布尔结构重构 启动 |
+| 2026-07-07 | claude-code → kimi-code | design → dev | A37 设计完成：三阶段（只读诊断 → 行为中性删除 → 开关门控重构），默认基线不变 |
+| 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2) |

@@ -7,6 +7,7 @@ from czsc import CZSC
 from czsc.objects import Direction
 
 from chan_strategy.zhongshu import build_zhongshu_from_bis
+from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.signals import (
     _bi_power,
     _get_confirmed_bi_list,
@@ -16,6 +17,7 @@ from chan_strategy.signals import (
     signal_divergence_status,
     signal_first_buy,
     signal_risk_control,
+    signal_risk_control_recent,
     signal_second_buy as _base_signal_second_buy,
     signal_third_buy as _base_signal_third_buy,
     signal_zs_confirmation,
@@ -254,6 +256,35 @@ def signal_short_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: fl
     return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
 
+def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 0.05) -> dict:
+    """Recent-mode short structural failure signal for restructured exits.
+
+    信号名: {freq}_D1BSP_空头风控RV260615
+    分类: 结构完好 / 结构失效
+
+    Uses mode="recent" so the structural-exit center aligns with the center
+    used by position/direction factors. The 0.05 threshold is copied verbatim.
+    """
+    k1, k2, k3 = freq, "D1BSP", "空头风控RV260615"
+    bi_list = _get_confirmed_bi_list(c)
+    zhongshu_list = build_zhongshu_from_bis(bi_list, mode="recent")
+    v1, score = "结构完好", 0
+    if not zhongshu_list or not bi_list:
+        return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
+
+    last_zs = zhongshu_list[-1]
+    last_bi = bi_list[-1]
+    if last_bi.raw_bars:
+        current_price = last_bi.raw_bars[-1].close
+    elif last_bi.direction == Direction.Up:
+        current_price = last_bi.high
+    else:
+        current_price = last_bi.low
+    if current_price > last_zs["zg"] * (1 + stop_loss_pct):
+        v1, score = "结构失效", 95
+    return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
+
+
 def get_all_signals(c: CZSC, freq: str = "30分钟",
                     buy1_anchor: dict = None,
                     sell1_anchor: dict = None) -> dict:
@@ -272,4 +303,7 @@ def get_all_signals(c: CZSC, freq: str = "30分钟",
     signals.update(signal_third_sell(c, freq))
     signals.update(signal_risk_control(c, freq))
     signals.update(signal_short_risk_control(c, freq))
+    if STRATEGY_CONFIG.get("exit_event_semantics") == "restructured":
+        signals.update(signal_risk_control_recent(c, freq))
+        signals.update(signal_short_risk_control_recent(c, freq))
     return signals

@@ -57,6 +57,9 @@ STRATEGY_CONFIG = {
     "max_2buy_entry_vs_anchor_pct": None,
     "enable_2buy_symbols": None,
     "trailing_overrides": {},
+
+    # A37 exit-event semantics switch (default legacy to keep baseline unchanged).
+    "exit_event_semantics": "legacy",  # "legacy" | "restructured"
 }
 
 # 回测参数

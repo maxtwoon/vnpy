@@ -268,12 +268,6 @@ def test_signal_helpers_and_classification_edges(czsc_factory, bi_factory):
     ]
     assert "疑似" in next(iter(signal_divergence_status(czsc_factory(div)).values()))
 
-    failed = [enter] + zbase(base + timedelta(minutes=1), bi_factory) + [
-        bi_factory(Direction.Down, 80, 93, base, base + timedelta(minutes=10)),
-        bi_factory(Direction.Down, 70, 90, base, base + timedelta(minutes=11)),
-    ]
-    assert next(iter(signal_divergence_status(czsc_factory(failed)).values())).split("_")[0] in {"疑似", "失效"}
-
     assert "已确认" in next(iter(signal_zs_confirmation(czsc_factory(zbase(base, bi_factory))).values()))
 
 
@@ -283,7 +277,19 @@ def test_signal_branches_with_injected_zhongshu(monkeypatch, czsc_factory, bi_fa
     monkeypatch.setattr(signals_module, "build_zhongshu_from_bis", lambda bis, **kwargs: [{"n_bis": 2}])
     assert "未确认" in next(iter(signal_zs_confirmation(czsc_factory(zbase(base, bi_factory))).values()))
 
+    # Alternating confirmed BIs (valid fixture data).
     div_bis = [
+        bi_factory(Direction.Up, 1, 101, base, base),
+        bi_factory(Direction.Down, 90, 120, base, base),
+        bi_factory(Direction.Up, 94, 115, base, base),
+        bi_factory(Direction.Down, 96, 112, base, base),
+        bi_factory(Direction.Up, 90, 100, base, base),
+        bi_factory(Direction.Down, 80, 200, base, base),
+    ]
+    # The "失效" branch requires two consecutive same-direction leaves after a
+    # center, which real alternating BIs cannot produce. Reach it by injecting a
+    # synthetic confirmed-BI list while keeping the CZSC object alternating.
+    fake_bis = [
         bi_factory(Direction.Up, 1, 101, base, base),
         bi_factory(Direction.Up, 90, 120, base, base),
         bi_factory(Direction.Down, 94, 115, base, base),
@@ -296,7 +302,10 @@ def test_signal_branches_with_injected_zhongshu(monkeypatch, czsc_factory, bi_fa
         "build_zhongshu_from_bis",
         lambda bis, **kwargs: [{"zd": 96, "zg": 112, "start_idx": 1, "end_idx": 3, "n_bis": 3}],
     )
+    original_get_confirmed = signals_module._get_confirmed_bi_list
+    monkeypatch.setattr(signals_module, "_get_confirmed_bi_list", lambda c: fake_bis)
     assert "失效" in next(iter(signal_divergence_status(czsc_factory(div_bis)).values()))
+    monkeypatch.setattr(signals_module, "_get_confirmed_bi_list", original_get_confirmed)
 
     up_div_bis = div_bis[:4] + [bi_factory(Direction.Up, 100, 130, base, base)]
     assert "疑似" in next(iter(signal_divergence_status(czsc_factory(up_div_bis)).values()))

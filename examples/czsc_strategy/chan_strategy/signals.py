@@ -17,6 +17,7 @@
 from typing import Dict, List, Any, Optional
 from czsc import CZSC
 from czsc.objects import Direction
+from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.zhongshu import build_zhongshu_from_bis
 
 
@@ -267,6 +268,10 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
 
             # 检查背驰失效: 如果之前疑似背驰但后续价格继续创新高/低
             # 向下背驰后如果继续新低 -> 失效
+            # NOTE(A37): This "失效" classification is currently unreachable on
+            # real data (confirmed BI directions alternate), and the exit-event
+            # consumers that referenced it were removed in A37. The decision to
+            # repair or delete this branch is explicitly deferred.
             if v1 == "无" and len(after_zs_bis) >= 2:
                 prev_leave = after_zs_bis[-2]
                 curr_leave = after_zs_bis[-1]
@@ -733,6 +738,53 @@ def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 
     return {key: value}
 
 
+def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 0.05) -> dict:
+    """
+    Recent-mode structural failure signal for restructured exit semantics.
+
+    信号名: {freq}_D1BSP_风控RV260615
+    分类: 结构完好 / 结构失效
+
+    Uses the nearest local center (mode="recent") so that structural failure
+    refers to the same center as position/direction factors. The 0.05 threshold
+    is copied verbatim from ``signal_risk_control``; it is not tuned here.
+    """
+    k1 = freq
+    k2 = "D1BSP"
+    k3 = "风控RV260615"
+
+    bi_list = _get_confirmed_bi_list(c)
+    zhongshu_list = build_zhongshu_from_bis(bi_list, mode="recent")
+
+    v1 = "结构完好"
+    score = 0
+
+    if not zhongshu_list or not bi_list:
+        key = f"{k1}_{k2}_{k3}"
+        value = f"{v1}_任意_任意_{score}"
+        return {key: value}
+
+    last_zs = zhongshu_list[-1]
+    zd = last_zs["zd"]
+
+    last_bi = bi_list[-1]
+    if last_bi.raw_bars:
+        current_price = last_bi.raw_bars[-1].close
+    elif last_bi.direction == Direction.Up:
+        current_price = last_bi.high
+    else:
+        current_price = last_bi.low
+
+    stop_level = zd * (1 - stop_loss_pct)
+    if current_price < stop_level:
+        v1 = "结构失效"
+        score = 95
+
+    key = f"{k1}_{k2}_{k3}"
+    value = f"{v1}_任意_任意_{score}"
+    return {key: value}
+
+
 # ============================================================
 # 汇总函数
 # ============================================================
@@ -749,4 +801,6 @@ def get_all_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -
     signals.update(signal_second_buy(c, freq, buy1_anchor=buy1_anchor))
     signals.update(signal_third_buy(c, freq))
     signals.update(signal_risk_control(c, freq))
+    if STRATEGY_CONFIG.get("exit_event_semantics") == "restructured":
+        signals.update(signal_risk_control_recent(c, freq))
     return signals

@@ -25,11 +25,37 @@ class FakeBI:
 
 
 class FakeCZSC:
-    def __init__(self, bis=None, last_bi_extend=False, bars_raw=None, bi_list=None):
+    def __init__(self, bis=None, last_bi_extend=False, bars_raw=None, bi_list=None, validate_alternating: bool = False):
         self.finished_bis = list(bis or [])
         self.last_bi_extend = last_bi_extend
         self.bars_raw = list(bars_raw or [])
         self.bi_list = list(bi_list if bi_list is not None else self.finished_bis)
+        if validate_alternating:
+            _validate_confirmed_bi_directions(self.bi_list)
+
+
+def _validate_confirmed_bi_directions(bis: list[FakeBI]) -> None:
+    """Assert that confirmed BI directions strictly alternate.
+
+    This invariant closes the fixture loophole exploited by the H3 dead branch:
+    consecutive same-direction confirmed BIs do not occur on real data.
+    """
+    for i in range(1, len(bis)):
+        prev_dir = bis[i - 1].direction
+        curr_dir = bis[i].direction
+        if prev_dir == curr_dir:
+            raise ValueError(
+                f"Confirmed BI directions must alternate, found {prev_dir.name} "
+                f"followed by {curr_dir.name} at index {i}."
+            )
+
+
+@pytest.fixture
+def strict_czsc_factory():
+    """Return a FakeCZSC factory that validates alternating BI directions."""
+    def _factory(bis=None, **kwargs):
+        return FakeCZSC(bis=bis, validate_alternating=True, **kwargs)
+    return _factory
 
 
 def make_raw_bar(i, dt, open_=100.0, close=None, high=None, low=None, freq=Freq.F1):

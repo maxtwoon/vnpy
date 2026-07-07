@@ -248,6 +248,57 @@ def _research_first_buy_allowed(symbol: str, signals_dict: dict) -> bool:
     return True
 
 
+def _build_exit_events(
+    name: str,
+    operate: str,
+    legacy_signals_any: list[str],
+    directional_factors: list[dict],
+    restructured_structural_signal_key: str,
+    restructured_extra_signals_any: list[str] | None = None,
+) -> list[Event]:
+    """Build exit event(s) according to STRATEGY_CONFIG['exit_event_semantics'].
+
+    ``legacy`` emits a single event gated by ``legacy_signals_any`` AND one of
+    the directional factors (current Phase 1 behavior). ``restructured`` emits
+    two independent events: a standalone structural exit and a standalone
+    directional exit.
+    """
+    semantics = STRATEGY_CONFIG.get("exit_event_semantics", "legacy")
+    if semantics == "legacy":
+        return [Event.load({
+            "name": name,
+            "operate": operate,
+            "signals_all": [],
+            "signals_any": legacy_signals_any,
+            "signals_not": [],
+            "factors": directional_factors,
+        })]
+
+    # restructured: standalone structural exit + standalone directional exit
+    structural_signals_any = [
+        f"{restructured_structural_signal_key}_结构失效_任意_任意_0",
+    ]
+    if restructured_extra_signals_any:
+        structural_signals_any.extend(restructured_extra_signals_any)
+    structural_event = Event.load({
+        "name": f"{name}-结构",
+        "operate": operate,
+        "signals_all": [],
+        "signals_any": structural_signals_any,
+        "signals_not": [],
+        "factors": [],
+    })
+    directional_event = Event.load({
+        "name": f"{name}-方向",
+        "operate": operate,
+        "signals_all": [],
+        "signals_any": [],
+        "signals_not": [],
+        "factors": directional_factors,
+    })
+    return [structural_event, directional_event]
+
+
 class Position:
     """
     持仓子策略
@@ -566,29 +617,29 @@ def create_first_buy_position(symbol: str, freq: str = "30分钟",
         }),
     ]
 
-    exits = [
-        Event.load({
-            "name": "一买平多",
-            "operate": "平多",
-            "signals_all": [],
+    exits = _build_exit_events(
+        name="一买平多",
+        operate="平多",
+        legacy_signals_any=[
+            f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+            f"{freq}_D1BSP_风控V260615_震荡超限_任意_任意_0",
+        ],
+        directional_factors=[{
+            "name": "方向反转平仓",
+            "signals_all": [
+                f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+            ],
             "signals_any": [
-                f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
-                f"{freq}_D1BSP_风控V260615_震荡超限_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
             ],
             "signals_not": [],
-            "factors": [{
-                "name": "方向反转平仓",
-                "signals_all": [
-                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
-                ],
-                "signals_any": [
-                    f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
-                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
-                ],
-                "signals_not": [],
-            }],
-        }),
-    ]
+        }],
+        restructured_structural_signal_key=f"{freq}_D1BSP_风控RV260615",
+        restructured_extra_signals_any=[
+            f"{freq}_D1BSP_风控V260615_震荡超限_任意_任意_0",
+        ],
+    )
 
     trailing_start, trailing_drawback = _research_trailing_params(symbol)
 
@@ -665,35 +716,23 @@ def create_second_buy_position(symbol: str, freq: str = "30分钟",
         }),
     ]
 
-    exits = [
-        Event.load({
-            "name": "二买平多",
-            "operate": "平多",
-            "signals_all": [],
-            "signals_any": [
-                f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+    exits = _build_exit_events(
+        name="二买平多",
+        operate="平多",
+        legacy_signals_any=[
+            f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+        ],
+        directional_factors=[{
+            "name": "跌破一买低点",
+            "signals_all": [
+                f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
             ],
+            "signals_any": [],
             "signals_not": [],
-            "factors": [{
-                "name": "跌破一买低点",
-                "signals_all": [
-                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
-                    f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }, {
-                "name": "方向反转且在中枢内",
-                "signals_all": [
-                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
-                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
-                    f"{freq}_D1BI_背驰V260615_失效_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }],
-        }),
-    ]
+        }],
+        restructured_structural_signal_key=f"{freq}_D1BSP_风控RV260615",
+    )
 
     trailing_start, trailing_drawback = _research_trailing_params(symbol)
 
@@ -763,33 +802,30 @@ def create_third_buy_position(symbol: str, freq: str = "30分钟",
         }),
     ]
 
-    exits = [
-        Event.load({
-            "name": "三买平多",
-            "operate": "平多",
-            "signals_all": [],
-            "signals_any": [
-                f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+    exits = _build_exit_events(
+        name="三买平多",
+        operate="平多",
+        legacy_signals_any=[
+            f"{freq}_D1BSP_风控V260615_结构失效_任意_任意_0",
+        ],
+        directional_factors=[{
+            "name": "回落入中枢",
+            "signals_all": [
+                f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
             ],
+            "signals_any": [],
             "signals_not": [],
-            "factors": [{
-                "name": "回落入中枢",
-                "signals_all": [
-                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
-                    f"{freq}_D1BI_方向V260615_向下_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }, {
-                "name": "跌破中枢",
-                "signals_all": [
-                    f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }],
-        }),
-    ]
+        }, {
+            "name": "跌破中枢",
+            "signals_all": [
+                f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
+            ],
+            "signals_any": [],
+            "signals_not": [],
+        }],
+        restructured_structural_signal_key=f"{freq}_D1BSP_风控RV260615",
+    )
 
     trailing_start, trailing_drawback = _research_trailing_params(symbol)
 
@@ -843,29 +879,29 @@ def create_first_sell_position(symbol: str, freq: str = "30分钟",
         }),
     ]
 
-    exits = [
-        Event.load({
-            "name": "一卖平空",
-            "operate": "平空",
-            "signals_all": [],
+    exits = _build_exit_events(
+        name="一卖平空",
+        operate="平空",
+        legacy_signals_any=[
+            f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+            f"{freq}_D1BSP_空头风控V260615_震荡超限_任意_任意_0",
+        ],
+        directional_factors=[{
+            "name": "方向反转平空",
+            "signals_all": [
+                f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+            ],
             "signals_any": [
-                f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
-                f"{freq}_D1BSP_空头风控V260615_震荡超限_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
             ],
             "signals_not": [],
-            "factors": [{
-                "name": "方向反转平空",
-                "signals_all": [
-                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
-                ],
-                "signals_any": [
-                    f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
-                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
-                ],
-                "signals_not": [],
-            }],
-        }),
-    ]
+        }],
+        restructured_structural_signal_key=f"{freq}_D1BSP_空头风控RV260615",
+        restructured_extra_signals_any=[
+            f"{freq}_D1BSP_空头风控V260615_震荡超限_任意_任意_0",
+        ],
+    )
 
     trailing_start, trailing_drawback = _research_trailing_params(symbol)
 
@@ -925,35 +961,23 @@ def create_second_sell_position(symbol: str, freq: str = "30分钟",
         }),
     ]
 
-    exits = [
-        Event.load({
-            "name": "二卖平空",
-            "operate": "平空",
-            "signals_all": [],
-            "signals_any": [
-                f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+    exits = _build_exit_events(
+        name="二卖平空",
+        operate="平空",
+        legacy_signals_any=[
+            f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+        ],
+        directional_factors=[{
+            "name": "突破一卖高点",
+            "signals_all": [
+                f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
+                f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
             ],
+            "signals_any": [],
             "signals_not": [],
-            "factors": [{
-                "name": "突破一卖高点",
-                "signals_all": [
-                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
-                    f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }, {
-                "name": "方向反转且在中枢内",
-                "signals_all": [
-                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
-                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
-                    f"{freq}_D1BI_背驰V260615_失效_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }],
-        }),
-    ]
+        }],
+        restructured_structural_signal_key=f"{freq}_D1BSP_空头风控RV260615",
+    )
 
     trailing_start, trailing_drawback = _research_trailing_params(symbol)
 
@@ -1008,33 +1032,30 @@ def create_third_sell_position(symbol: str, freq: str = "30分钟",
         }),
     ]
 
-    exits = [
-        Event.load({
-            "name": "三卖平空",
-            "operate": "平空",
-            "signals_all": [],
-            "signals_any": [
-                f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+    exits = _build_exit_events(
+        name="三卖平空",
+        operate="平空",
+        legacy_signals_any=[
+            f"{freq}_D1BSP_空头风控V260615_结构失效_任意_任意_0",
+        ],
+        directional_factors=[{
+            "name": "反弹入中枢",
+            "signals_all": [
+                f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
+                f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
             ],
+            "signals_any": [],
             "signals_not": [],
-            "factors": [{
-                "name": "反弹入中枢",
-                "signals_all": [
-                    f"{freq}_D1ZS_位置V260615_中枢内_任意_任意_0",
-                    f"{freq}_D1BI_方向V260615_向上_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }, {
-                "name": "突破中枢",
-                "signals_all": [
-                    f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
-                ],
-                "signals_any": [],
-                "signals_not": [],
-            }],
-        }),
-    ]
+        }, {
+            "name": "突破中枢",
+            "signals_all": [
+                f"{freq}_D1ZS_位置V260615_中枢上方_任意_任意_0",
+            ],
+            "signals_any": [],
+            "signals_not": [],
+        }],
+        restructured_structural_signal_key=f"{freq}_D1BSP_空头风控RV260615",
+    )
 
     trailing_start, trailing_drawback = _research_trailing_params(symbol)
 

@@ -411,6 +411,7 @@ class BacktestEngine:
         report = {
             "symbol": self.symbol,
             "freq": self.freq,
+            "exit_event_semantics": STRATEGY_CONFIG.get("exit_event_semantics", "legacy"),
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
             "traded_bars": len(self.equity_curve),
@@ -512,6 +513,7 @@ class BacktestEngine:
         print("=" * 60)
         print(f"标的: {report['symbol']}")
         print(f"频率: {report['freq']}")
+        print(f"退出事件语义: {report.get('exit_event_semantics', 'legacy')}")
         print(f"回测区间: {report['period']}")
         print(f"K线总数: {report['total_bars']}")
         print(f"交易K线: {report['traded_bars']}")
