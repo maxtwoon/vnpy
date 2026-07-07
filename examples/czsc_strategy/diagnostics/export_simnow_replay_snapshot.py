@@ -227,11 +227,14 @@ def build_snapshot(db_path: Path, start: str, end: str, day: str, cost_factor: f
     replay_available = bool(events["positions"]) and bool(risk)
     unavailable_reason = ""
     if not replay_available:
-        unavailable_reason = (
-            "historical_db_lag"
-            if latest_db_date and latest_db_date < day_text
-            else "no_replay_events_for_day"
+        # Only label the day as "no replay events" when every required symbol
+        # already reaches the target date in the database. Otherwise it is a
+        # historical data lag, even if some symbols have rows beyond ``day``.
+        covers_day = all(
+            bool(row.get("max_datetime")) and str(row["max_datetime"])[:10] >= day_text
+            for row in table_ranges.values()
         )
+        unavailable_reason = "historical_db_lag" if not covers_day else "no_replay_events_for_day"
     return {
         **events,
         "risk": risk,

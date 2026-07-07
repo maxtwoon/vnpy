@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 
 DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
@@ -1154,3 +1155,46 @@ def test_both_modules_share_the_same_action_summary_function():
 
     assert monitor_mod.build_action_summary is action_mod.build_action_summary
     assert promo_mod.build_action_summary is action_mod.build_action_summary
+
+
+def test_compare_simnow_replay_matches_no_actionable_events_day():
+    """A day with no live events and no replay trades is considered consistent."""
+    simnow: dict[str, Any] = {"signals": [], "trades": [], "positions": []}
+    replay: dict[str, Any] = {
+        "signals": [{"dt": "2026-07-06 10:00", "symbol": "AP888", "strategy": "snapshot", "operate": "SIGNAL"}],
+        "trades": [],
+        "positions": [{"dt": "2026-07-06 10:00", "symbol": "AP888", "strategy": "portfolio", "operate": "POSITION"}],
+        "meta": {"replay_available": True},
+    }
+    result = compare_simnow_replay(simnow, replay)
+    assert result["matched"] is True
+    assert result["reason"] == "no_actionable_events_on_either_side"
+    assert result["details"]["positions"]["matched"] is True
+
+
+def test_compare_simnow_replay_matches_unavailable_no_replay_events_when_simnow_empty():
+    simnow: dict[str, Any] = {"signals": [], "trades": [], "positions": []}
+    replay: dict[str, Any] = {
+        "signals": [],
+        "trades": [],
+        "positions": [],
+        "meta": {
+            "replay_available": False,
+            "replay_unavailable_reason": "no_replay_events_for_day",
+        },
+    }
+    result = compare_simnow_replay(simnow, replay)
+    assert result["matched"] is True
+    assert result["reason"] == "no_actionable_events_on_either_side"
+
+
+def test_compare_simnow_replay_still_mismatches_when_replay_has_trades():
+    simnow: dict[str, Any] = {"signals": [], "trades": [], "positions": []}
+    replay: dict[str, Any] = {
+        "signals": [],
+        "trades": [{"dt": "2026-07-06 10:00", "symbol": "AP888", "strategy": "二买多头", "operate": "OPEN"}],
+        "positions": [],
+        "meta": {"replay_available": True},
+    }
+    result = compare_simnow_replay(simnow, replay)
+    assert result["matched"] is False

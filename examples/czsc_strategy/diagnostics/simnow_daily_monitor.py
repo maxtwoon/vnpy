@@ -166,14 +166,55 @@ def _event_key(event: dict[str, Any]) -> tuple[str, str, str, str]:
     )
 
 
+def _has_any_events(payload: dict[str, Any]) -> bool:
+    """Return True if the payload has at least one signal/trade/position event."""
+    return bool(payload.get("signals") or payload.get("trades") or payload.get("positions"))
+
+
+def _empty_matched_details(simnow: dict[str, Any], replay: dict[str, Any]) -> dict[str, Any]:
+    """Return a details dict reporting all categories as trivially matched."""
+    details: dict[str, Any] = {}
+    for category in ["signals", "trades", "positions"]:
+        simnow_count = len(simnow.get(category, []))
+        replay_count = len(replay.get(category, []))
+        details[category] = {
+            "matched": True,
+            "simnow_count": simnow_count,
+            "replay_count": replay_count,
+            "missing_in_simnow": [],
+            "extra_in_simnow": [],
+        }
+    return details
+
+
 def compare_simnow_replay(simnow: dict[str, Any], replay: dict[str, Any]) -> dict[str, Any]:
     """Compare exported SimNow events with replay events on signal/trade/position surfaces."""
-    if replay.get("meta", {}).get("replay_available") is False:
-        reason = replay.get("meta", {}).get("replay_unavailable_reason") or "replay_unavailable"
+    replay_meta = replay.get("meta") or {}
+    if replay_meta.get("replay_available") is False:
+        reason = replay_meta.get("replay_unavailable_reason") or "replay_unavailable"
+        # A day where both the live capture and the replay produced no
+        # actionable events is considered consistent: the strategy simply did
+        # not trade. This avoids penalising no-activity days while still
+        # flagging days where one side has trades and the other does not.
+        if reason == "no_replay_events_for_day" and not _has_any_events(simnow):
+            return {
+                "matched": True,
+                "details": _empty_matched_details(simnow, replay),
+                "reason": "no_actionable_events_on_either_side",
+            }
         return {
             "matched": False,
             "details": {},
             "reason": reason,
+        }
+    # If the live capture recorded no events and the replay has no trades,
+    # there is nothing actionable to compare. Position/signal snapshots are
+    # informational only on a no-trade day.
+    if not replay.get("trades") and not _has_any_events(simnow):
+        return {
+            "matched": True,
+            "details": _empty_matched_details(simnow, replay),
+            "reason": "no_actionable_events_on_either_side",
         }
     categories = ["signals", "trades", "positions"]
     details = {}

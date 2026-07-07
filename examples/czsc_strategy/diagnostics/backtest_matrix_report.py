@@ -62,21 +62,47 @@ def _fmt_num(value: float | int | str | None, digits: int = 2) -> str:
 
 
 def _dominant_symbol(db_path: Path, table_name: str, start: str, end: str) -> str:
+    """Select the symbol whose data covers the end of the backtest range.
+
+    Some continuous-contract tables contain mixed symbols (e.g. historical
+    'AP888' rows plus newer 'ap888' rows). We must choose the symbol whose
+    latest bar reaches ``end`` so that the backtest actually processes the
+    target trading day. If no symbol covers ``end``, fall back to the one
+    with the latest available bar.
+    """
+    end_inclusive = str(end)
+    if len(end_inclusive) <= 10 and " " not in end_inclusive:
+        end_inclusive = f"{end_inclusive} 23:59:59"
     with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
+        rows = conn.execute(
             f"""
-            select symbol, count(*) as n
+            select symbol, min(datetime) as mindt, max(datetime) as maxdt, count(*) as n
             from {table_name}
             where datetime >= ? and datetime <= ?
             group by symbol
-            order by n desc
-            limit 1
             """,
-            (start, end),
-        ).fetchone()
-    if row is None:
+            (start, end_inclusive),
+        ).fetchall()
+    if not rows:
         raise RuntimeError(f"{table_name} has no rows for {start} ~ {end}")
-    return str(row[0])
+
+    # Prefer symbols whose max datetime reaches the requested end date.
+    covering = [
+        row for row in rows
+        if row[2] is not None and str(row[2]) >= str(end)
+    ]
+    if covering:
+        # Among covering symbols, pick the one with the most rows (likely the
+        # primary continuous series); tie-break by latest max datetime.
+        best = max(covering, key=lambda r: (r[3], str(r[2]) if r[2] else ""))
+        return str(best[0])
+
+    # No symbol covers the end date: fall back to the latest available bar.
+    best = max(
+        rows,
+        key=lambda r: (str(r[2]) if r[2] else "", r[3]),
+    )
+    return str(best[0])
 
 
 def run_one(db_path: Path, symbol: str, start: str, end: str, quiet: bool = True) -> dict[str, Any]:

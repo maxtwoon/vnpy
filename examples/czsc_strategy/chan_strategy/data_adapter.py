@@ -222,8 +222,13 @@ class SqliteDataAdapter:
             conditions.append(f"{date_col} >= ?")
             params.append(start_date)
         if end_date:
+            # 当 end_date 只给日期时，需要包含该日期的全部时间。
+            # 例如 '2026-07-06' 应等价于 '2026-07-06 23:59:59'，否则时间戳会被排除。
+            end_param = str(end_date)
+            if len(end_param) <= 10 and " " not in end_param:
+                end_param = f"{end_param} 23:59:59"
             conditions.append(f"{date_col} <= ?")
-            params.append(end_date)
+            params.append(end_param)
         if freq and freq_col:
             conditions.append(f"{freq_col} = ?")
             params.append(freq)

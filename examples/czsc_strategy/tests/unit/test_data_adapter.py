@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime, timedelta
 
 from czsc.objects import Freq
@@ -52,5 +53,39 @@ def test_sqlite_adapter_loads_raw_bars(memory_db):
         bars = adapter.load_raw_bars("TEST", freq="1", table_name="test_1M_raw")
         assert len(bars) == 120
         assert bars[0].freq == Freq.F1
+    finally:
+        adapter.close()
+
+
+def test_sqlite_adapter_end_date_includes_full_day(tmp_path: Path) -> None:
+    """A date-only end_date must include all timestamps on that day."""
+    db = tmp_path / "end_date.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "create table test_1M_raw ("
+        "datetime text, symbol text, open real, high real, low real, close real, volume real, amount real"
+        ")"
+    )
+    rows = [
+        ("2024-01-02 09:00:00", "T", 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0),
+        ("2024-01-02 10:00:00", "T", 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0),
+        ("2024-01-03 09:00:00", "T", 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0),
+        ("2024-01-03 10:00:00", "T", 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0),
+    ]
+    conn.executemany("insert into test_1M_raw values (?,?,?,?,?,?,?,?)", rows)
+    conn.commit()
+    conn.close()
+
+    adapter = SqliteDataAdapter(str(db))
+    try:
+        df = adapter.load_kline_data(
+            "T", start_date="2024-01-02", end_date="2024-01-03", table_name="test_1M_raw"
+        )
+        assert len(df) == 4
+
+        df_cutoff = adapter.load_kline_data(
+            "T", start_date="2024-01-02", end_date="2024-01-03 09:30:00", table_name="test_1M_raw"
+        )
+        assert len(df_cutoff) == 3
     finally:
         adapter.close()

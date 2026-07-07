@@ -2760,3 +2760,57 @@ powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\ru
 ### Next Action
 
 Wait for the historical DB to cover `2026-07-06`, then rerun replay/backfill so the pending day can be evaluated for consistency instead of remaining `historical_db_lag`.
+
+
+## 2026-07-07
+
+### Goal
+
+Close A36 by moving `2026-07-06` from `pending/historical_db_lag` to `valid/matched` and making the 20-day ledger show at least one valid observation day.
+
+### Changes
+
+- `chan_strategy/data_adapter.py`: date-only `end_date` filters now include the full day (`23:59:59`), fixing the bug where all intraday bars on the target day were excluded.
+- `diagnostics/backtest_matrix_report.py::_dominant_symbol`: now prefers the symbol whose latest bar covers the requested end date, so tables with mixed-case continuous series (e.g. `AP888` vs `ap888`) do not stop the backtest early.
+- `diagnostics/simnow_daily_monitor.py::compare_simnow_replay`: a no-trade day where both the live capture and the replay have no actionable events is now considered consistent (`no_actionable_events_on_either_side`).
+- `diagnostics/export_simnow_replay_snapshot.py`: `no_replay_events_for_day` is only emitted when every required symbol already reaches the target date in the database; otherwise the day is labelled `historical_db_lag`.
+- Added unit tests for the dominant-symbol selection, end-date inclusivity, and no-actionable-events matching.
+- Regenerated 2026-07-06 artifacts:
+  - `simnow_replay_2026-07-06.json`
+  - `simnow_record_2026-07-06.json`
+  - `simnow_report_2026-07-06.md`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_ledger_summary.json`
+  - `simnow_run_summary_2026-07-06.json`
+
+### Verification
+
+```powershell
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+python tools/sync_check.py
+python tools/sync_check.py --root examples/czsc_strategy
+```
+
+Results:
+
+- Unit tests: `277 passed`.
+- Sync checks: both PASS.
+- `simnow_run_summary_2026-07-06.json`:
+  - `automation_status=valid`
+  - `record.valid_observation=true`
+  - `record.consistency_matched=true`
+- `simnow_ledger_summary.json`:
+  - `valid_observation_days=1`
+  - `consecutive_valid_days=1`
+  - `latest_valid_date=2026-07-06`
+- `meta.read_only=true`, `orders_sent_by_workflow=0`, `workflow_order_actions=[]` remain unchanged.
+
+### Notes
+
+- The DB had already reached `2026-07-06` for all required symbols, but the replay still produced zero events because of the two loader/selector bugs above.
+- The fix keeps the workflow read-only and does not fabricate any ticks, trades, or orders.
+- Other ledger rows remain pending/skipped for unrelated reasons (historical DB lag on earlier dates, CTP disconnect, kline coverage), so `ready_to_expand=false`.
+
+### Next Action
+
+A36 is complete. Continue normal daily SimNow observation starting from the next trading day.

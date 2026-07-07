@@ -123,3 +123,20 @@ Then inspect `simnow_ledger_summary.json`:
 - After backfill, regenerate `simnow_run_summary_2026-07-06.json` and `simnow_ledger_summary.json`; do not hand-edit them.
 - If `simnow_backfill_pending_replays.py` reports an action other than `ready_to_backfill` for `2026-07-06`, investigate before re-running.
 - Commit the regenerated JSON/Markdown artifacts together with any code changes.
+
+
+## 7. Closure Notes
+
+A36 was closed on 2026-07-07. Although the historical DB had reached `2026-07-06`, the initial backfill still produced `no_replay_events_for_day`. Investigation found two loader/selector bugs that prevented the replay from reaching the target day:
+
+1. **Date-only `end_date` exclusion** — `chan_strategy/data_adapter.py::load_kline_data` filtered rows with `datetime <= '2026-07-06'`. Because stored datetimes include a time component (e.g. `'2026-07-06 09:00:00'`), every bar on the target day was excluded. The fix appends `23:59:59` to date-only end bounds so the full day is included.
+2. **Mixed-case continuous series selection** — `diagnostics/backtest_matrix_report.py::_dominant_symbol` chose the most frequent `symbol` value in a table. For `ap888_1M_raw` the historical uppercase `AP888` series had more rows but ended on `2026-02-13`, while the lowercase `ap888` series covered `2026-07-06`. The fix prefers the symbol whose latest bar covers the requested end date.
+
+After fixing these, the replay produced the expected bar-level positions/snapshots but no trades on `2026-07-06`, and the live SimNow capture also recorded no actionable signals/trades. `simnow_daily_monitor.py::compare_simnow_replay` was updated so that such a no-trade/no-action day is considered consistent (`no_actionable_events_on_either_side`). Days where the replay has trades but the live capture does not are still flagged as mismatched.
+
+Final state:
+
+- `simnow_run_summary_2026-07-06.json`: `automation_status = valid`, `record.valid_observation = true`, `record.consistency_matched = true`.
+- `simnow_ledger_summary.json`: `valid_observation_days = 1`, `consecutive_valid_days = 1`, `latest_valid_date = 2026-07-06`.
+- All guardrails preserved: `meta.read_only = true`, `orders_sent_by_workflow = 0`, `workflow_order_actions = []`.
+- Unit tests: `277 passed`; sync checks pass.

@@ -1,19 +1,25 @@
 ---
 task: A36 SimNow Replay Backfill Closure
 version: 4.4.0
-stage: dev
-owner: kimi-code
-updated: 2026-07-06
+stage: done
+owner: codex
+updated: 2026-07-07
 deliverables:
   - HANDOFF.md
   - docs/design/a36-simnow-replay-backfill-closure.md
-blockers:
-  - Historical SQLite DB does not yet cover 2026-07-06 (latest_db_date=2026-07-01; all 5 symbols lagged). A36 cannot execute backfill until the external DB is refreshed.
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+  - examples/czsc_strategy/chan_strategy/data_adapter.py
+  - examples/czsc_strategy/diagnostics/backtest_matrix_report.py
+  - examples/czsc_strategy/diagnostics/simnow_daily_monitor.py
+  - examples/czsc_strategy/diagnostics/export_simnow_replay_snapshot.py
+  - examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py
+  - examples/czsc_strategy/tests/unit/test_data_adapter.py
+  - examples/czsc_strategy/tests/unit/test_simnow_daily_monitor.py
+blockers: []
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -54,11 +60,34 @@ Quantified target:
 - `python tools/sync_check.py --root examples/czsc_strategy` passes.
 - `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
 
+## Result
+
+- 2026-07-06 moved from `pending/historical_db_lag` to `valid/matched`.
+- `simnow_run_summary_2026-07-06.json` now reports:
+  - `automation_status = valid`
+  - `record.valid_observation = true`
+  - `record.consistency_matched = true`
+- `simnow_ledger_summary.json` now reports `valid_observation_days = 1`.
+
+Root causes fixed:
+
+1. `chan_strategy/data_adapter.py` used a date-only `end_date` filter (`<= '2026-07-06'`),
+   which excluded all intraday timestamps on the target day. It now appends
+   `23:59:59` for date-only end bounds so the full day is included.
+2. `diagnostics/backtest_matrix_report.py::_dominant_symbol` selected the most
+   frequent `symbol` value in a table, even when that series stopped before the
+   target date (e.g. `AP888` stopped on 2026-02-13 while `ap888` continued to
+   2026-07-06). It now prefers the symbol whose latest bar covers `end`,
+   falling back to the latest bar if none cover.
+3. `diagnostics/simnow_daily_monitor.py::compare_simnow_replay` now treats a
+   no-trade day where both the live capture and the replay have no actionable
+   events as matched, with reason `no_actionable_events_on_either_side`.
+
 ## Notes for the Next Agent
 
 Read `docs/design/a36-simnow-replay-backfill-closure.md` before doing any work.
 
-This is primarily a **data-driven closure** using existing tools:
+This was originally expected to be a **data-driven closure** using existing tools:
 
 1. Verify DB coverage:
    ```powershell
@@ -94,6 +123,7 @@ Guardrails:
 | Date | From -> To | Stage Change | Summary |
 |------|------------|--------------|---------|
 | 2026-07-06 | codex -> claude-code | done -> design | A36 SimNow replay backfill closure started |
+| 2026-07-07 | kimi-code -> codex | dev -> review | A36 implementation complete; awaiting codex review before done |
 
 ## 交接历史
 
@@ -101,3 +131,5 @@ Guardrails:
 |------|---------|----------|------|
 | 2026-07-06 | codex → claude-code | done → design | A36 SimNow replay backfill closure started |
 | 2026-07-06 | claude-code → kimi-code | design → dev | A36 design complete: SimNow replay backfill closure |
+| 2026-07-07 | kimi-code → codex | dev → review | A36 implementation complete; awaiting codex review before done |
+| 2026-07-07 | codex → codex | review → done | A36 review passed: SimNow replay backfill closure accepted |
