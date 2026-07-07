@@ -1,8 +1,8 @@
 ---
 task: A37 Exit-Event Boolean Restructure
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-07
 deliverables:
   - HANDOFF.md
@@ -20,12 +20,12 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_exit_event_restructure.py
   - examples/czsc_strategy/tests/unit/test_phase1_dead_factor_equivalence.py
 blockers: []
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
-last_transition_kind: reject
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
+last_transition_kind: next
 ---
 
 ## Background
@@ -193,3 +193,4 @@ Guardrails (reject-on-violation, see design §8):
 | 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 diagnostic scripts and proof artifacts are ignored by git, so the review evidence is not reproducible from a clean checkout |
 | 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2); diagnostic scripts now tracked |
 | 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 deliverables and tracked proof evidence remain incomplete after remediation |
+| 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2); tracked proof evidence and deliverables complete |
