@@ -275,13 +275,16 @@ class BacktestEngine:
             if pending_signals is not None:
                 self.strategy.update(
                     pending_signals, bar.close, bar.dt,
-                    execution_price=bar.open, czsc_obj=czsc_trade
+                    execution_price=bar.open, czsc_obj=czsc_trade,
+                    bar_high=bar.high, bar_low=bar.low
                 )
                 pending_signals = None
             else:
                 # 无待执行信号时，仍需更新风控（止损/超时检查用当前价格）
                 # 传入空信号字典，只触发风控逻辑
-                self.strategy.update({}, bar.close, bar.dt, czsc_obj=czsc_trade)
+                # intrabar 触价止损用当根 bar 的 high/low（仅当前bar，无未来函数）
+                self.strategy.update({}, bar.close, bar.dt, czsc_obj=czsc_trade,
+                                     bar_high=bar.high, bar_low=bar.low)
 
             # 2. 更新交易周期CZSC
             czsc_trade.update(bar)
@@ -412,6 +415,8 @@ class BacktestEngine:
             "symbol": self.symbol,
             "freq": self.freq,
             "exit_event_semantics": STRATEGY_CONFIG.get("exit_event_semantics", "legacy"),
+            "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model", "close"),
+            "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
             "traded_bars": len(self.equity_curve),
@@ -519,6 +524,8 @@ class BacktestEngine:
         print(f"交易K线: {report['traded_bars']}")
         print(f"手续费率: {self.commission_rate}")
         print(f"滑点: {self.slippage}")
+        print(f"止损执行模型: {report.get('stop_execution_model', 'close')} "
+              f"(penalty={report.get('stop_penalty_bp', 0)}bp)")
         print("-" * 60)
         print(f"总交易次数: {report['total_trades']}")
         print(f"胜率: {report.get('win_rate', 0)*100:.1f}%")

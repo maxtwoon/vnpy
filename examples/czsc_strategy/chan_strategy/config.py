@@ -53,6 +53,11 @@ STRATEGY_CONFIG = {
     "trailing_start_bp": 300,      # 盈利超过300BP(3%)后启动移动止损
     "trailing_drawback_pct": 0.25, # 移动止损回撤容忍比例(从最高回撤25%平仓)
 
+    # 止损执行模型（A38 Phase 1）。默认 "close" 与历史基线字节一致；
+    # "intrabar" 用当根 bar 的 low/high 触价触发，避免收盘价检查下的隔夜跳空穿透。
+    "stop_execution_model": "close",   # "close"（基线：逐bar收盘价触发/成交）| "intrabar"（bar内触价）
+    "stop_penalty_bp": 0,              # intrabar 止损成交的额外不利滑点(BP)，默认0不惩罚
+
     # Research-only execution switches. None / empty keeps baseline behavior.
     "max_2buy_entry_vs_anchor_pct": None,
     "enable_2buy_symbols": None,

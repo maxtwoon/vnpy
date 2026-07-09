@@ -216,7 +216,8 @@ def test_backtest_engine_run_accounting_branches(monkeypatch, mini_backtest_bars
         def get_last_sell1_anchor(self):
             return None
 
-        def update(self, signals, price, dt, execution_price=None, czsc_obj=None):
+        def update(self, signals, price, dt, execution_price=None, czsc_obj=None,
+                   bar_high=None, bar_low=None):
             p = self.positions[2]
             if len(p.pairs) == 0 and signals:
                 p.pairs.append({"open_dt": dt, "close_dt": dt, "pnl_pct": 0.1, "bars_held": 1})

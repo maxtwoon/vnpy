@@ -163,7 +163,8 @@ def test_strategy_update_second_buy_research_gates():
             self.pairs = list(pairs or [])
             self.calls = []
 
-        def update(self, signals, price, dt, execution_price=None):
+        def update(self, signals, price, dt, execution_price=None,
+                   bar_high=None, bar_low=None):
             self.calls.append((signals, price, dt, execution_price))
 
     original = dict(STRATEGY_CONFIG)

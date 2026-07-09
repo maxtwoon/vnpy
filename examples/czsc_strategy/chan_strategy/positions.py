@@ -365,7 +365,8 @@ class Position:
         self.trailing_active = False  # 移动止损是否激活
 
     def update(self, signals_dict: dict, price: float, dt: datetime,
-               bar_count: int = 1, execution_price: float = None):
+               bar_count: int = 1, execution_price: float = None,
+               bar_high: float = None, bar_low: float = None):
         """
         根据当前信号更新持仓状态
 
@@ -375,6 +376,9 @@ class Position:
         :param bar_count: K线计数增量
         :param execution_price: 信号驱动交易的成交价（延迟成交时为下一根开盘价）
                                 如果为None，则使用price作为成交价（向后兼容）
+        :param bar_high: 当根bar最高价（仅 stop_execution_model="intrabar" 时用于触价止损）
+        :param bar_low: 当根bar最低价（仅 stop_execution_model="intrabar" 时用于触价止损）
+                        为 None 时（旧调用方/close模型）固定止损回退到收盘价检查，保持基线一致
         """
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
@@ -401,12 +405,13 @@ class Position:
                     self._close_long(price, dt, "移动止损")
                 elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
                     self._close_short(price, dt, "移动止损")
-            # 检查固定止损 - 风控用当前价格立即执行
-            elif self._check_stop_loss(price):
+            # 检查固定止损 - close 模型用收盘价，intrabar 模型用当根 low/high 触价
+            elif self._stop_triggered(price, bar_high, bar_low):
+                stop_fill = self._stop_fill(price, bar_high, bar_low)
                 if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                    self._close_long(price, dt, "止损")
+                    self._close_long(stop_fill, dt, "止损")
                 elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                    self._close_short(price, dt, "止损")
+                    self._close_short(stop_fill, dt, "止损")
             # 检查超时 - 风控立即执行
             elif self.bars_since_open >= self.timeout:
                 if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
@@ -486,6 +491,40 @@ class Position:
             loss_bp = (price - self.cost) / self.cost * 10000
             return loss_bp >= self.stop_loss
         return False
+
+    def _stop_triggered(self, price: float, bar_high: float = None,
+                        bar_low: float = None) -> bool:
+        """固定止损是否触发。
+
+        - close 模型（默认）：完全委托给 ``_check_stop_loss(price)``，与历史基线字节一致。
+        - intrabar 模型：多头看当根 bar_low 是否触及止损位，空头看 bar_high。
+          当 intrabar 被请求但缺少对应 bar 极值（旧调用方）时，安全回退到收盘价检查。
+        """
+        if STRATEGY_CONFIG.get("stop_execution_model", "close") == "intrabar" and self.cost != 0:
+            if self.pos > 0 and bar_low is not None:
+                return bar_low <= self.cost * (1 - self.stop_loss / 10000)
+            if self.pos < 0 and bar_high is not None:
+                return bar_high >= self.cost * (1 + self.stop_loss / 10000)
+        return self._check_stop_loss(price)
+
+    def _stop_fill(self, price: float, bar_high: float = None,
+                   bar_low: float = None) -> float:
+        """固定止损成交价。
+
+        - close 模型（默认）或缺少 bar 极值：成交价 = price（收盘价），与基线一致。
+        - intrabar 模型：多头 = min(触发位, 收盘价)，空头 = max(触发位, 收盘价)，
+          再叠加 ``stop_penalty_bp`` 不利滑点。跳空穿透时 fill 退化为更差的收盘价。
+        """
+        if STRATEGY_CONFIG.get("stop_execution_model", "close") != "intrabar" or self.cost == 0:
+            return price
+        penalty = STRATEGY_CONFIG.get("stop_penalty_bp", 0) / 10000
+        if self.pos > 0 and bar_low is not None:
+            trigger = self.cost * (1 - self.stop_loss / 10000)
+            return min(trigger, price) * (1 - penalty)
+        if self.pos < 0 and bar_high is not None:
+            trigger = self.cost * (1 + self.stop_loss / 10000)
+            return max(trigger, price) * (1 + penalty)
+        return price
 
     def _open_long(self, price: float, dt: datetime, reason: str = "开多"):
         self.pos = 1
@@ -1260,7 +1299,8 @@ class ChanTimingStrategy:
         return self._positions
 
     def update(self, signals_dict: dict, price: float, dt: datetime,
-               execution_price: float = None, czsc_obj=None):
+               execution_price: float = None, czsc_obj=None,
+               bar_high: float = None, bar_low: float = None):
         """
         更新所有持仓子策略
 
@@ -1269,6 +1309,8 @@ class ChanTimingStrategy:
         :param dt: 当前时间
         :param execution_price: 信号驱动交易的成交价（延迟成交时为下一根开盘价）
         :param czsc_obj: 可选的 CZSC 对象，用于补充一买锚点中的中枢信息
+        :param bar_high: 当根bar最高价，透传给各子策略用于 intrabar 触价止损
+        :param bar_low: 当根bar最低价，透传给各子策略用于 intrabar 触价止损
         """
         # 记录日线趋势状态（便于验证日线过滤是否生效）
         self._log_daily_trend(signals_dict, dt)
@@ -1325,10 +1367,10 @@ class ChanTimingStrategy:
 
         # 一买和三买正常更新
         if buy1_pos.pos != 0 or _research_first_buy_allowed(self.symbol, signals_dict):
-            buy1_pos.update(signals_dict, price, dt, execution_price=execution_price)
+            buy1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
         else:
-            buy1_pos.update({}, price, dt, execution_price=execution_price)
-        buy3_pos.update(signals_dict, price, dt, execution_price=execution_price)
+            buy1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+        buy3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
 
         # 二买需要一买上下文: 仅当一买子策略有过历史交易记录或有一买锚点时才生效
         if buy1_pos.pairs or self.buy1_history:
@@ -1336,12 +1378,12 @@ class ChanTimingStrategy:
             # 研究参数只拦截新开仓，已有二买持仓仍接收退出/风控信号。
             trade_price = execution_price if execution_price is not None else price
             if buy2_pos.pos != 0 or _research_second_buy_allowed(self.symbol, self._last_buy1_anchor, trade_price):
-                buy2_pos.update(signals_dict, price, dt, execution_price=execution_price)
+                buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
             else:
-                buy2_pos.update({}, price, dt, execution_price=execution_price)
+                buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
         else:
             # 无一买上下文，二买仅执行风控（传空信号，不触发开仓）
-            buy2_pos.update({}, price, dt, execution_price=execution_price)
+            buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
 
         if self.enable_short:
             sell1_pos = self.positions[3]  # 一卖子策略
@@ -1349,14 +1391,14 @@ class ChanTimingStrategy:
             sell3_pos = self.positions[5]  # 三卖子策略
 
             # 一卖和三卖正常更新
-            sell1_pos.update(signals_dict, price, dt, execution_price=execution_price)
-            sell3_pos.update(signals_dict, price, dt, execution_price=execution_price)
+            sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+            sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
 
             # 二卖需要一卖上下文
             if sell1_pos.pairs or self.sell1_history:
-                sell2_pos.update(signals_dict, price, dt, execution_price=execution_price)
+                sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
             else:
-                sell2_pos.update({}, price, dt, execution_price=execution_price)
+                sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
 
     def get_total_pos(self) -> int:
         """获取总仓位方向"""
