@@ -1,197 +1,132 @@
 ---
-task: A37 Exit-Event Boolean Restructure
+task: A38 Chan Strategy Improvement Roadmap (Phase 1 - touch-based stop execution)
 version: 4.4.0
-stage: done
-owner: codex
-updated: 2026-07-07
+stage: dev
+owner: kimi-code
+updated: 2026-07-09
 deliverables:
   - HANDOFF.md
-  - docs/design/a37-exit-event-restructure.md
-  - docs/design/a37-proof-evidence.md
-  - examples/czsc_strategy/chan_strategy/config.py
-  - examples/czsc_strategy/chan_strategy/positions.py
-  - examples/czsc_strategy/chan_strategy/signals.py
-  - examples/czsc_strategy/chan_strategy/sell_signals.py
-  - examples/czsc_strategy/chan_strategy/validation.py
-  - examples/czsc_strategy/chan_strategy/backtest_engine.py
-  - examples/czsc_strategy/diagnostics/exit_event_reachability_report.py
-  - examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py
-  - examples/czsc_strategy/tests/unit/test_exit_event_reachability_report.py
-  - examples/czsc_strategy/tests/unit/test_exit_event_restructure.py
-  - examples/czsc_strategy/tests/unit/test_phase1_dead_factor_equivalence.py
+  - docs/design/a38-strategy-improvement-roadmap.md
 blockers: []
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
 last_transition_kind: next
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-A36 closed the SimNow replay backfill. The 2026-07-07 win-rate audit identified the highest-leverage remaining structural defect (R1/R2): losing trades have no reachable structural exit path.
+The 2026-07-09 futures-trading review turned into an action checklist (three tiers: foundation
+/ win-rate / profitability). A34-A37 already handled the audit-remediation slice as diagnostics
+(M1 cost single-source, H1 declassification, A35 stop-loss stress diagnostic, A37 exit-event
+restructure). What remains un-built: the actual touch-based stop *implementation* (H2 - A35 only
+measured it; `Position._check_stop_loss` is still close-based), 888 rollover handling (H4), and
+the entire win-rate / profitability edge program that A34 explicitly excluded.
 
-Evidence (full sample, `diagnostics/pnl_attribution_20220101_20260424.md`, 358 trades):
+A38 sequences the full improvement program into a phased, gated roadmap (P1-P8) and ships the
+first, highest-certainty slice. The user (2026-07-09) explicitly authorized modifying strategy
+code in this root `vnpy` workflow for this line of work, so A38 is NOT diagnostics-only; but the
+A34-style guardrails still bind (gated default-off switches, no OOS tuning, research-only
+banner, no SimNow order changes).
 
-- `stop_loss`: 155 trades, 0% win rate, cumulative about `-489%` (pnl_pct sum).
-- `trailing_stop`: 114 trades, 99.1% win rate, about `+411%`.
-- `signal_exit`: only 88 trades, about `+8.4%`.
-- `timeout`: 1 trade.
-
-Structural causes, confirmed at source level:
-
-1. All six exit events use AND semantics: `(结构失效 [∨ 震荡超限]) ∧ (directional/position factor)` (`Event.is_match`, `chan_strategy/positions.py:125-141`; exits at `:569-591`, `:668-696`, `:766-792`, `:846-860`, `:928-955`, `:1011-1030`). A standalone `结构失效` never closes a position, contradicting `signals.py:682-683` ("两者并存，先触发者执行").
-2. `结构失效` uses the segment-mode center (`signals.py:696`, `sell_signals.py:237`) while the position factors use the recent-mode center (`zhongshu.py`), so the AND combines conditions about two different structures.
-3. The 二买平多 / 二卖平空 factors depending on `背驰V260615_失效` (`positions.py:685-694`, `:946-954`) are dead code (H3: classification count = 0 on real data).
+Single source of truth for the plan: `docs/design/a38-strategy-improvement-roadmap.md`
+(Part I = full P1-P8 roadmap; Part II = Phase 1 dev contract).
 
 ## Goal
 
-Implement A37 exactly as specified in `docs/design/a37-exit-event-restructure.md`, in phase order:
+Implement **Phase 1 only**: gap-aware / intrabar touch-based stop-loss execution, gated behind
+`STRATEGY_CONFIG["stop_execution_model"]` (`"close"` default = byte-identical legacy;
+`"intrabar"` = touch-based trigger + realistic fill). A35's `intrabar_trigger` stress scenario
+is the acceptance oracle. Phases P2-P8 are deferred to A39+.
 
-- Phase 0: read-only exit-blocked reachability diagnostic (`exit_event_reachability_report.py`), counting `legacy_fired` / `struct_alone` / `factor_alone` per exit event per symbol.
-- Phase 1: behavior-neutral removal of the two dead exit factors, with a machine-checkable equivalence proof (empty before/after trade-pair diff, including one `enable_short=True` replay leg).
-- Phase 2: `STRATEGY_CONFIG["exit_event_semantics"]` switch (`"legacy"` default, byte-identical baseline; `"restructured"` emits standalone structural-exit events plus standalone directional-exit events, with `结构失效` recomputed from a recent-mode signal `风控RV260615` / `空头风控RV260615`).
+Why Phase 1 first: it is a pure execution-accuracy fix (no signal semantics change), it targets
+the largest single loss source (stop path = 155 trades / 0% win / ~-489% cumulative in the A37
+attribution; A35 shows up to ~4.2x overshoot, worst ~-12.60% on a 3% stop), and it is a
+prerequisite for honestly measuring any later win-rate / PnL change.
 
 ## Acceptance Criteria
 
-- `docs/design/a37-exit-event-restructure.md` acceptance gates all pass, per phase and in order.
-- Phase 0 reports exist (`exit_event_reachability_report_YYYY-MM-DD.json/.md`) with the standard disclaimer; missing DB coverage marked `unavailable`, never silently passed; `背驰V260615_失效` replay count reported (expected 0).
-- Phase 1 equivalence: before/after trade-pair diff empty on >=2 symbols x 1 year (long baseline) AND >=1 symbol x 1 year with `enable_short=True`; test fixtures gain the "confirmed BI directions alternate" invariant.
-- Phase 2: switch defaults to `legacy`; with `legacy` the emitted event structures are identical to Phase 1 output (unit-tested); new signal keys registered in `validation.py` exhaustiveness sets; backtest report header prints the active switch value.
-- No numeric threshold tuned (`stop_loss_pct=0.05` copied verbatim); no selection justified by pre-2026-04-24 data; no `GOAL PASSED`; no SimNow order/cancel/trading interface changes; `Position` stop/trailing/timeout logic and `BacktestEngine.run` ordering untouched.
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
-- `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight` passes.
-- `python tools/handoff.py next --summary "A37 exit-event restructure implemented (phases 0-2)"` advances to review.
-
-## Review Findings
-
-2026-07-07 codex review result: **rejected to dev**.
-
-Blocking issue:
-
-- The implementation commit `4ef90b88` added tracked unit tests that import
-  `diagnostics.exit_event_reachability_report` and
-  `diagnostics.phase1_dead_factor_equivalence`, but both diagnostic scripts and
-  the generated Phase 0 / Phase 1 proof artifacts are ignored by
-  `.gitignore:105` (`examples/czsc_strategy/diagnostics/`) and are not tracked
-  by git. Local tests pass only because those ignored files exist on this
-  machine; a clean checkout of the commit would miss the scripts and cannot
-  reproduce the acceptance evidence.
-
-Evidence:
-
-```powershell
-git ls-files examples/czsc_strategy/diagnostics/exit_event_reachability_report.py `
-  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py `
-  examples/czsc_strategy/diagnostics/exit_event_reachability_report_2026-07-07.json `
-  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence_2025.json
-# no output
-
-git status --short --ignored examples/czsc_strategy/diagnostics/exit_event_reachability_report.py `
-  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py `
-  examples/czsc_strategy/diagnostics/exit_event_reachability_report_2026-07-07.json `
-  examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence_2025.json
-# !! examples/czsc_strategy/diagnostics/exit_event_reachability_report.py
-# !! examples/czsc_strategy/diagnostics/exit_event_reachability_report_2026-07-07.json
-# !! examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py
-# !! examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence_2025.json
-```
-
-Additional concern:
-
-- The generated Phase 0 JSON currently marks only `AP888` as `ok`; `RB888`,
-  `SC888`, `A888`, and `ZN888` are `unavailable` because of insufficient
-  30-minute bars in the selected window. That may be acceptable only if the
-  design explicitly allows a partial Phase 0 sample; otherwise rerun Phase 0 on
-  a window that covers the intended symbol set.
-
-Required remediation:
-
-1. Track the Phase 0 / Phase 1 diagnostic scripts despite the diagnostics
-   directory ignore rule, or move reusable scripts to a tracked package/module.
-2. Track the machine-checkable proof artifacts required by A37 acceptance, or
-   add an explicitly tracked summary artifact that contains the same evidence.
-3. Update `HANDOFF.md` deliverables to include the actual scripts, reports, and
-   tests used for acceptance.
-4. Re-run the full A37 acceptance commands and hand off again to review.
-
-2026-07-07 codex second review result: **rejected to dev**.
-
-Progress since the first rejection:
-
-- `examples/czsc_strategy/diagnostics/exit_event_reachability_report.py` is now tracked.
-- `examples/czsc_strategy/diagnostics/phase1_dead_factor_equivalence.py` is now tracked.
-- Targeted A37 tests pass locally: `55 passed`.
-- Full unit suite passes locally: `332 passed`.
-- Root and child `sync_check` pass.
-- `run_next_work.ps1 -Preflight` passes with `128 passed`.
-
-Remaining blockers:
-
-- `HANDOFF.md` deliverables still list only `HANDOFF.md` and the design
-  document, omitting the actual A37 implementation/test/proof files used for
-  acceptance. This violates the previous remediation item and makes the handoff
-  state under-report the real contract.
-- The machine-checkable proof artifacts remain ignored and untracked:
-  `exit_event_reachability_report_2026-07-07.json` and
-  `phase1_dead_factor_equivalence_2025.json`. Either force-track these proof
-  artifacts, or add a tracked summary artifact containing the same evidence
-  (dead signal count, per-symbol availability, long-leg diff, short-enabled diff,
-  and equivalence=true). Do not rely only on ignored local files.
-- The Phase 0 partial coverage issue remains unresolved in the handoff notes:
-  only `AP888` is `ok`; `RB888`, `SC888`, `A888`, and `ZN888` are
-  `unavailable`. Either rerun on a suitable window or explicitly record why this
-  partial Phase 0 sample satisfies the acceptance contract.
-
-Required remediation before the next review:
-
-1. Update `deliverables` to include every actual tracked A37 source/test/doc
-   artifact used for acceptance.
-2. Add tracked proof evidence for Phase 0 and Phase 1, or update the design /
-   handoff contract to explicitly make regenerated ignored outputs acceptable
-   and provide the exact regeneration commands.
-3. Address the Phase 0 partial-coverage concern with either a rerun or an
-   explicit documented rationale.
-4. Re-run the full A37 acceptance commands and hand off again to review.
+- [ ] `STRATEGY_CONFIG["stop_execution_model"]` exists with values `"close"` (default) and
+      `"intrabar"`, plus `stop_penalty_bp` (default `0`); both documented in `config.py`.
+- [ ] Legacy equivalence: with `"close"`, before/after trade-pair diff is empty on >=2 symbols
+      x 1 year (long baseline) AND >=1 symbol x 1 year with `enable_short=True`.
+- [ ] Intrabar trigger: unit tests prove long fires on `bar_low <= cost*(1-bp)` and fills
+      `min(trigger, close)`; short fires on `bar_high >= cost*(1+bp)` and fills
+      `max(trigger, close)`; `stop_penalty_bp` worsens the fill in the correct direction.
+- [ ] No-lookahead: the intrabar check reads only the current bar's high/low; a test asserts no
+      future bar is consulted, and `BacktestEngine.run` step ordering is unchanged beyond
+      threading high/low.
+- [ ] A35 cross-check: an `"intrabar"` backtest's recomputed stop-loss `worst_loss_pct` /
+      `overshoot_count` / `max_overshoot_multiple` agree with A35's `intrabar_trigger` scenario
+      within a stated tolerance on >=1 symbol; the evidence artifact is tracked (not only
+      regenerated on disk).
+- [ ] Backtest report header prints the active `stop_execution_model` and `stop_penalty_bp`.
+- [ ] No stop-loss threshold tuned (`stop_loss_*bp` unchanged); no pre-2026-04-24 data used for
+      any selection; every generated report carries the RESEARCH-ONLY disclaimer; no
+      `GOAL PASSED`.
+- [ ] No SimNow order/cancel/send paths changed; no new `send_order`/`cancel_order`/`buy`/
+      `sell`/`short`/`cover`; no secret fields in output.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+      pass.
+- [ ] `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
+      passes.
+- [ ] Part I roadmap present in the design doc: all Tier A/B/C review items mapped to P1-P8,
+      each with a default-off gate and boundaries.
 
 ## Notes for the Next Agent
 
-Read `docs/design/a37-exit-event-restructure.md` before writing code. The full dev prompt is in its §9.
+(dev = kimi-code must read this before writing code)
 
-Guardrails (reject-on-violation, see design §8):
-
-- Implement phases strictly in order; Phase 2 must not ship before the Phase 1 equivalence diff is empty.
-- Do not tune parameters or thresholds; do not use pre-2026-04-24 data for any selection.
-- Do not "fix" the dead `失效` branch in `signal_divergence_status` in this task — consumer-side removal only; the signal-side repair/delete decision is explicitly deferred.
-- Do not touch SimNow order/cancel/send-order paths.
-- Do not claim `GOAL PASSED`; result reports carry the RESEARCH-ONLY banner.
-- The local SQLite DB exists on this machine (verified 2026-07-07), so Phase 0/1 replays are executable locally.
+1. **Entry point:** `docs/design/a38-strategy-improvement-roadmap.md`. Implement **Part II only**
+   (Phase 1). The full dev prompt is in design doc S5. Do not implement P2-P8 - they are separate
+   future tasks; scope creep here is a reject reason.
+2. **Core change (design doc 2.3):** honor the switch in `positions.py`. Under `"intrabar"`,
+   long stop fires when `bar_low <= cost*(1-stop_loss_bp/10000)` and fills at
+   `min(trigger, bar_close)`; short fires when `bar_high >= cost*(1+stop_loss_bp/10000)` and
+   fills at `max(trigger, bar_close)`; then apply `stop_penalty_bp` adversely. Thread `bar.high`
+   / `bar.low` into `Position.update` via NEW optional params defaulting to `None` (fallback to
+   `price`, so existing call sites and the `"close"` path stay byte-identical).
+3. **Only the fixed stop changes.** Trailing-stop and timeout keep their current price basis in
+   this task (P8 owns the exit overhaul). The `Position.update` priority order
+   (trailing > stop > timeout) is unchanged.
+4. **No-lookahead is load-bearing:** the risk check must read only the CURRENT bar's OHLC - the
+   same bar whose close already drives the existing risk block (`backtest_engine.py:271-284`).
+   Do not read any future bar; do not otherwise reorder `BacktestEngine.run`.
+5. **Correctness proof = A35 cross-check.** A35's `stop_loss_stress_report` already computed the
+   `intrabar_trigger` scenario independently. Your `"intrabar"` backtest overshoot metrics must
+   converge to it within a stated tolerance on >=1 symbol. Track that evidence as a committed
+   artifact - the A37 review rejected twice for relying on git-ignored `diagnostics/` files, so
+   do not repeat that: put reusable scripts and proof under tracked paths (or add a tracked
+   summary artifact carrying the numbers).
+6. **Guardrails (reject-on-violation):** do not tune any threshold/weight/interval; do not use
+   pre-2026-04-24 data for selection; do not touch SimNow order/cancel/send paths; reports carry
+   the RESEARCH-ONLY banner; no `GOAL PASSED`.
+7. **Why gated + default-off:** same discipline as A37 - the `"close"` default must reproduce the
+   current baseline byte-for-byte (equivalence test), so P1 adds a capability without changing
+   any published result until it is deliberately switched on.
+8. Finish by running the four commands in the acceptance list, then
+   `python tools/handoff.py next --actor kimi-code --summary "A38 phase 1 touch-based stop execution implemented"`.
+   The gate is transactional - if it blocks, fix and retry; do not use `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-07 - A37 started after A36 reached `done`; scope chosen from the win-rate audit's top recommendation (R1/R2 exit-event restructure).
-- 2026-07-07 - Chose diagnostic-first phasing (Phase 0 counts blocked exits before any behavior change), mirroring A34/A35 discipline.
-- 2026-07-07 - Chose OR semantics for `restructured` mode on traceability grounds (restores documented "先触发者执行" and 三买 "回落入中枢" intent), gated behind a default-off config switch; churn explosion on new data is a defined rejection outcome.
-- 2026-07-07 - Design review fixed two gaps before dev handoff: pinned exact short-side exit anchors, and made the `enable_short=True` equivalence replay leg mandatory (baseline `enable_short=False` would otherwise vacuously pass the 二卖 removal).
-
-## Handoff History
-
-| Date | From -> To | Stage Change | Summary |
-|------|------------|--------------|---------|
-| 2026-07-07 | codex -> claude-code | done -> design | A37 exit-event restructure started |
-| 2026-07-07 | claude-code -> kimi-code | design -> dev | A37 design complete: exit-event boolean restructure (3 phases, gated) |
+- 2026-07-09 - A38 started after A37 reached `done`; scope = the 2026-07-09 futures-review action
+  checklist, sequenced as a gated P1-P8 roadmap. User authorized strategy-code changes in the
+  root workflow (vs the czsc_strategy sub-workflow, which is read-only diagnostics and could not
+  host this).
+- 2026-07-09 - Chose touch-based stop execution as Phase 1: highest certainty (execution-accuracy
+  fix, no signal-semantics change), highest leverage (stop path is the dominant loss source), and
+  a prerequisite for honestly measuring later Tier B/C win-rate / PnL changes. A35 already
+  produced the acceptance oracle.
+- 2026-07-09 - Kept the fixed-stop change isolated from trailing/timeout (P8 owns exits) to keep
+  the Phase 1 equivalence proof small and the review surface minimal.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-07 | codex → claude-code | done → design | A37 出场事件布尔结构重构 启动 |
-| 2026-07-07 | claude-code → kimi-code | design → dev | A37 设计完成：三阶段（只读诊断 → 行为中性删除 → 开关门控重构），默认基线不变 |
-| 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2) |
-| 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 diagnostic scripts and proof artifacts are ignored by git, so the review evidence is not reproducible from a clean checkout |
-| 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2); diagnostic scripts now tracked |
-| 2026-07-07 | codex → kimi-code | review → dev | 打回: A37 deliverables and tracked proof evidence remain incomplete after remediation |
-| 2026-07-07 | kimi-code → codex | dev → review | A37 exit-event restructure implemented (phases 0-2); tracked proof evidence and deliverables complete |
-| 2026-07-07 | codex → codex | review → done | A37 review passed: exit-event boolean restructure accepted with tracked proof evidence |
+| 2026-07-09 | codex → claude-code | done → design | A38 improvement roadmap started (Phase 1: touch-based stop execution) |
+| 2026-07-09 | claude-code → kimi-code | design → dev | A38 design complete: strategy improvement roadmap (P1-P8); Phase 1 = touch-based stop execution spec + acceptance |
