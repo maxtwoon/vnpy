@@ -210,13 +210,30 @@ open, then CZSC update, then signal generation) is otherwise untouched. Wiring: 
 branch of the loop (`backtest_engine.py:271-284`), pass `bar.high` / `bar.low` alongside
 `bar.close` into `strategy.update(...)`. No future bar is read.
 
-### 2.5 Cross-check against A35
+### 2.5 Cross-check against A35 (well-posed; revised 2026-07-10 after review)
 
-A35's `stop_loss_stress_report` computed the `intrabar_trigger` scenario independently from
-saved pairs. Phase 1 must produce a backtest under `stop_execution_model="intrabar"` whose
-recomputed stop-loss `worst_loss_pct`, `overshoot_count`, and `max_overshoot_multiple` agree
-with A35's `intrabar_trigger` scenario within tolerance on at least one symbol — two independent
-implementations converging is the correctness proof.
+**Why revised.** A35's `scenario_intrabar_trigger` fills a touched stop **at the trigger level**
+(an optimistic limit-fill that never overshoots the nominal stop). A38 deliberately fills at
+`min(trigger, close)` — market-on-touch, which is **more conservative on a gap-through bar**
+(where the bar's close is already past the trigger). They are therefore *different fill models
+by design*, so a single blanket "agree within tolerance" between them is not well-posed (this
+was the 2026-07-10 review rejection). The cross-check is redefined to be numerically well-posed:
+
+Validate the two independent implementations on the **same stop-loss population** — the
+close-model run's own stop pairs, restricted to one uniform-stop sub-strategy on >=1 symbol so a
+single nominal stop applies — by reusing A35's `scenario_intrabar_trigger` and
+`_scenario_summary`:
+
+- **Convergence on non-gap trades:** for every trade whose trigger bar does not gap past the
+  trigger (long: trigger bar `close >= trigger`; short: `close <= trigger`), A38's fill equals
+  A35's fill within `1e-6`.
+- **Conservatism invariant on gap trades:** for gap-through trades, A38's realized loss is never
+  smaller than A35's (`A38_loss >= A35_loss`); these are listed with counts and are the intended
+  modeling improvement, not a discrepancy.
+- **Reported metrics:** `worst_loss_pct`, `overshoot_count`, `max_overshoot_multiple` for both
+  the A35 model and the A38 model on that shared population, plus the committed A35 full-sample
+  `stop_loss_stress_report_*.json` `intrabar_trigger` values for reference (labelled full-sample
+  vs windowed). The tolerance (`1e-6`) and the gap invariant are printed in the artifact.
 
 ### 2.6 Expected file changes
 
@@ -244,9 +261,12 @@ These are copied verbatim into `HANDOFF.md` as the dev/review contract.
       `max(trigger, close)`; `stop_penalty_bp` worsens the fill in the correct direction.
 - [ ] **No-lookahead:** the intrabar check reads only the current bar's high/low; a test
       asserts no future bar is consulted, and `BacktestEngine.run` step ordering is unchanged.
-- [ ] **A35 cross-check:** an `"intrabar"` backtest's recomputed stop-loss `worst_loss_pct` /
-      `overshoot_count` / `max_overshoot_multiple` agree with A35's `intrabar_trigger` scenario
-      within a stated tolerance on >=1 symbol (evidence tracked, not only regenerated-on-disk).
+- [ ] **A35 cross-check (well-posed; see 2.5):** on the close-model run's stop pairs for one
+      uniform-stop sub-strategy on >=1 symbol, the cross-check reuses A35's
+      `scenario_intrabar_trigger` / `_scenario_summary` and asserts (a) A38 fill == A35 fill
+      within `1e-6` on every non-gap trade, and (b) `A38_loss >= A35_loss` on every gap trade;
+      it reports `worst_loss_pct` / `overshoot_count` / `max_overshoot_multiple` for both models
+      plus the committed A35 full-sample values. Evidence tracked (not only regenerated-on-disk).
 - [ ] Backtest report header prints the active `stop_execution_model` and `stop_penalty_bp`.
 - [ ] No stop-loss threshold tuned (`stop_loss_*bp` unchanged); no pre-2026-04-24 data used for
       any selection; every generated report carries the RESEARCH-ONLY disclaimer; no

@@ -1,9 +1,9 @@
 ---
 task: A38 Chan Strategy Improvement Roadmap (Phase 1 - touch-based stop execution)
 version: 4.4.0
-stage: review
-owner: codex
-updated: 2026-07-09
+stage: dev
+owner: kimi-code
+updated: 2026-07-10
 deliverables:
   - HANDOFF.md
   - docs/design/a38-strategy-improvement-roadmap.md
@@ -17,11 +17,11 @@ deliverables:
   - examples/czsc_strategy/diagnostics/stop_execution_model_crosscheck_2026-07-09.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -66,10 +66,13 @@ prerequisite for honestly measuring any later win-rate / PnL change.
 - [ ] No-lookahead: the intrabar check reads only the current bar's high/low; a test asserts no
       future bar is consulted, and `BacktestEngine.run` step ordering is unchanged beyond
       threading high/low.
-- [ ] A35 cross-check: an `"intrabar"` backtest's recomputed stop-loss `worst_loss_pct` /
-      `overshoot_count` / `max_overshoot_multiple` agree with A35's `intrabar_trigger` scenario
-      within a stated tolerance on >=1 symbol; the evidence artifact is tracked (not only
-      regenerated on disk).
+- [ ] A35 cross-check (well-posed; design 2.5, revised 2026-07-10): on the close-model run's
+      stop pairs for one uniform-stop sub-strategy on >=1 symbol, the cross-check reuses A35's
+      `scenario_intrabar_trigger` / `_scenario_summary` and asserts (a) A38 fill == A35 fill
+      within `1e-6` on every non-gap trade, and (b) `A38_loss >= A35_loss` on every gap trade;
+      it reports `worst_loss_pct` / `overshoot_count` / `max_overshoot_multiple` for both models
+      plus the committed A35 full-sample values. Tolerance and gap invariant printed. Evidence
+      tracked (not only regenerated on disk).
 - [ ] Backtest report header prints the active `stop_execution_model` and `stop_penalty_bp`.
 - [ ] No stop-loss threshold tuned (`stop_loss_*bp` unchanged); no pre-2026-04-24 data used for
       any selection; every generated report carries the RESEARCH-ONLY disclaimer; no
@@ -86,7 +89,31 @@ prerequisite for honestly measuring any later win-rate / PnL change.
 
 ## Notes for the Next Agent
 
-(review = codex; verify against the Acceptance Criteria above)
+(dev = kimi-code; this is a **remediation cycle** after the 2026-07-10 review reject)
+
+### Remediation scope (ONLY the cross-check; do not touch strategy code)
+
+The strategy code (`config.py` / `positions.py` / `backtest_engine.py`), the unit tests, and the
+close-model equivalence proof are **accepted and unchanged** - re-verify they still pass but do
+not modify them. The single blocking issue was the A35 cross-check. Rebuild
+`diagnostics/stop_execution_model_crosscheck.py` to the revised well-posed criterion (design 2.5
+/ acceptance above):
+
+1. Run the close-model backtest; take its stop-loss pairs for **one uniform-stop sub-strategy**
+   on >=1 symbol (e.g. `一买多头`, stop 200bp, on sc888) so a single nominal stop applies.
+2. Reuse A35's `diagnostics.stop_loss_stress_report.scenario_intrabar_trigger` and
+   `_scenario_summary` to compute the A35-model (`fill = trigger`) metrics on those pairs.
+3. Compute the A38-model (`fill = min(trigger, close)`, the live `_stop_fill` semantics) metrics
+   on the same pairs via a small reference function.
+4. Assert (a) A38 fill == A35 fill within `1e-6` on every non-gap trade (trigger bar
+   `close >= trigger` long / `<= trigger` short); (b) `A38_loss >= A35_loss` on every gap trade.
+5. Report `worst_loss_pct` / `overshoot_count` / `max_overshoot_multiple` for BOTH models, the
+   tolerance (`1e-6`), the gap-trade count, and load the committed
+   `stop_loss_stress_report_2026-07-04.json` `intrabar_trigger` values for full-sample reference.
+6. Regenerate the tracked JSON/MD artifact (git add -f) with the A35 comparison block; add a
+   small non-realdb unit test for the A38-fill reference function.
+7. Re-run: `pytest ... -m "not realdb"`, root+child `sync_check`, preflight; then handoff to
+   review.
 
 ### What changed (Phase 1 only; P2-P8 untouched)
 
@@ -144,6 +171,51 @@ Confirm: `"close"` byte-identical (stash diff + unit test); intrabar trigger/fil
 2.3; trailing/timeout untouched; only current-bar OHLC read; no threshold tuned; no
 pre-2026-04-24 selection; no SimNow order path; no `GOAL PASSED`; artifacts git-tracked.
 
+## Review Findings
+
+2026-07-10 codex review result: **rejected to dev**.
+
+Blocking issue:
+
+- The A38 acceptance contract requires the A35 cross-check to compare an
+  `intrabar` backtest's recomputed `worst_loss_pct`, `overshoot_count`, and
+  `max_overshoot_multiple` against A35's `intrabar_trigger` scenario **within a
+  stated tolerance** on at least one symbol. The implementation instead records
+  a qualitative / directional check: `stop_execution_model_crosscheck.py` says
+  it is "cross-referenced qualitatively", the tracked JSON/Markdown report says
+  it "matches the A35 intrabar_trigger direction", and the Decision Log says the
+  gate is "satisfied qualitatively ... rather than an exact numeric replica".
+  That is a contract downgrade without a design-stage decision.
+
+Evidence:
+
+- `docs/design/a38-strategy-improvement-roadmap.md` §2.5 and §3 require
+  `worst_loss_pct` / `overshoot_count` / `max_overshoot_multiple` to agree with
+  A35 `intrabar_trigger` within tolerance.
+- `HANDOFF.md` acceptance lines 69-71 repeat the same requirement.
+- `HANDOFF.md` Decision Log lines 162-166 explicitly admits the current
+  cross-check is qualitative rather than exact.
+- `examples/czsc_strategy/diagnostics/stop_execution_model_crosscheck.py` only
+  reports `stop_trades`, `worst_loss_pct`, and `max_overshoot_x`; it does not
+  read the A35 stress report, does not compute/report `overshoot_count`, and
+  does not apply a stated tolerance.
+- `examples/czsc_strategy/diagnostics/stop_execution_model_crosscheck_2026-07-09.json`
+  contains no `overshoot_count` field and no A35 comparison block.
+
+Required remediation:
+
+1. Make `stop_execution_model_crosscheck.py` consume the A35
+   `stop_loss_stress_report_*.json` (or a tracked A35 fixture/summary) and
+   compare the required metrics: `worst_loss_pct`, `overshoot_count`, and
+   `max_overshoot_multiple`.
+2. Define and print the tolerance used for each metric. If exact agreement is
+   impossible because A35 is pair-reconstruction based while A38 is live-engine
+   based, return to design and explicitly change the acceptance contract before
+   claiming the gate passes.
+3. Regenerate and track the cross-check JSON/Markdown evidence with the A35
+   comparison block.
+4. Re-run the full A38 acceptance commands and hand off again to review.
+
 ## Decision Log
 
 - 2026-07-09 - A38 started after A37 reached `done`; scope = the 2026-07-09 futures-review action
@@ -164,6 +236,16 @@ pre-2026-04-24 selection; no SimNow order path; no `GOAL PASSED`; artifacts git-
   equivalence test; the A35 cross-check is satisfied qualitatively by the intrabar tail-bounding
   direction (short overshoot 2.77x -> 1.41x) rather than an exact numeric replica of A35's
   post-hoc scenario, since A35 recomputed from saved pairs while this runs the live engine.
+- 2026-07-10 (design, after review reject) - The 2026-07-09 (dev) qualitative substitution above
+  was a contract downgrade without a design decision (correctly caught in review). Root cause:
+  A35 `scenario_intrabar_trigger` fills at the trigger (never overshoots) while A38 fills at
+  `min(trigger, close)` (conservative on gaps) - different fill models, so blanket numeric
+  agreement is impossible by construction. **Decision:** redefine the A35 cross-check (design 2.5)
+  to a well-posed same-population, two-model comparison reusing A35's `scenario_intrabar_trigger`
+  / `_scenario_summary`: exact convergence (`1e-6`) on non-gap trades + an `A38_loss >= A35_loss`
+  conservatism invariant on gap trades, reporting `worst_loss_pct` / `overshoot_count` /
+  `max_overshoot_multiple` for both models plus the committed A35 full-sample values. This keeps
+  A38's more-conservative gap fill (the modeling improvement) instead of forcing it to match A35.
 
 ## 交接历史
 
@@ -172,3 +254,6 @@ pre-2026-04-24 selection; no SimNow order path; no `GOAL PASSED`; artifacts git-
 | 2026-07-09 | codex → claude-code | done → design | A38 improvement roadmap started (Phase 1: touch-based stop execution) |
 | 2026-07-09 | claude-code → kimi-code | design → dev | A38 design complete: strategy improvement roadmap (P1-P8); Phase 1 = touch-based stop execution spec + acceptance |
 | 2026-07-09 | kimi-code → codex | dev → review | A38 phase 1 touch-based stop execution implemented (gated, close byte-identical, intrabar tail-bounded; unit+realdb proof) |
+| 2026-07-10 | codex → kimi-code | review → dev | 打回: A38 A35 cross-check was downgraded to qualitative direction instead of numeric tolerance agreement |
+| 2026-07-10 | kimi-code → claude-code | dev → design | 打回: A35 cross-check criterion is ill-posed: A35 scenario_intrabar_trigger fills at the trigger level (never overshoots) while A38 fills at min(trigger,close) (conservative on gap-through) - two different fill models, so blanket numeric agreement is impossible by construction. Amend the acceptance to a well-posed same-population two-model comparison (exact convergence on non-gap trades + A38>=A35 conservatism invariant on gap trades), consuming A35's module and reporting overshoot_count. |
+| 2026-07-10 | claude-code → kimi-code | design → dev | A38 design amend: well-posed A35 cross-check (same-population two-model; exact non-gap convergence + gap conservatism invariant) |
