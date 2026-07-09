@@ -84,6 +84,11 @@ Each phase is a separate handoff task. Common discipline for every phase (reject
 | P7 | Symmetric regime-gated shorts | C | #9 | P3, P5 | `enable_short=False` (unchanged) |
 | P8 | Exit overhaul + portfolio risk (risk parity, correlation cap, daily loss limit) | C | #10, #11 | P3, P7 | `exit_model="legacy"`, `portfolio_risk=off` |
 
+> **Companion document.** Detailed dev contracts for P2-P8 (config switches, semantics,
+> no-lookahead constraints, expected files, decidable acceptance, boundaries, dev prompt, review
+> checklist) are pre-authored in `docs/design/a38-phase-contracts-p2-p8.md` for the future tasks
+> A39-A45. They do not change A38's Phase-1 dev scope.
+
 ### P1 - Touch-based stop execution (this task; detailed in Part II)
 
 Rationale for going first: highest certainty (pure execution-accuracy fix, no signal-semantics
