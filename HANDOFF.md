@@ -1,7 +1,7 @@
 ---
 task: A38 Chan Strategy Improvement Roadmap (Phase 1 - touch-based stop execution)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-10
 deliverables:
@@ -18,10 +18,10 @@ deliverables:
   - examples/czsc_strategy/diagnostics/stop_execution_model_crosscheck_2026-07-10.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -259,3 +259,4 @@ Required remediation:
 | 2026-07-10 | kimi-code → claude-code | dev → design | 打回: A35 cross-check criterion is ill-posed: A35 scenario_intrabar_trigger fills at the trigger level (never overshoots) while A38 fills at min(trigger,close) (conservative on gap-through) - two different fill models, so blanket numeric agreement is impossible by construction. Amend the acceptance to a well-posed same-population two-model comparison (exact convergence on non-gap trades + A38>=A35 conservatism invariant on gap trades), consuming A35's module and reporting overshoot_count. |
 | 2026-07-10 | claude-code → kimi-code | design → dev | A38 design amend: well-posed A35 cross-check (same-population two-model; exact non-gap convergence + gap conservatism invariant) |
 | 2026-07-10 | kimi-code → codex | dev → review | A38 remediation: well-posed A35 cross-check (same-population two-model; non-gap exact 1e-6, gap conservatism invariant); rebuilt crosscheck + unit test + tracked 2026-07-10 evidence |
+| 2026-07-10 | codex → codex | review → done | A38 review passed: touch-based stop execution accepted with well-posed A35 cross-check |
