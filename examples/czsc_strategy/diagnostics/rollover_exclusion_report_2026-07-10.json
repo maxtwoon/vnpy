@@ -1,0 +1,142 @@
+{
+  "disclaimer": "Diagnostic only, not a trading recommendation.",
+  "generated_at": "2026-07-10T16:33:56.052279+00:00",
+  "window": "2026-04-24 ~ 2026-07-09",
+  "db_path": "D:\\BaiduNetdiskDownload\\新数据库\\ssquant数据库_20260425\\kline_data.db",
+  "symbols": {
+    "AP888": {
+      "symbol": "AP888",
+      "detection_method": "real_symbol",
+      "transition_dates": [],
+      "excluded_dates": [],
+      "before": {
+        "trade_count": 2,
+        "return": -5.8398,
+        "drawdown": 5.8398,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "after": {
+        "trade_count": 2,
+        "return": -5.8398,
+        "drawdown": 5.8398,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "baseline_report_summary": {
+        "total_trades": 2,
+        "total_return_pct": -0.900528094142472,
+        "max_drawdown_pct": 1.1802067542718984
+      }
+    },
+    "RB888": {
+      "symbol": "RB888",
+      "unavailable": "insufficient_bars_in_window",
+      "detection_method": "real_symbol",
+      "transition_dates": []
+    },
+    "SC888": {
+      "symbol": "SC888",
+      "detection_method": "real_symbol",
+      "transition_dates": [
+        {
+          "date": "2026-07-01",
+          "datetime": "2026-07-01 00:00:00",
+          "from_contract": "sc2606",
+          "to_contract": "sc2608"
+        }
+      ],
+      "excluded_dates": [
+        "2026-04-24",
+        "2026-07-01",
+        "2026-07-02"
+      ],
+      "before": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "after": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "baseline_report_summary": {
+        "total_trades": 0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0
+      }
+    },
+    "A888": {
+      "symbol": "A888",
+      "unavailable": "insufficient_bars_in_window",
+      "detection_method": "real_symbol",
+      "transition_dates": [
+        {
+          "date": "2026-07-02",
+          "datetime": "2026-07-02 09:00:00",
+          "from_contract": "a2607",
+          "to_contract": "a2609"
+        }
+      ]
+    },
+    "ZN888": {
+      "symbol": "ZN888",
+      "detection_method": "real_symbol",
+      "transition_dates": [
+        {
+          "date": "2026-07-01",
+          "datetime": "2026-07-01 00:00:00",
+          "from_contract": "zn2606",
+          "to_contract": "zn2608"
+        }
+      ],
+      "excluded_dates": [
+        "2026-04-24",
+        "2026-07-01",
+        "2026-07-02"
+      ],
+      "before": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "after": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "baseline_report_summary": {
+        "total_trades": 0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0
+      }
+    }
+  }
+}
