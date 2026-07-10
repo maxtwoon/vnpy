@@ -89,6 +89,7 @@ examples/czsc_strategy/diagnostics/*.jsonl
 examples/czsc_strategy/diagnostics/signal_history_*.json
 
 # Cached market data
+data_cache/
 docs/chanlunnew/codex_chan_audit_pack/expected_outputs/
 docs/chanlunnew/codex_chan_audit_pack/payload/
 docs/chanlunnew/*.pdf
