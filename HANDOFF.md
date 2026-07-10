@@ -1,8 +1,8 @@
 ---
 task: A39 Rollover-Pollution Diagnostic + Trading-Calendar Daily Aggregation (P2)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
@@ -16,12 +16,12 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_rollover_exclusion_report.py
   - examples/czsc_strategy/RISK_NOTE_888_SPLICE.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -155,3 +155,4 @@ Checks that passed in this review:
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented; all acceptance gates pass |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
+| 2026-07-11 | kimi-code → codex | dev → review | A39 dev stage acceptance gates pass: pytest unit tests, preflight, and sync checks all green. |
