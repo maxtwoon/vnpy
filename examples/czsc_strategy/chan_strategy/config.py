@@ -65,6 +65,11 @@ STRATEGY_CONFIG = {
 
     # A37 exit-event semantics switch (default legacy to keep baseline unchanged).
     "exit_event_semantics": "legacy",  # "legacy" | "restructured"
+
+    # A39 daily aggregation switch (P2). "natural" is the legacy byte-identical path;
+    # "trading_calendar" maps night-session bars past midnight to the next trading day.
+    "daily_agg": "natural",               # "natural" | "trading_calendar"
+    "night_session_start_hour": 20,       # bars with hour >= this are evening-session bars
 }
 
 # 回测参数

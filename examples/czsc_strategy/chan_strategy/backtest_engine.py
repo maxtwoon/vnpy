@@ -230,7 +230,13 @@ class BacktestEngine:
         print(f"K线合成: {len(self.bars)}根1分钟 → {len(trade_bars)}根{trade_freq_name}")
 
         # 从1分钟K线合成日线K线（用于趋势过滤）
-        daily_bars = resample_bars(self.bars, Freq.D, target_minutes=None)
+        daily_agg = STRATEGY_CONFIG.get("daily_agg", "natural")
+        night_session_start_hour = STRATEGY_CONFIG.get("night_session_start_hour", 20)
+        daily_bars = resample_bars(
+            self.bars, Freq.D, target_minutes=None,
+            daily_agg=daily_agg,
+            night_session_start_hour=night_session_start_hour,
+        )
         print(f"K线合成: {len(self.bars)}根1分钟 → {len(daily_bars)}根日线")
 
         if len(trade_bars) < warmup_bars + 10:

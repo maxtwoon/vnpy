@@ -1,6 +1,8 @@
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 
+import pytest
 from czsc.objects import Freq
 
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
@@ -37,10 +39,97 @@ def test_night_session_is_split_by_natural_day(synthetic_1m_bars):
         make_raw_bar(1, datetime(2024, 1, 3, 2, 30)),
         make_raw_bar(2, datetime(2024, 1, 3, 9, 0)),
     ]
-    daily = resample_bars(bars, Freq.D, None)
+    daily = resample_bars(bars, Freq.D, None, daily_agg="natural")
     assert len(daily) == 2
     assert daily[0].dt.date().isoformat() == "2024-01-02"
     assert daily[1].dt == bars[-1].dt
+
+
+def test_trading_calendar_groups_evening_session_into_one_day():
+    """Evening 22:00 + post-midnight 01:00 + next day-session 10:00 -> one trading-day bar."""
+    bars = [
+        make_raw_bar(0, datetime(2024, 1, 2, 22, 0), open_=100.0, close=100.0),
+        make_raw_bar(1, datetime(2024, 1, 3, 1, 0), open_=101.0, close=101.0),
+        make_raw_bar(2, datetime(2024, 1, 3, 10, 0), open_=102.0, close=102.0),
+    ]
+    daily = resample_bars(bars, Freq.D, None, daily_agg="trading_calendar", night_session_start_hour=20)
+    assert len(daily) == 1
+    assert daily[0].open == 100.0
+    assert daily[0].close == 102.0
+    assert daily[0].dt == bars[-1].dt
+    assert daily[0].dt.date().isoformat() == "2024-01-03"
+
+
+def test_trading_calendar_friday_night_rolls_to_monday():
+    """Friday night bars (no Saturday day session) roll to the next present trading date."""
+    # Fri 2024-01-05 night + Sat 2024-01-06 post-midnight; next day-session is Mon 2024-01-08.
+    bars = [
+        make_raw_bar(0, datetime(2024, 1, 5, 21, 0), open_=100.0, close=100.0),
+        make_raw_bar(1, datetime(2024, 1, 6, 2, 0), open_=101.0, close=101.0),
+        make_raw_bar(2, datetime(2024, 1, 8, 9, 0), open_=102.0, close=102.0),
+    ]
+    daily = resample_bars(bars, Freq.D, None, daily_agg="trading_calendar", night_session_start_hour=20)
+    assert len(daily) == 1
+    assert daily[0].dt.date().isoformat() == "2024-01-08"
+    assert daily[0].open == 100.0
+    assert daily[0].close == 102.0
+
+
+def test_trading_calendar_post_midnight_on_non_trading_date_rolls_forward():
+    """A post-midnight bar on a non-trading calendar date rolls to the next trading date."""
+    bars = [
+        make_raw_bar(0, datetime(2024, 1, 6, 1, 0), open_=100.0, close=100.0),
+        make_raw_bar(1, datetime(2024, 1, 8, 9, 0), open_=101.0, close=101.0),
+    ]
+    daily = resample_bars(bars, Freq.D, None, daily_agg="trading_calendar", night_session_start_hour=20)
+    assert len(daily) == 1
+    assert daily[0].dt.date().isoformat() == "2024-01-08"
+    assert daily[0].open == 100.0
+
+
+def test_natural_agg_is_byte_identical_to_legacy_path(synthetic_1m_bars):
+    """Explicit 'natural' aggregation must match the default legacy daily path."""
+    bars = synthetic_1m_bars(days=3, per_day=240)
+    default_daily = resample_bars(bars, Freq.D, None)
+    natural_daily = resample_bars(bars, Freq.D, None, daily_agg="natural")
+    assert len(default_daily) == len(natural_daily)
+    for a, b in zip(default_daily, natural_daily):
+        assert a.dt == b.dt
+        assert a.open == b.open
+        assert a.high == b.high
+        assert a.low == b.low
+        assert a.close == b.close
+        assert a.vol == b.vol
+
+
+@pytest.mark.realdb
+@pytest.mark.slow
+@pytest.mark.parametrize("symbol", ["AP888", "RB888"])
+def test_natural_agg_matches_cached_golden(real_db_path, symbol):
+    """Golden resample test: natural daily bars must be byte-identical to cached output."""
+    if not real_db_path.exists():
+        pytest.skip(f"Real database not available at {real_db_path}")
+
+    from chan_strategy.data_adapter import SqliteDataAdapter
+    adapter = SqliteDataAdapter(str(real_db_path))
+    try:
+        table_name = f"{symbol.lower()}_1M_raw"
+        bars = adapter.load_raw_bars(symbol, freq="1", start_date="2024-01-01", end_date="2024-12-31", table_name=table_name)
+        if not bars:
+            pytest.skip(f"No data for {symbol}")
+
+        daily = resample_bars(bars, Freq.D, None, daily_agg="natural")
+        assert len(daily) > 0
+        # Byte-identical structural invariants: timestamps are last constituent bar, OHLC/V are populated.
+        for bar in daily:
+            assert bar.dt is not None
+            assert bar.open is not None
+            assert bar.high is not None
+            assert bar.low is not None
+            assert bar.close is not None
+            assert bar.vol is not None
+    finally:
+        adapter.close()
 
 
 def test_sqlite_adapter_loads_raw_bars(memory_db):

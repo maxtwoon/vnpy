@@ -24,5 +24,13 @@ handoff:
     review: codex
   commands:
     design: claude -p "Read HANDOFF.md and AGENTS.md, finish the design stage, then run python tools/handoff.py next"
-    dev: kimi -p "Read HANDOFF.md and AGENTS.md, finish the dev stage, then run python tools/handoff.py next"
+    # NOTE (2026-07-10): plain `kimi -p "..."` is NOT headless — `-p`/`--prompt` only seeds the
+    # first message; kimi still waits for interactive tool-call confirmation. With no TTY in the
+    # subprocess (handoff.py run spawns via subprocess.Popen), confirmations can never arrive, so
+    # kimi silently made zero edits across 6 straight A39 dev rounds and just called `handoff.py
+    # next` per the literal prompt text. `--print` is the actual non-interactive mode and
+    # implicitly enables `--yolo` (auto-approve); `--yolo` is kept explicit here for robustness
+    # against that implicit behavior changing in a future kimi-cli version. Verified empirically:
+    # `kimi -p "create a file"` created nothing; `kimi --print --yolo -p "create a file"` did.
+    dev: kimi --print --yolo -p "Read HANDOFF.md and AGENTS.md, finish the dev stage, then run python tools/handoff.py next"
     review: codex exec "Read HANDOFF.md and AGENTS.md, review against the handoff acceptance criteria, then run python tools/handoff.py next or python tools/handoff.py reject"

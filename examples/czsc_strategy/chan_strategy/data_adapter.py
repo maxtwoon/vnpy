@@ -5,7 +5,7 @@ SQLite数据适配器 - 从本地数据库加载K线数据并转换为czsc RawBa
 """
 import sqlite3
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional
 from pathlib import Path
 
@@ -13,27 +13,134 @@ from pathlib import Path
 from czsc.objects import RawBar, Freq
 
 
-def resample_bars(bars: List[RawBar], target_freq: Freq, target_minutes: int = None) -> List[RawBar]:
+def _trading_day_for_bar(
+    bar,
+    trading_dates: set[date],
+    night_session_start_hour: int,
+    notes: list[str],
+) -> date:
+    """Map a single bar to its exchange trading day (A39 design 4.1)."""
+    bar_date = bar.dt.date()
+    bar_hour = bar.dt.hour
+
+    if bar_hour >= night_session_start_hour:
+        # Evening session belongs to the next trading date strictly after bar_date.
+        later = [d for d in trading_dates if d > bar_date]
+        if later:
+            return min(later)
+        # Tail-of-data fallback: keep bar_date and record a note.
+        notes.append(f"evening bar {bar.dt} has no later trading date; fallback to {bar_date}")
+        return bar_date
+
+    # Non-evening bar: its own date if it is a trading date, else roll forward.
+    if bar_date in trading_dates:
+        return bar_date
+    later_or_same = [d for d in trading_dates if d >= bar_date]
+    if later_or_same:
+        return min(later_or_same)
+    # Defensive fallback (should not happen when trading_dates is non-empty).
+    notes.append(f"non-evening bar {bar.dt} has no trading date; fallback to {bar_date}")
+    return bar_date
+
+
+def _resample_daily_trading_calendar(
+    bars: List[RawBar],
+    target_freq: Freq,
+    night_session_start_hour: int,
+) -> List[RawBar]:
+    """Daily aggregation by exchange trading day (A39 Phase 1)."""
+    symbol = bars[0].symbol
+    day_session_hours = range(8, 16)
+    trading_dates = sorted({
+        bar.dt.date() for bar in bars if bar.dt.hour in day_session_hours
+    })
+
+    if not trading_dates:
+        # No day-session bars: fall back to natural date to avoid producing nothing.
+        return _resample_daily_natural(bars, target_freq)
+
+    trading_date_set = set(trading_dates)
+    notes: list[str] = []
+
+    resampled: List[RawBar] = []
+    group: List[RawBar] = []
+    current_trading_day: Optional[date] = None
+
+    for bar in bars:
+        trading_day = _trading_day_for_bar(
+            bar, trading_date_set, night_session_start_hour, notes
+        )
+        if current_trading_day is None:
+            current_trading_day = trading_day
+            group = [bar]
+        elif trading_day == current_trading_day:
+            group.append(bar)
+        else:
+            if group:
+                resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
+            group = [bar]
+            current_trading_day = trading_day
+
+    if group:
+        resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
+
+    return resampled
+
+
+def _resample_daily_natural(bars: List[RawBar], target_freq: Freq) -> List[RawBar]:
+    """Daily aggregation by natural calendar date (legacy byte-identical path)."""
+    symbol = bars[0].symbol
+    resampled: List[RawBar] = []
+    group: List[RawBar] = []
+    current_date: Optional[date] = None
+
+    for bar in bars:
+        bar_date = bar.dt.date()
+        if current_date is None:
+            current_date = bar_date
+            group = [bar]
+        elif bar_date == current_date:
+            group.append(bar)
+        else:
+            if group:
+                resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
+            group = [bar]
+            current_date = bar_date
+
+    if group:
+        resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
+
+    return resampled
+
+
+def resample_bars(
+    bars: List[RawBar],
+    target_freq: Freq,
+    target_minutes: int = None,
+    daily_agg: str = None,
+    night_session_start_hour: int = None,
+) -> List[RawBar]:
     """
     将低频K线合成为高频K线（如1分钟→30分钟，1分钟→日线）
 
     :param bars: 原始K线列表（需按时间排序）
     :param target_freq: 目标频率的czsc Freq对象
     :param target_minutes: 目标周期分钟数。日线传None，会按自然日聚合
+    :param daily_agg: 日线聚合模式 ("natural" | "trading_calendar")；None 则从 STRATEGY_CONFIG 读取
+    :param night_session_start_hour: 夜盘开始小时；None 则从 STRATEGY_CONFIG 读取
     :return: 合成后的RawBar列表
 
     支持:
     - 1分钟 → 5/15/30/60/120分钟 (按固定间隔聚合)
-    - 1分钟 → 日线 (按自然日聚合)
+    - 1分钟 → 日线 (按自然日聚合或按交易日聚合)
     """
     if not bars:
         return []
 
-    symbol = bars[0].symbol
-    resampled = []
-
     if target_minutes and target_minutes > 0:
         # 分钟级别聚合: 按固定间隔切分
+        symbol = bars[0].symbol
+        resampled = []
         group = []
         group_start_minute = None
 
@@ -58,29 +165,21 @@ def resample_bars(bars: List[RawBar], target_freq: Freq, target_minutes: int = N
         # 保存最后一组
         if group:  # pragma: no branch - final group exists after at least one bar
             resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
-    else:
-        # 日线聚合: 按自然日切分
-        group = []
-        current_date = None
+        return resampled
 
-        for bar in bars:
-            bar_date = bar.dt.date()
-            if current_date is None:
-                current_date = bar_date
-                group = [bar]
-            elif bar_date == current_date:
-                group.append(bar)
-            else:
-                # 新的一天
-                if group:  # pragma: no branch - group is always populated before day rollover
-                    resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
-                group = [bar]
-                current_date = bar_date
+    # 日线聚合
+    if daily_agg is None or night_session_start_hour is None:
+        # Lazy import to keep the module usable in contexts without config.
+        from chan_strategy.config import STRATEGY_CONFIG
+        if daily_agg is None:
+            daily_agg = STRATEGY_CONFIG.get("daily_agg", "natural")
+        if night_session_start_hour is None:
+            night_session_start_hour = STRATEGY_CONFIG.get("night_session_start_hour", 20)
 
-        if group:  # pragma: no branch - final group exists after at least one bar
-            resampled.append(_merge_bars(group, symbol, target_freq, len(resampled)))
+    if daily_agg == "trading_calendar":
+        return _resample_daily_trading_calendar(bars, target_freq, night_session_start_hour)
 
-    return resampled
+    return _resample_daily_natural(bars, target_freq)
 
 
 def _merge_bars(group: List[RawBar], symbol: str, freq: Freq, bar_id: int) -> RawBar:
@@ -214,8 +313,8 @@ class SqliteDataAdapter:
         if not symbol_col or not date_col:
             raise ValueError(f"无法识别表 {table_name} 的关键列。列名: {col_names}")
 
-        # 构建WHERE条件
-        conditions = [f"{symbol_col} = ?"]
+        # 构建WHERE条件（品种代码大小写不敏感，兼容历史大写与近期小写记录）
+        conditions = [f"{symbol_col} = ? COLLATE NOCASE"]
         params = [symbol]
 
         if start_date:

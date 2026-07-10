@@ -1,13 +1,15 @@
 from datetime import datetime, timedelta
 
+import pytest
 from czsc.objects import Freq
 
 from chan_strategy.data_adapter import resample_bars
 
 
-def test_daily_filter_does_not_see_current_day_before_daily_bar_closes(synthetic_1m_bars):
+@pytest.mark.parametrize("daily_agg", ["natural", "trading_calendar"])
+def test_daily_filter_does_not_see_current_day_before_daily_bar_closes(synthetic_1m_bars, daily_agg):
     bars = synthetic_1m_bars(days=2, per_day=3, start=datetime(2024, 1, 2, 9, 0))
-    daily_bars = resample_bars(bars, Freq.D)
+    daily_bars = resample_bars(bars, Freq.D, daily_agg=daily_agg)
     assert len(daily_bars) == 2
 
     daily_bar_idx = 1
