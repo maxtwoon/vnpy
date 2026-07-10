@@ -14,6 +14,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Avoid permission-sensitive __pycache__ writes in the source tree.
+$env:PYTHONDONTWRITEBYTECODE = '1'
+
 function Write-Step {
     param([string]$Message)
     Write-Host ""
@@ -170,19 +173,27 @@ Write-Host "Repository: $RepoRoot"
 Write-Host "Diagnostics: $ScriptPath"
 Write-Host "Date: $Date"
 
-Invoke-Checked "Compile SimNow capture script" @(
-    "python",
-    "-m",
-    "py_compile",
-    ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_run_summary.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_daily_brief.py",
-    ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py"
-)
+$PyCompileCache = Join-Path $env:TEMP "vnpy_py_compile_cache"
+New-Item -ItemType Directory -Path $PyCompileCache -Force | Out-Null
+try {
+    $env:PYTHONPYCACHEPREFIX = $PyCompileCache
+    Invoke-Checked "Compile SimNow capture script" @(
+        "python",
+        "-m",
+        "py_compile",
+        ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_run_summary.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_daily_brief.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py"
+    )
+} finally {
+    Remove-Item -Path $PyCompileCache -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item Env:\PYTHONPYCACHEPREFIX -ErrorAction SilentlyContinue
+}
 
 Invoke-Checked "Run SimNow workflow unit tests" @(
     "python",

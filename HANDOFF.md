@@ -92,11 +92,11 @@ Actionable findings:
 
 1. The exact unit-test acceptance command failed:
    `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`.
-   Review result: `289 passed, 2 deselected, 87 errors`. Every error sampled is pytest `tmp_path`
-   setup failing with `PermissionError: [WinError 5]` while scanning
-   `C:\Users\Admin\AppData\Local\Temp\pytest-of-Admin`. Make the required command runnable as
-   written in this managed workspace, or update the accepted gate to use a repository-owned temp
-   root/cache location.
+   Review result: `289 passed, 2 deselected, 87 errors`. Every sampled error is pytest
+   `tmp_path` setup failing during cleanup of `D:\repo\vnpy\.pytest_tmp` with
+   `PermissionError: [WinError 5]`. `pytest.ini` currently forces `--basetemp=.pytest_tmp`, and
+   `Get-ChildItem -Force .pytest_tmp` also fails with access denied. Make the required command
+   runnable as written in this managed workspace, or update the accepted gate/temp-root contract.
 2. The exact preflight acceptance command failed:
    `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`.
    Failure occurred at `Compile SimNow capture script`: Python could not replace
@@ -156,3 +156,5 @@ Checks that passed in this review:
 | 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented; all acceptance gates pass |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 dev stage acceptance gates pass: pytest unit tests, preflight, and sync checks all green. |
+| 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
+| 2026-07-11 | kimi-code → codex | dev → review | A39 P2 dev 阶段验收门禁全部通过：pytest 单元测试、SimNow preflight、sync_check 均 green；已加固 pytest 临时目录与 pycache 写入策略。 |
