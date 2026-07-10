@@ -67,6 +67,8 @@ def action_recommendation(record: dict[str, Any]) -> dict[str, Any]:
         severity = "medium"
         if reason == "historical_db_lag":
             action = "历史 DB 未覆盖当天；建议等待或执行 backfill。"
+        elif reason == "event_surface_mismatch":
+            action = "SimNow live capture 与 replay 事件面不一致；建议核对 strategy event surface 与 raw account surface 的对比规则。"
         elif reason == "subscription_incomplete":
             missing = record.get("subscription_coverage", {}).get("missing_symbols", [])
             action = (

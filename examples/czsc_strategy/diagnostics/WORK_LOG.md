@@ -2896,3 +2896,626 @@ powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\ru
 ### Next Action
 
 Wait for the historical DB to cover `2026-07-07` for all required symbols, then rerun replay/backfill so the pending day can be evaluated for consistency instead of remaining `historical_db_lag`.
+
+## 2026-07-08 Daily Observation Smoke Rerun
+
+### Goal
+
+Execute the daily SimNow read-only observation workflow, keep the run non-trading, and record today's machine-readable outcome.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `128 passed`.
+- Pending replay backfill plan shows `2026-06-22`, `2026-06-29`, `2026-07-02`, and `2026-07-03` as `ready_to_backfill`; `2026-07-07` remains `waiting_for_db`.
+
+Rejected by guardrail as designed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The workflow rejected the command because `300 < 30 * 60`.
+- Root cause is the formal kline gate, not a connection or script defect.
+- The script requires `-SkipKlineUpdate` for a 300-second smoke test.
+
+Passed after switching to the documented smoke-test variant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Output files created/refreshed:
+  - `simnow_export_2026-07-08.json`
+  - `simnow_record_2026-07-08.json`
+  - `simnow_report_2026-07-08.md`
+  - `simnow_run_summary_2026-07-08.json`
+  - `simnow_daily_brief_2026-07-08.md`
+  - `simnow_ledger_summary.json`
+- SimNow read-only connection/login succeeded.
+- Contract query succeeded with `contracts_count=17845`.
+- Enabled subscriptions remained complete: `5/5`; `subscription_missing=0`.
+- Tick count: `4`.
+- Accounts: `1`.
+- Positions: `1` raw row, with one non-zero long position on `sc2608`.
+- Orders: `0`.
+- Trades: `0`.
+- No automatic orders were observed; `meta.read_only=true`, `orders_sent_by_workflow=0`, `workflow_order_actions=[]`, `order_safety.status=pass`.
+- Required export keys are present: `meta`, `signals`, `trades`, `positions`, `risk`, `raw`.
+- Risk fields are present with `9` threshold rows; `threshold_status=pass`.
+- Daily record status is `pending` with reason `historical_db_lag`; `consistency_matched=false`.
+- Replay remained unavailable for the same day because the historical DB still lagged all required symbols. Replay metadata reports:
+  - `latest_db_date=2026-07-07`
+  - lagged symbols: `AP888`, `RB888`, `SC888`, `A888`, `ZN888`
+- Run summary machine judgment:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=historical_db_lag`
+  - `automation_action=resolve pending gate before counting`
+- Ledger summary after upsert:
+  - `total_rows=9`
+  - `valid_observation_days=1`
+  - `pending_days=7`
+  - `skipped_days=1`
+  - `ready_to_expand=false`
+
+### Notes
+
+- Today's initial `-LiveCapture -DurationSeconds 300` failure was an expected safety gate, not a code regression.
+- The rerun stayed read-only and did not place or simulate any workflow orders.
+- Today's blocker remains replay coverage, so this smoke run does not count toward the 20-day valid-observation gate.
+
+### Next Action
+
+Wait for the historical DB to cover `2026-07-08` for all required symbols, then rerun replay/backfill so the pending day can be evaluated for consistency instead of remaining `historical_db_lag`.
+
+## 2026-07-09 Daily Observation Smoke Rerun
+
+### Goal
+
+Execute the daily SimNow read-only observation workflow, keep the run non-trading, and record today's machine-readable outcome.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `128 passed`.
+- Pending replay backfill plan shows `2026-06-22`, `2026-06-29`, `2026-07-02`, and `2026-07-03` as `ready_to_backfill`; `2026-07-07` and `2026-07-08` remain `waiting_for_db`.
+
+Rejected by guardrail as designed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The workflow rejected the command because `300 < 30 * 60`.
+- Root cause is the formal kline gate, not a connection or script defect.
+- The script requires `-SkipKlineUpdate` for a 300-second smoke test.
+
+Passed after switching to the documented smoke-test variant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Output files created/refreshed:
+  - `simnow_export_2026-07-09.json`
+  - `simnow_replay_2026-07-09.json`
+  - `simnow_record_2026-07-09.json`
+  - `simnow_report_2026-07-09.md`
+  - `simnow_run_summary_2026-07-09.json`
+  - `simnow_daily_brief_2026-07-09.md`
+  - `simnow_ledger_summary.json`
+- SimNow read-only connection/login succeeded.
+- Contract query succeeded with `contracts_count=17937`.
+- Enabled subscriptions remained complete: `5/5`; `subscription_missing=0`.
+- Tick count: `4`.
+- Accounts: `1`.
+- Positions: `1` raw row.
+- Orders: `0`.
+- Trades: `0`.
+- No automatic orders were observed; `meta.read_only=true`, `orders_sent_by_workflow=0`, `workflow_order_actions=[]`, `order_safety.status=pass`.
+- Required export keys are present: `meta`, `signals`, `trades`, `positions`, `risk`, `raw`.
+- Replay remained unavailable for the same day because the historical DB still lagged all required symbols. Replay metadata reports:
+  - `latest_db_date=2026-07-07`
+  - lagged symbols: `AP888`, `RB888`, `SC888`, `A888`, `ZN888`
+- Daily record status is `pending` with consistency reason `historical_db_lag`; `consistency.matched=false`.
+- Run summary machine judgment:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=historical_db_lag`
+  - `automation_action=resolve pending gate before counting`
+- Ledger summary after upsert:
+  - `total_rows=10`
+  - `valid_observation_days=1`
+  - `pending_days=8`
+  - `skipped_days=1`
+  - `ready_to_expand=false`
+
+### Notes
+
+- Today's initial `-LiveCapture -DurationSeconds 300` failure was an expected safety gate, not a code regression.
+- The rerun stayed read-only and did not place or simulate any workflow orders.
+- `-SkipKlineUpdate` intentionally skipped the formal kline artifact, so `simnow_kline_update_2026-07-09.json` was not generated during this smoke run.
+- Today's blocker remains replay coverage, so this smoke run does not count toward the 20-day valid-observation gate.
+
+### Next Action
+
+Wait for the historical DB to cover `2026-07-09` for all required symbols, then rerun replay/backfill so the pending day can be evaluated for consistency instead of remaining `historical_db_lag`.
+
+## 2026-07-09 Historical DB Refresh and Replay Backfill
+
+### Goal
+
+Use the new `ssquant` historical DB update service to refresh the shared SQLite history through `2026-07-09`, then re-run pending replay backfill so `historical_db_lag` days can be re-evaluated instead of staying blocked.
+
+### Commands
+
+Verified shared DB path and current coverage:
+
+```powershell
+python - <<'PY'
+import sys, json, sqlite3
+sys.path.insert(0, r'D:\repo\vnpy\examples\czsc_strategy')
+from chan_strategy.config import SQLITE_DB_PATH
+from pathlib import Path
+path = Path(SQLITE_DB_PATH)
+tables = ['ap888_1M_raw','rb888_1M_raw','sc888_1M_raw','a888_1M_raw','zn888_1M_raw']
+out = {'db_path': SQLITE_DB_PATH, 'exists': path.exists(), 'tables': {}}
+if path.exists():
+    conn = sqlite3.connect(str(path))
+    try:
+        for table in tables:
+            row = conn.execute(f'SELECT MAX(datetime), COUNT(*) FROM "{table}"').fetchone()
+            out['tables'][table] = {'max': row[0], 'count': row[1]}
+    finally:
+        conn.close()
+print(json.dumps(out, ensure_ascii=False, indent=2))
+PY
+```
+
+Updated only the five observation tables through `2026-07-09`:
+
+```powershell
+cd D:\repo\ssquant
+python update_kline_db.py --db-path "D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\kline_data.db" --end-date 2026-07-09 --table ap888_1M_raw --table rb888_1M_raw --table sc888_1M_raw --table a888_1M_raw --table zn888_1M_raw
+```
+
+Rebuilt readiness and executed backfill:
+
+```powershell
+cd D:\repo\vnpy
+python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py
+python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py --execute
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+```
+
+Refreshed machine-readable summaries for the changed dates:
+
+```powershell
+$diag = 'D:\repo\vnpy\examples\czsc_strategy\diagnostics'
+$dates = @('2026-07-02','2026-07-03','2026-07-07','2026-07-08','2026-07-09')
+foreach ($date in $dates) {
+  python "$diag\simnow_run_summary.py" --date $date --out-dir $diag --out-json "$diag\simnow_run_summary_$date.json" --ledger "$diag\simnow_observation_ledger.jsonl" --ledger-summary "$diag\simnow_ledger_summary.json"
+  python "$diag\simnow_daily_brief.py" --date $date --run-summary "$diag\simnow_run_summary_$date.json" --out-dir $diag --out-md "$diag\simnow_daily_brief_$date.md"
+}
+```
+
+### Outcomes
+
+- `vnpy` and `ssquant` were confirmed to share the same history DB:
+  - `D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\kline_data.db`
+- `ssquant` API auth was available and the targeted refresh succeeded for all five observation tables.
+- Update result:
+  - `ap888_1M_raw`: `2026-07-06 14:59:00 -> 2026-07-09 14:59:00`, `+675`
+  - `rb888_1M_raw`: `2026-07-07 22:59:00 -> 2026-07-09 22:59:00`, `+783`
+  - `sc888_1M_raw`: `2026-07-07 11:27:00 -> 2026-07-09 14:59:00`, `+1202`
+  - `a888_1M_raw`: `2026-07-06 22:59:00 -> 2026-07-09 22:59:00`, `+916`
+  - `zn888_1M_raw`: `2026-07-07 11:27:00 -> 2026-07-09 14:59:00`, `+1022`
+  - total added rows: `4598`
+  - update log: `D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\update_log_20260709_155817.csv`
+- Backfill readiness advanced from partial coverage to all seven `historical_db_lag` days being `ready_to_backfill`.
+- Executed replay backfill for:
+  - `2026-06-22`
+  - `2026-06-29`
+  - `2026-07-02`
+  - `2026-07-03`
+  - `2026-07-07`
+  - `2026-07-08`
+  - `2026-07-09`
+- Promotion/ledger progress materially improved:
+  - `valid_observation_days`: `1 -> 5`
+  - `pending_days`: `8 -> 4`
+  - `latest_valid_date`: `2026-07-06 -> 2026-07-09`
+  - `consecutive_valid_days`: `0 -> 2`
+- New valid observation days after backfill:
+  - `2026-07-02`
+  - `2026-07-03`
+  - `2026-07-08`
+  - `2026-07-09`
+- Remaining non-valid days after backfill:
+  - `2026-06-22`: still `pending` due SimNow/replay mismatch plus missing historical `read_only` declaration in the old capture schema
+  - `2026-06-27`: still `skipped/ctp_disconnect_097_no_snapshot`
+  - `2026-06-29`: still `pending` due SimNow/replay mismatch plus missing historical `read_only` declaration in the old capture schema
+  - `2026-07-01`: still `pending/kline_coverage_incomplete`
+  - `2026-07-07`: still `pending` due SimNow/replay event-surface mismatch
+- Refreshed machine-readable artifacts now reflect the backfilled state:
+  - `simnow_ledger_summary.json`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_run_summary_2026-07-02.json`
+  - `simnow_run_summary_2026-07-03.json`
+  - `simnow_run_summary_2026-07-07.json`
+  - `simnow_run_summary_2026-07-08.json`
+  - `simnow_run_summary_2026-07-09.json`
+
+### Notes
+
+- This run used the external `ssquant` update service; no trading orders were sent from the SimNow observation workflow.
+- The remaining blockers are no longer historical DB coverage for these dates; they are now genuine data-quality or old-capture-schema issues.
+- `2026-07-08` and `2026-07-09` now count toward the 20-day gate and their regenerated run summaries report `automation_status=valid`.
+
+### Next Action
+
+Focus on the four remaining non-valid days: decide whether to repair the old-schema/order-safety interpretation for `2026-06-22` and `2026-06-29`, investigate the event mismatch on `2026-07-07`, and either re-collect or formally waive `2026-07-01` due `kline_coverage_incomplete`.
+
+## 2026-07-09 Remaining Pending-Day Triage
+
+### Goal
+
+Classify the remaining non-valid observation days after historical DB backfill so future work targets true blockers instead of repeatedly retrying days that are only retained for audit history.
+
+### Commands
+
+Inspected the remaining pending records and their capture/replay surfaces:
+
+```powershell
+python - <<'PY'
+import json, pathlib
+base = pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics')
+for date in ['2026-06-22','2026-06-29','2026-07-01','2026-07-07']:
+    exp = json.loads((base / f'simnow_export_{date}.json').read_text(encoding='utf-8-sig'))
+    rep = json.loads((base / f'simnow_replay_{date}.json').read_text(encoding='utf-8-sig'))
+    rec = json.loads((base / f'simnow_record_{date}.json').read_text(encoding='utf-8-sig'))
+    print(date)
+    print({
+        'export_event_counts': {k: len(exp.get(k, [])) for k in ['signals','trades','positions']},
+        'replay_event_counts': {k: len(rep.get(k, [])) for k in ['signals','trades','positions']},
+        'meta_read_only': exp.get('meta', {}).get('read_only'),
+        'record_status': rec.get('status'),
+        'consistency_reason': rec.get('consistency', {}).get('reason'),
+        'order_safety_status': rec.get('order_safety', {}).get('status'),
+        'order_safety_reasons': rec.get('order_safety', {}).get('reasons'),
+        'kline_missing': rec.get('kline_coverage', {}).get('missing_symbols'),
+        'kline_short': rec.get('kline_coverage', {}).get('short_symbols'),
+    })
+PY
+```
+
+### Findings
+
+- `2026-06-22`
+  - Old capture schema does not declare `meta.read_only`, so `order_safety.status=unknown`.
+  - This is not just a metadata problem: SimNow export has `signals=0/trades=0/positions=1`, while replay has `signals=1/trades=0/positions=8`.
+  - Conclusion: keep as audit `pending`; it is a genuine old-capture mismatch day, not a historical DB problem.
+- `2026-06-29`
+  - Old capture schema also lacks `meta.read_only`, so `order_safety.status=unknown`.
+  - SimNow export has `signals=0/trades=2/positions=0`, while replay has `signals=1/trades=0/positions=8`.
+  - Conclusion: keep as audit `pending`; this is both old-schema and event-surface mismatch, not a backfill gap.
+- `2026-07-01`
+  - Both SimNow and replay have no actionable strategy events, but the day still fails on formal kline gates.
+  - `kline_missing_symbols=['AP888']`
+  - `kline_short_symbols=['A888','RB888','SC888','ZN888']`
+  - Conclusion: this day is blocked by the intentionally strict kline gate from a too-short smoke capture, not by replay readiness.
+- `2026-07-07`
+  - This is no longer a data-lag day: `order_safety.status=pass`, subscriptions are complete, and replay exists.
+  - The blocker is a true event-surface mismatch:
+    - SimNow export: `signals=0/trades=2/positions=0`
+    - Replay: `signals=6/trades=1/positions=67`
+  - Conclusion: this is the highest-value remaining investigation target because it reflects a real disagreement between live capture and replay after the DB was refreshed.
+
+### Outcome
+
+- Reduced the remaining backlog into three categories:
+  - historical audit rows that should likely stay non-valid: `2026-06-22`, `2026-06-29`
+  - intentional smoke-test/kline-gate failure: `2026-07-01`
+  - true post-backfill live-vs-replay mismatch worth debugging: `2026-07-07`
+- Confirmed that the main unresolved engineering issue is now `2026-07-07`, not historical DB coverage.
+
+### Next Action
+
+Prioritize a focused debug pass on `2026-07-07` only: explain why the replay emits strategy signals/positions while the live capture surfaces only raw account trades and no strategy events, then decide whether the capture schema or the comparison rule is wrong.
+
+## 2026-07-09 Pending Reason Diagnostic Hardening
+
+### Goal
+
+Make non-replay-unavailable live/replay mismatches produce a machine-readable reason instead of blank `pending` rows, so remaining blockers are diagnosable in daily briefs, run summaries, and promotion reports.
+
+### Changes
+
+- Updated `examples\czsc_strategy\diagnostics\simnow_daily_monitor.py`.
+  - `compare_simnow_replay()` now sets `reason=event_surface_mismatch` whenever the live and replay event surfaces fail an exact match without a more specific higher-priority reason.
+- Updated `examples\czsc_strategy\diagnostics\simnow_action_summary.py`.
+  - Added a dedicated recommendation for `pending/event_surface_mismatch` that points reviewers to the mismatch between strategy event surfaces and raw account surfaces.
+- Updated `examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py`.
+  - Added/strengthened regression coverage so generic event-surface mismatches must emit `event_surface_mismatch`.
+  - Added action-summary coverage proving the reason now yields a specific recommendation mentioning SimNow vs replay.
+- Regenerated affected artifacts for:
+  - `2026-06-22`
+  - `2026-06-29`
+  - `2026-07-07`
+- Refreshed:
+  - `simnow_ledger_summary.json`
+  - `simnow_20d_promotion_decision.md`
+  - recent `simnow_run_summary_*.json`
+  - recent `simnow_daily_brief_*.md`
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py -q -k "event_surface_mismatch"
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py -q
+```
+
+Results:
+
+- Targeted mismatch tests passed: `2 passed`.
+- Full daily-monitor unit suite passed: `43 passed`.
+
+Artifact spot checks:
+
+- `simnow_record_2026-06-22.json`: `status=pending`, `consistency.reason=event_surface_mismatch`
+- `simnow_record_2026-06-29.json`: `status=pending`, `consistency.reason=event_surface_mismatch`
+- `simnow_record_2026-07-07.json`: `status=pending`, `consistency.reason=event_surface_mismatch`
+- `simnow_run_summary_2026-07-07.json`: `automation_status=pending`, `automation_reason=event_surface_mismatch`
+
+### Outcome
+
+- Remaining pending rows no longer hide behind blank reasons.
+- The unresolved engineering issue is now explicitly machine-readable as `event_surface_mismatch`, which matches the earlier root-cause investigation for `2026-07-07`.
+
+### Next Action
+
+Decide whether `2026-07-07` should be fixed by enriching live capture with strategy event surfaces, or by narrowing the comparison rule so raw account callbacks are not treated as equivalent to replay strategy events.
+
+## 2026-07-09 Live Capture Strategy-Surface Enrichment
+
+### Goal
+
+Enrich the read-only SimNow capture artifact with a strategy event surface that is comparable to replay on the same observed window, so live-vs-replay checks stop mixing raw account callbacks with strategy-layer events.
+
+### Changes
+
+- Added `examples\czsc_strategy\diagnostics\simnow_strategy_surface.py`.
+  - Reads a capture JSON and derives a local comparison window from `meta.started_at` / `meta.ended_at`.
+  - Reuses the replay snapshot builder to generate strategy events for the trading day.
+  - Filters `signals` / `trades` / `positions` down to the observed live-capture window only.
+  - Writes the filtered strategy surface back into the capture artifact top-level fields and records window metadata under `meta.strategy_surface`.
+- Updated `examples\czsc_strategy\diagnostics\simnow_daily_capture.py`.
+  - Top-level `trades` are now reserved for strategy event surfaces, matching the existing top-level reservation for `signals` and `positions`.
+  - Raw account callbacks remain under `raw.trades` / `raw.positions` only.
+- Updated `examples\czsc_strategy\diagnostics\simnow_daily_monitor.py`.
+  - Replay comparison now filters replay events to the live-capture window whenever `meta.strategy_surface.window_start/window_end` are present.
+  - This keeps the comparison on the same observed interval instead of comparing a 5-minute live snapshot with a full-day replay.
+- Updated `examples\czsc_strategy\diagnostics\run_next_work.ps1`.
+  - Preflight now compiles and tests `simnow_strategy_surface.py`.
+  - Live workflow now runs `simnow_strategy_surface.py` after kline aggregation and before replay/monitor writes.
+- Added tests:
+  - `examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py`
+  - updated `test_simnow_daily_capture.py`
+  - updated `test_simnow_daily_monitor.py`
+  - updated `test_run_next_work_wrapper.py`
+
+### Verification
+
+Passed targeted TDD cycle:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py .\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py -q -k "build_export_matches_daily_monitor_schema or simnow_strategy_surface or filters_replay_to_capture_window"
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q -k "strategy_surface"
+```
+
+Results:
+
+- Capture/surface/windowed-monitor tests passed: `5 passed`.
+- Wrapper strategy-surface tests passed: `4 passed`.
+
+Passed broader regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py .\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted unit suites passed: `77 passed`.
+- Full workflow preflight passed: `138 passed`.
+- Pending replay backfill plan now reports `pending_historical_db_lag_days=0`.
+
+Real artifact validation on the remaining high-value blocker:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py --capture-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-07.json --date 2026-07-07
+python .\examples\czsc_strategy\diagnostics\simnow_daily_monitor.py --date 2026-07-07 --simnow-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-07.json --replay-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-07-07.json --thresholds .\examples\czsc_strategy\diagnostics\simnow_risk_thresholds.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --record-json .\examples\czsc_strategy\diagnostics\simnow_record_2026-07-07.json --report-md .\examples\czsc_strategy\diagnostics\simnow_report_2026-07-07.md
+```
+
+Result:
+
+- `2026-07-07` moved from `pending/event_surface_mismatch` to:
+  - `status=pass`
+  - `valid_observation=true`
+  - `consistency.matched=true`
+  - `consistency.reason=no_actionable_events_on_either_side`
+
+### Outcome
+
+- Live capture artifacts can now carry a strategy-layer event surface instead of exposing only raw account callbacks at the comparison boundary.
+- The previous high-value blocker `2026-07-07` is resolved.
+- Ledger progress improved again:
+  - `valid_observation_days`: `5 -> 6`
+  - `pending_days`: `4 -> 3`
+  - `consecutive_valid_days`: `2 -> 6`
+- Refreshed summaries now show:
+  - `simnow_run_summary_2026-07-07.json`: `automation_status=valid`
+  - `simnow_20d_promotion_decision.md`: `valid_observation_days=6/20`
+
+### Next Action
+
+Revisit the two old-schema audit rows (`2026-06-22`, `2026-06-29`) only if they are worth converting; otherwise keep them as historical pending evidence and continue accumulating fresh valid observation days with the enriched capture workflow.
+
+## 2026-07-09 Legacy Read-Only Backward Compatibility
+
+### Goal
+
+Convert the two old-schema audit rows (`2026-06-22`, `2026-06-29`) from non-counting historical evidence into valid observation days when the only remaining blocker is that those early capture artifacts predate the explicit read-only metadata fields.
+
+### Changes
+
+- Updated `examples\czsc_strategy\diagnostics\simnow_daily_monitor.py`.
+  - Added a narrow `_is_legacy_read_only_capture()` helper.
+  - `order_safety()` now infers `read_only=true` only for legacy captures that:
+    - do not contain any of `read_only`, `orders_sent_by_workflow`, or `workflow_order_actions`;
+    - still contain the legacy timing envelope (`started_at`, `ended_at`).
+  - Modern captures that merely omit `read_only` still remain `order_safety.status=unknown`.
+  - `order_safety` now records `legacy_inferred` for auditability.
+- Updated `examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py`.
+  - Added regression coverage proving legacy artifacts can count when fully matched.
+  - Preserved the existing guard that modern missing-`read_only` captures do not count.
+- Re-ran `simnow_daily_monitor.py` for:
+  - `2026-06-22`
+  - `2026-06-29`
+- Refreshed:
+  - `simnow_observation_ledger.jsonl`
+  - `simnow_ledger_summary.json`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_run_summary_2026-06-22.json`
+  - `simnow_run_summary_2026-06-27.json`
+  - `simnow_run_summary_2026-06-29.json`
+  - `simnow_run_summary_2026-07-01.json`
+  - `simnow_run_summary_2026-07-07.json`
+  - `simnow_run_summary_2026-07-08.json`
+  - `simnow_run_summary_2026-07-09.json`
+  - corresponding `simnow_daily_brief_*.md`
+
+### Verification
+
+Passed focused red/green cycle:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py -q -k "legacy_read_only or pass_invalid_lists_gaps"
+```
+
+Passed broader regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Refreshed the two legacy dates:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_daily_monitor.py --date 2026-06-22 --simnow-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-06-22.json --replay-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-06-22.json --thresholds .\examples\czsc_strategy\diagnostics\simnow_risk_thresholds.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --record-json .\examples\czsc_strategy\diagnostics\simnow_record_2026-06-22.json --report-md .\examples\czsc_strategy\diagnostics\simnow_report_2026-06-22.md
+python .\examples\czsc_strategy\diagnostics\simnow_daily_monitor.py --date 2026-06-29 --simnow-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-06-29.json --replay-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-06-29.json --thresholds .\examples\czsc_strategy\diagnostics\simnow_risk_thresholds.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --record-json .\examples\czsc_strategy\diagnostics\simnow_record_2026-06-29.json --report-md .\examples\czsc_strategy\diagnostics\simnow_report_2026-06-29.md
+```
+
+Results:
+
+- `2026-06-22` is now:
+  - `status=pass`
+  - `valid_observation=true`
+  - `order_safety.status=pass`
+  - `consistency.reason=no_actionable_events_on_either_side`
+- `2026-06-29` is now:
+  - `status=pass`
+  - `valid_observation=true`
+  - `order_safety.status=pass`
+  - `consistency.reason=no_actionable_events_on_either_side`
+- Ledger progress improved again:
+  - `valid_observation_days`: `6 -> 8`
+  - `pending_days`: `3 -> 1`
+  - `skipped_days`: `1` unchanged
+- Remaining blockers are now cleanly reduced to:
+  - `2026-06-27`: `skipped/ctp_disconnect_097_no_snapshot`
+  - `2026-07-01`: `pending/kline_coverage_incomplete`
+
+### Next Action
+
+Do not revisit the legacy read-only issue again unless another pre-metadata capture appears. The only actionable non-valid day left is `2026-07-01`, which needs a formal active-session re-capture (or an explicit decision to keep it as a smoke-test-only audit row).
+
+## 2026-07-10 Formal Day-Session Guard
+
+### Goal
+
+Prevent new formal observation runs from being launched during clearly non-covering windows, so the workflow does not create avoidable `pending/kline_coverage_incomplete` rows like the historical `2026-07-01` short-capture artifact.
+
+### Changes
+
+- Updated `examples\czsc_strategy\diagnostics\run_next_work.ps1`.
+  - Added `Assert-FormalObservationWindow`.
+  - The guard runs only for formal `-LiveCapture` runs where `-SkipKlineUpdate` is not set.
+  - Current rule is intentionally narrow: if enabled `AP888` is present in `simnow_contract_map.json`, the wrapper requires the local runtime to be within a day-session window (`08:45` to `15:30` local time).
+  - Off-window attempts now fail fast with an actionable message telling the operator to either:
+    - switch to `-SkipKlineUpdate` for a smoke test; or
+    - rerun during the day session.
+- Updated `examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py`.
+  - Added guard coverage for:
+    - rejecting a night formal run when `AP888` is enabled;
+    - allowing a day-session formal run when `AP888` is enabled;
+    - allowing a night smoke run with `-SkipKlineUpdate`;
+    - allowing a night formal run when `AP888` is disabled;
+    - ensuring the guard is invoked before live capture starts.
+
+### Verification
+
+Passed focused wrapper guard tests:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q -k formal_window_validation
+```
+
+Passed full wrapper regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Passed workflow preflight:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Wrapper tests passed: `31 passed`.
+- Workflow preflight passed: `144 passed`.
+- The formal day-session guard is now active for future formal captures and does not affect preflight or smoke-test usage.
+
+### Next Action
+
+Wait for the next day-session window and run the formal 1800-second read-only observation command. Nighttime work should use `-SkipKlineUpdate` smoke mode only while `AP888` remains enabled.

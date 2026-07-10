@@ -117,6 +117,82 @@ def test_kline_window_validation_allows_smoke_when_kline_update_skipped():
     assert "validation-finished" in output
 
 
+def test_formal_window_validation_rejects_night_session_when_ap888_enabled():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        assert_formal_window,
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' } }",
+        "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
+        "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "AP888" in output
+    assert "day-session" in output
+
+
+def test_formal_window_validation_allows_day_session_when_ap888_enabled():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        assert_formal_window,
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' } }",
+        "$now = [datetimeoffset]::Parse('2026-07-10T10:15:00+08:00')",
+        "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
+        "Write-Host 'window-finished'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert "window-finished" in output
+
+
+def test_formal_window_validation_allows_smoke_at_night():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        assert_formal_window,
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' } }",
+        "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
+        "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $true -Now $now -ContractMap $contractMap",
+        "Write-Host 'smoke-window-finished'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert "smoke-window-finished" in output
+
+
+def test_formal_window_validation_allows_night_when_ap888_disabled():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        assert_formal_window,
+        "$contractMap = @{ AP888 = @{ enabled = $false; exchange = 'CZCE' }; SC888 = @{ enabled = $true; exchange = 'INE' } }",
+        "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
+        "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
+        "Write-Host 'night-window-finished'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert "night-window-finished" in output
+
+
 def test_live_capture_runs_daily_monitor_once_for_formal_ledger_write():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
 
@@ -192,9 +268,19 @@ def test_preflight_py_compile_includes_ledger_summary_script():
     assert "simnow_ledger_summary.py" in script_text
 
 
+def test_preflight_py_compile_includes_strategy_surface_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_strategy_surface.py" in script_text
+
+
 def test_preflight_pytest_includes_ledger_summary_tests():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "test_simnow_ledger_summary.py" in script_text
+
+
+def test_preflight_pytest_includes_strategy_surface_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_strategy_surface.py" in script_text
 
 
 def test_ledger_summary_step_after_monitor_and_before_promotion():
@@ -221,6 +307,33 @@ def test_ledger_summary_script_called_with_ledger_and_output():
 def test_ledger_summary_output_hosted():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "Ledger summary JSON:" in script_text
+
+
+def test_strategy_surface_step_after_capture_before_monitor():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    capture_index = script_text.index("Run read-only SimNow capture")
+    surface_index = script_text.index("Build live strategy event surface")
+    monitor_index = script_text.index("Upsert daily record into formal ledger")
+    assert surface_index > capture_index
+    assert monitor_index > surface_index
+
+
+def test_strategy_surface_script_called_with_capture_and_date():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    step_index = script_text.index("Build live strategy event surface")
+    block = script_text[step_index:step_index + 700]
+    assert "simnow_strategy_surface.py" in block
+    assert "--capture-json" in block
+    assert "$CaptureJson" in block
+    assert "--date" in block
+    assert "$Date" in block
+
+
+def test_formal_window_validation_called_before_live_capture():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    formal_window_index = script_text.index("Assert-FormalObservationWindow")
+    capture_index = script_text.index("Run read-only SimNow capture")
+    assert formal_window_index < capture_index
 
 
 def test_run_summary_step_after_ledger_summary():

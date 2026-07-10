@@ -115,6 +115,48 @@ def test_compare_simnow_replay_requires_exact_event_surface_match():
     changed["trades"] = []
     result = compare_simnow_replay(changed, _events())
     assert result["matched"] is False
+
+
+def test_compare_simnow_replay_filters_replay_to_capture_window():
+    simnow: dict[str, Any] = {
+        "meta": {
+            "strategy_surface": {
+                "window_start": "2026-07-07T09:14:59+08:00",
+                "window_end": "2026-07-07T09:19:59+08:00",
+            }
+        },
+        "signals": [],
+        "trades": [],
+        "positions": [],
+    }
+    replay: dict[str, Any] = {
+        "signals": [{"dt": "2026-07-07 14:59:00", "symbol": "AP888", "strategy": "signal_snapshot", "operate": "SIGNAL"}],
+        "trades": [{"dt": "2026-07-07 23:29:00", "symbol": "SC888", "strategy": "strategy_trade", "operate": "CLOSE"}],
+        "positions": [{"dt": "2026-07-07 22:59:00", "symbol": "RB888", "strategy": "portfolio", "operate": "POSITION"}],
+        "meta": {"replay_available": True},
+    }
+    result = compare_simnow_replay(simnow, replay)
+    assert result["matched"] is True
+    assert result["reason"] == "no_actionable_events_on_either_side"
+
+
+def test_compare_simnow_replay_reports_event_surface_mismatch_reason():
+    simnow: dict[str, Any] = {
+        "signals": [],
+        "trades": [{"dt": "2026-07-07 09:14:59+08:00", "symbol": "sc2608", "strategy": "simnow_trade", "operate": "LONG"}],
+        "positions": [],
+    }
+    replay: dict[str, Any] = {
+        "signals": [{"dt": "2026-07-07 14:59:00", "symbol": "AP888", "strategy": "signal_snapshot", "operate": "SIGNAL"}],
+        "trades": [{"dt": "2026-07-07 23:29:00", "symbol": "SC888", "strategy": "strategy_trade", "operate": "CLOSE"}],
+        "positions": [{"dt": "2026-07-07 14:59:00", "symbol": "AP888", "strategy": "portfolio", "operate": "POSITION"}],
+        "meta": {"replay_available": True},
+    }
+    result = compare_simnow_replay(simnow, replay)
+    assert result["matched"] is False
+    assert result["reason"] == "event_surface_mismatch"
+    assert result["reason"] == "event_surface_mismatch"
+    assert result["reason"] == "event_surface_mismatch"
     assert result["details"]["trades"]["missing_in_simnow"]
 
 
@@ -435,6 +477,63 @@ def test_make_record_allows_observed_account_orders_when_workflow_is_read_only()
     assert record["order_safety"]["status"] == "pass"
     assert record["order_safety"]["observed_raw_orders"] == 1
     assert record["order_safety"]["observed_raw_trades"] == 1
+
+
+def test_make_record_infers_legacy_read_only_when_new_order_fields_never_existed():
+    simnow = {
+        "signals": [{"dt": "2026-06-22 15:22", "symbol": "AP888", "strategy": "second_buy", "operate": "LO"}],
+        "trades": [{"dt": "2026-06-22 15:23", "symbol": "AP888", "strategy": "second_buy", "operate": "LO"}],
+        "positions": [{"dt": "2026-06-22 15:24", "symbol": "AP888", "strategy": "second_buy", "operate": "HOLD"}],
+    }
+    simnow["meta"] = {
+        "generated_at": "2026-06-22T07:26:24.155182+00:00",
+        "started_at": "2026-06-22T07:21:23.265502+00:00",
+        "ended_at": "2026-06-22T07:26:23.598245+00:00",
+        "duration_seconds": 300,
+        "contract_map": {"AP888": {"enabled": True}},
+        "strategy_surface": {
+            "source": "windowed_strategy_replay",
+            "window_start": "2026-06-22T15:21:23.265502+08:00",
+            "window_end": "2026-06-22T15:26:23.598245+08:00",
+            "trade_date": "2026-06-22",
+        },
+    }
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-06-22 15:21:23", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [],
+        "subscribed": [{"research_symbol": "AP888"}],
+    }
+    replay = {
+        "signals": [{"dt": "2026-06-22 15:22", "symbol": "AP888", "strategy": "second_buy", "operate": "LO"}],
+        "trades": [{"dt": "2026-06-22 15:23", "symbol": "AP888", "strategy": "second_buy", "operate": "LO"}],
+        "positions": [{"dt": "2026-06-22 15:24", "symbol": "AP888", "strategy": "second_buy", "operate": "HOLD"}],
+    }
+    replay["meta"] = {"replay_available": True}
+
+    record = make_record(
+        "2026-06-22",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        kline={
+            "expected_symbols": ["AP888"],
+            "symbols": ["AP888"],
+            "missing_symbols": [],
+            "short_symbols": [],
+            "min_bars_per_symbol": 30,
+        },
+    )
+
+    assert record["status"] == "pass"
+    assert record["order_safety"]["status"] == "pass"
+    assert record["order_safety"]["read_only"] is True
+    assert record["order_safety"]["orders_sent_by_workflow"] == 0
+    assert record["order_safety"]["workflow_order_actions"] == []
+    assert record["order_safety"]["legacy_inferred"] is True
+    assert record["valid_observation"] is True
 
 
 def test_make_record_marks_only_fully_matched_safe_days_as_valid_observations():
@@ -878,6 +977,39 @@ def test_action_recommendation_pending_kline_coverage_too_short():
     assert "SC888" in rec["action"]
     assert "30" in rec["action"]
     assert "DurationSeconds" in rec["action"]
+
+
+def test_action_recommendation_pending_event_surface_mismatch():
+    record = make_record(
+        "2026-07-07",
+        _baseline(),
+        simnow={
+            "meta": {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []},
+            "signals": [],
+            "trades": [{"dt": "2026-07-07 09:14:59+08:00", "symbol": "sc2608", "strategy": "simnow_trade", "operate": "LONG"}],
+            "positions": [],
+            "risk": {},
+            "raw": {
+                "logs": [{"msg": "connected"}],
+                "ticks": [{"dt": "2026-07-07 09:14:59+08:00", "symbol": "sc2608"}],
+                "contracts_count": 1,
+                "accounts": [{"accountid": "demo"}],
+                "positions": [],
+                "subscribed": [{"research_symbol": "SC888"}],
+            },
+        },
+        replay={
+            "signals": [{"dt": "2026-07-07 14:59:00", "symbol": "AP888", "strategy": "signal_snapshot", "operate": "SIGNAL"}],
+            "trades": [{"dt": "2026-07-07 23:29:00", "symbol": "SC888", "strategy": "strategy_trade", "operate": "CLOSE"}],
+            "positions": [{"dt": "2026-07-07 14:59:00", "symbol": "AP888", "strategy": "portfolio", "operate": "POSITION"}],
+            "meta": {"replay_available": True},
+        },
+    )
+    rec = action_recommendation(record)
+    assert rec["status"] == "pending"
+    assert rec["reason"] == "event_surface_mismatch"
+    assert "SimNow" in rec["action"]
+    assert "replay" in rec["action"]
 
 
 def test_action_recommendation_halt_workflow_order_safety_breach():

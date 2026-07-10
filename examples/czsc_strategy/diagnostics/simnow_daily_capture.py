@@ -286,11 +286,14 @@ def build_export(
             "contract_map": contract_map,
         },
         "signals": [],
+        # Top-level strategy-event surfaces are populated later by the
+        # read-only strategy-surface enrichment step. Raw account callbacks
+        # remain under raw.* for audit only.
+        "trades": [],
         # Top-level positions are reserved for strategy/portfolio event surfaces
         # that can be compared with replay snapshots. Account positions captured
         # from CTP belong under raw.positions and must not be compared directly
         # with replay portfolio exposures.
-        "trades": trades,
         "positions": [],
         "risk": build_risk(state),
         "raw": {

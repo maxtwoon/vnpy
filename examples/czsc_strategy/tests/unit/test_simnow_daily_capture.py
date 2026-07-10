@@ -73,6 +73,7 @@ def test_build_export_matches_daily_monitor_schema(tmp_path):
     assert payload["meta"]["orders_sent_by_workflow"] == 0
     assert payload["meta"]["workflow_order_actions"] == []
     assert payload["signals"] == []
+    assert payload["trades"] == []
     assert payload["positions"] == []
     assert payload["raw"]["positions"][0]["symbol"] == "ap610"
     assert payload["risk"]["account_balance"] == 20000000

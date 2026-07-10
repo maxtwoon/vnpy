@@ -78,9 +78,55 @@ function Assert-KlineCoverageWindow {
     }
 }
 
+function Assert-FormalObservationWindow {
+    param(
+        [bool]$LiveCapture,
+        [bool]$SkipKlineUpdate,
+        [datetimeoffset]$Now,
+        [object]$ContractMap
+    )
+
+    if (-not $LiveCapture -or $SkipKlineUpdate) {
+        return
+    }
+
+    $RequiresDaySession = $false
+    if ($ContractMap -is [System.Collections.IDictionary]) {
+        if ($ContractMap.Contains("AP888")) {
+            $Row = $ContractMap["AP888"]
+            if ($null -ne $Row) {
+                if ($Row -is [System.Collections.IDictionary]) {
+                    $RequiresDaySession = [bool]$Row["enabled"]
+                } elseif ($Row.PSObject.Properties.Name -contains "enabled") {
+                    $RequiresDaySession = [bool]$Row.enabled
+                }
+            }
+        }
+    } elseif ($ContractMap.PSObject.Properties.Name -contains "AP888") {
+        $Row = $ContractMap.AP888
+        if ($null -ne $Row -and $Row.PSObject.Properties.Name -contains "enabled") {
+            $RequiresDaySession = [bool]$Row.enabled
+        }
+    }
+
+    if (-not $RequiresDaySession) {
+        return
+    }
+
+    $LocalNow = $Now.ToLocalTime()
+    $TimeOfDay = $LocalNow.TimeOfDay
+    $DaySessionStart = [timespan]::Parse("08:45:00")
+    $DaySessionEnd = [timespan]::Parse("15:30:00")
+    if ($TimeOfDay -lt $DaySessionStart -or $TimeOfDay -gt $DaySessionEnd) {
+        throw "Formal observation window rejected: AP888 is enabled and requires a day-session capture; current local time is $($LocalNow.ToString('yyyy-MM-dd HH:mm:ss zzz')). Use -SkipKlineUpdate for a smoke test or run during the day session."
+    }
+}
+
 $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..\..\..")
 Set-Location $RepoRoot
+$ContractMapPath = Join-Path $ScriptPath "simnow_contract_map.json"
+$ContractMap = Get-Content -LiteralPath $ContractMapPath -Raw | ConvertFrom-Json
 
 if ([string]::IsNullOrWhiteSpace($Date)) {
     $Date = Get-Date -Format "yyyy-MM-dd"
@@ -114,6 +160,12 @@ Assert-KlineCoverageWindow `
     -DurationSeconds $DurationSeconds `
     -MinKlineBarsPerSymbol $MinKlineBarsPerSymbol
 
+Assert-FormalObservationWindow `
+    -LiveCapture $LiveCapture.IsPresent `
+    -SkipKlineUpdate $SkipKlineUpdate.IsPresent `
+    -Now (Get-Date) `
+    -ContractMap $ContractMap
+
 Write-Host "Repository: $RepoRoot"
 Write-Host "Diagnostics: $ScriptPath"
 Write-Host "Date: $Date"
@@ -126,6 +178,7 @@ Invoke-Checked "Compile SimNow capture script" @(
     ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py",
     ".\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py",
     ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
+    ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
     ".\examples\czsc_strategy\diagnostics\simnow_run_summary.py",
     ".\examples\czsc_strategy\diagnostics\simnow_daily_brief.py",
     ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py"
@@ -141,6 +194,7 @@ Invoke-Checked "Run SimNow workflow unit tests" @(
     ".\examples\czsc_strategy\tests\unit\test_simnow_replay_readiness.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_backfill_pending_replays.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_tick_bars.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py",
     ".\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_docs.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py",
@@ -185,6 +239,20 @@ if ($LiveCapture) {
         if ($LASTEXITCODE -ne 0) {
             throw "SimNow kline update failed with exit code $LASTEXITCODE"
         }
+    }
+
+    Write-Step "Build live strategy event surface"
+    $StrategySurfaceArgs = @(
+        ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
+        "--capture-json", "$CaptureJson",
+        "--date", "$Date"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($KlineDbPath)) {
+        $StrategySurfaceArgs += @("--db-path", "$KlineDbPath")
+    }
+    & python @StrategySurfaceArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Strategy surface enrichment failed with exit code $LASTEXITCODE"
     }
 
     if (-not $SkipReplay) {

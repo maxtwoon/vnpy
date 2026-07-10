@@ -9,6 +9,7 @@ from typing import Any
 
 from simnow_action_summary import _record_reason, build_action_summary
 from simnow_observation_rules import is_valid_observation
+from simnow_strategy_surface import filter_events_to_window
 
 
 HERE = Path(__file__).resolve().parent
@@ -187,8 +188,27 @@ def _empty_matched_details(simnow: dict[str, Any], replay: dict[str, Any]) -> di
     return details
 
 
+def _windowed_replay(simnow: dict[str, Any], replay: dict[str, Any]) -> dict[str, Any]:
+    """Filter replay events to the live-capture comparison window when provided."""
+    surface_meta = simnow.get("meta", {}).get("strategy_surface") or {}
+    window_start = surface_meta.get("window_start")
+    window_end = surface_meta.get("window_end")
+    if not window_start or not window_end:
+        return replay
+
+    replay_copy = dict(replay)
+    for category in ("signals", "trades", "positions"):
+        replay_copy[category] = filter_events_to_window(list(replay.get(category) or []), window_start, window_end)
+    meta = dict(replay_copy.get("meta") or {})
+    meta["comparison_window_start"] = window_start
+    meta["comparison_window_end"] = window_end
+    replay_copy["meta"] = meta
+    return replay_copy
+
+
 def compare_simnow_replay(simnow: dict[str, Any], replay: dict[str, Any]) -> dict[str, Any]:
     """Compare exported SimNow events with replay events on signal/trade/position surfaces."""
+    replay = _windowed_replay(simnow, replay)
     replay_meta = replay.get("meta") or {}
     if replay_meta.get("replay_available") is False:
         reason = replay_meta.get("replay_unavailable_reason") or "replay_unavailable"
@@ -233,7 +253,8 @@ def compare_simnow_replay(simnow: dict[str, Any], replay: dict[str, Any]) -> dic
             "missing_in_simnow": [list(x) for x in missing],
             "extra_in_simnow": [list(x) for x in extra],
         }
-    return {"matched": all_match, "details": details}
+    reason = "" if all_match else "event_surface_mismatch"
+    return {"matched": all_match, "details": details, "reason": reason}
 
 
 def attribution_watch(record: dict[str, Any]) -> dict[str, Any]:
@@ -295,6 +316,17 @@ def subscription_coverage(simnow: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_legacy_read_only_capture(meta: dict[str, Any]) -> bool:
+    """Return True only for pre-order-safety artifacts that had no order fields."""
+    return (
+        "read_only" not in meta
+        and "orders_sent_by_workflow" not in meta
+        and "workflow_order_actions" not in meta
+        and "started_at" in meta
+        and "ended_at" in meta
+    )
+
+
 def order_safety(simnow: dict[str, Any]) -> dict[str, Any]:
     """Verify the observation workflow stayed read-only.
 
@@ -304,7 +336,10 @@ def order_safety(simnow: dict[str, Any]) -> dict[str, Any]:
     """
     meta = simnow.get("meta") or {}
     raw = simnow.get("raw") or {}
+    legacy_inferred = _is_legacy_read_only_capture(meta)
     read_only = meta.get("read_only")
+    if legacy_inferred:
+        read_only = True
     orders_sent = int(meta.get("orders_sent_by_workflow", 0) or 0)
     actions = meta.get("workflow_order_actions") or []
     status = "pass" if read_only is True else "unknown"
@@ -312,7 +347,7 @@ def order_safety(simnow: dict[str, Any]) -> dict[str, Any]:
     if read_only is False:
         status = "halt"
         reasons.append("read_only_disabled")
-    elif read_only is None:
+    elif read_only is None and not legacy_inferred:
         reasons.append("read_only_not_declared")
     if orders_sent != 0 or actions:
         status = "halt"
@@ -322,6 +357,7 @@ def order_safety(simnow: dict[str, Any]) -> dict[str, Any]:
         "read_only": read_only is True,
         "orders_sent_by_workflow": orders_sent,
         "workflow_order_actions": actions,
+        "legacy_inferred": legacy_inferred,
         "observed_raw_orders": len(raw.get("orders") or []),
         "observed_raw_trades": len(raw.get("trades") or []),
         "reasons": reasons,
