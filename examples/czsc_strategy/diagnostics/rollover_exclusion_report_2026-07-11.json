@@ -1,6 +1,6 @@
 {
-  "disclaimer": "Diagnostic only, not a trading recommendation.",
-  "generated_at": "2026-07-10T16:33:56.052279+00:00",
+  "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
+  "generated_at": "2026-07-10T16:58:55.192383+00:00",
   "window": "2026-04-24 ~ 2026-07-09",
   "db_path": "D:\\BaiduNetdiskDownload\\新数据库\\ssquant数据库_20260425\\kline_data.db",
   "symbols": {
@@ -39,7 +39,27 @@
       "symbol": "RB888",
       "unavailable": "insufficient_bars_in_window",
       "detection_method": "real_symbol",
-      "transition_dates": []
+      "transition_dates": [],
+      "before": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "after": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      }
     },
     "SC888": {
       "symbol": "SC888",
@@ -94,7 +114,27 @@
           "from_contract": "a2607",
           "to_contract": "a2609"
         }
-      ]
+      ],
+      "before": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      },
+      "after": {
+        "trade_count": 0,
+        "return": 0.0,
+        "drawdown": 0.0,
+        "stop_loss_overshoot": {
+          "worst_loss_pct": null,
+          "overshoot_count": 0,
+          "max_overshoot_multiple": null
+        }
+      }
     },
     "ZN888": {
       "symbol": "ZN888",

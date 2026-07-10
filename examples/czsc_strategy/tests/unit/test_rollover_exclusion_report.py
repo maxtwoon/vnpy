@@ -81,6 +81,19 @@ def test_exclusion_window_expands_to_neighbor_trading_dates(rollover_db: Path):
     assert date("2024-01-04") in excluded
 
 
+def test_unavailable_symbol_still_reports_before_after_metrics(rollover_db: Path):
+    """Missing-table symbols must still carry before/after metric blocks."""
+    result = report._detect_transitions(rollover_db, "XX888")
+    assert result["unavailable"].startswith("table_not_found")
+    # _run_symbol adds empty before/after when transitions are unavailable.
+    run = report._run_symbol(rollover_db, "XX888", "2024-01-01", "2024-01-10")
+    assert run["before"]["trade_count"] == 0
+    assert run["after"]["trade_count"] == 0
+    assert "return" in run["before"]
+    assert "drawdown" in run["before"]
+    assert "stop_loss_overshoot" in run["before"]
+
+
 def test_pair_in_exclusion_window_uses_open_and_close_dates():
     excluded = {datetime(2024, 1, 4).date()}
     inside = {"open_dt": datetime(2024, 1, 4, 9, 0), "close_dt": datetime(2024, 1, 5, 9, 0)}
@@ -100,6 +113,22 @@ def test_metrics_from_pairs_computes_required_fields():
     assert metrics["return"] == pytest.approx(-6.0, abs=1e-4)
     assert metrics["drawdown"] >= 0
     assert metrics["stop_loss_overshoot"]["overshoot_count"] == 1
+
+
+def test_report_disclaimer_contains_research_only(tmp_path: Path):
+    payload = report.main(
+        db_path=tmp_path / "missing.db",
+        symbols=("AP888",),
+        start_date="2024-01-01",
+        end_date="2024-01-10",
+        out_dir=tmp_path,
+        stamp="test",
+    )
+    assert "RESEARCH-ONLY" in payload["disclaimer"]
+    json_text = (tmp_path / "rollover_exclusion_report_test.json").read_text(encoding="utf-8")
+    assert "RESEARCH-ONLY" in json_text
+    md_text = (tmp_path / "rollover_exclusion_report_test.md").read_text(encoding="utf-8")
+    assert "RESEARCH-ONLY" in md_text
 
 
 def date(iso: str):

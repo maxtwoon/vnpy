@@ -1,9 +1,9 @@
 # Rollover Exclusion Diagnostic Report
 
-**Generated at:** 2026-07-10T16:33:56.052279+00:00
+**Generated at:** 2026-07-10T16:58:55.192383+00:00
 **Window:** 2026-04-24 ~ 2026-07-09
 
-> Diagnostic only, not a trading recommendation.
+> RESEARCH-ONLY — Diagnostic only, not a trading recommendation.
 
 ## Method
 
@@ -33,6 +33,14 @@
 - **Unavailable:** insufficient_bars_in_window
 - **Detection method:** real_symbol
 
+| Metric | Before | After |
+|--------|--------|-------|
+| trade_count | 0 | 0 |
+| return | 0.0 | 0.0 |
+| drawdown | 0.0 | 0.0 |
+| stop_loss_overshoot_count | 0 | 0 |
+| stop_loss_worst_loss_pct | None | None |
+
 ### SC888
 
 - **Detection method:** real_symbol
@@ -52,6 +60,14 @@
 
 - **Unavailable:** insufficient_bars_in_window
 - **Detection method:** real_symbol
+
+| Metric | Before | After |
+|--------|--------|-------|
+| trade_count | 0 | 0 |
+| return | 0.0 | 0.0 |
+| drawdown | 0.0 | 0.0 |
+| stop_loss_overshoot_count | 0 | 0 |
+| stop_loss_worst_loss_pct | None | None |
 
 ### ZN888
 

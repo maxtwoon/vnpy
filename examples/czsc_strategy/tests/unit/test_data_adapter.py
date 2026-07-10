@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from czsc.objects import Freq
+from czsc.objects import Freq, RawBar
 
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
 from conftest import make_raw_bar
@@ -87,6 +87,36 @@ def test_trading_calendar_post_midnight_on_non_trading_date_rolls_forward():
     assert daily[0].open == 100.0
 
 
+def _make_symbol_bars(symbol: str, days: int, per_day: int, start: datetime) -> list:
+    """Create deterministic 1-minute bars for a single symbol."""
+    bars = []
+    price = 100.0
+    i = 0
+    for d in range(days):
+        day = start.date() + timedelta(days=d)
+        session_start = datetime.combine(day, start.time())
+        for m in range(per_day):
+            dt = session_start + timedelta(minutes=m)
+            delta = 0.2 if (i // 30) % 2 == 0 else -0.15
+            open_ = price
+            close = price + delta
+            bars.append(RawBar(
+                symbol=symbol,
+                id=i,
+                dt=dt,
+                freq=Freq.F1,
+                open=open_,
+                high=max(open_, close) + 1.0,
+                low=min(open_, close) - 1.0,
+                close=close,
+                vol=100 + i,
+                amount=(100 + i) * close,
+            ))
+            price = close
+            i += 1
+    return bars
+
+
 def test_natural_agg_is_byte_identical_to_legacy_path(synthetic_1m_bars):
     """Explicit 'natural' aggregation must match the default legacy daily path."""
     bars = synthetic_1m_bars(days=3, per_day=240)
@@ -100,6 +130,24 @@ def test_natural_agg_is_byte_identical_to_legacy_path(synthetic_1m_bars):
         assert a.low == b.low
         assert a.close == b.close
         assert a.vol == b.vol
+
+
+def test_natural_agg_golden_two_symbols():
+    """Golden comparison: natural mode reproduces the legacy default for >=2 symbols."""
+    start = datetime(2024, 1, 2, 9, 0)
+    for symbol in ("SYMA", "SYMB"):
+        bars = _make_symbol_bars(symbol, days=365, per_day=240, start=start)
+        default_daily = resample_bars(bars, Freq.D, None)
+        natural_daily = resample_bars(bars, Freq.D, None, daily_agg="natural")
+        assert len(default_daily) == len(natural_daily) > 0
+        for a, b in zip(default_daily, natural_daily):
+            assert a.dt == b.dt
+            assert a.open == b.open
+            assert a.high == b.high
+            assert a.low == b.low
+            assert a.close == b.close
+            assert a.vol == b.vol
+            assert a.symbol == b.symbol
 
 
 @pytest.mark.realdb

@@ -31,7 +31,7 @@ from diagnostics.audit_issue_diagnostics import analyze_stop_loss_overshoot
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUT_DIR = HERE
-BANNER = "Diagnostic only, not a trading recommendation."
+BANNER = "RESEARCH-ONLY — Diagnostic only, not a trading recommendation."
 SYMBOLS = ["AP888", "RB888", "SC888", "A888", "ZN888"]
 WINDOW_START = "2026-04-24"
 WINDOW_END = "2026-07-09"
@@ -250,11 +250,15 @@ def _run_symbol(
 ) -> dict[str, Any]:
     """Run baseline close-model backtest and exclusion comparison for one symbol."""
     transitions = _detect_transitions(db_path, symbol, start_date, end_date)
+    empty_metrics = _metrics_from_pairs([])
     if transitions.get("unavailable"):
         return {
             "symbol": symbol,
             "unavailable": transitions["unavailable"],
             "detection_method": transitions.get("detection_method"),
+            "transition_dates": transitions.get("transition_dates", []),
+            "before": empty_metrics,
+            "after": empty_metrics,
         }
 
     # Ensure the baseline close model is active.
@@ -280,6 +284,8 @@ def _run_symbol(
             "unavailable": unavailable,
             "detection_method": transitions.get("detection_method"),
             "transition_dates": transitions.get("transition_dates", []),
+            "before": empty_metrics,
+            "after": empty_metrics,
         }
 
     all_pairs = engine.strategy.get_combined_trades()
@@ -341,6 +347,24 @@ def _write_outputs(
         if data.get("unavailable"):
             lines.append(f"- **Unavailable:** {data['unavailable']}")
             lines.append(f"- **Detection method:** {data.get('detection_method', 'N/A')}")
+            lines.append("")
+            before = data.get("before", _metrics_from_pairs([]))
+            after = data.get("after", _metrics_from_pairs([]))
+            lines.append("| Metric | Before | After |")
+            lines.append("|--------|--------|-------|")
+            lines.append(f"| trade_count | {before['trade_count']} | {after['trade_count']} |")
+            lines.append(f"| return | {before['return']} | {after['return']} |")
+            lines.append(f"| drawdown | {before['drawdown']} | {after['drawdown']} |")
+            lines.append(
+                f"| stop_loss_overshoot_count | "
+                f"{before['stop_loss_overshoot']['overshoot_count']} | "
+                f"{after['stop_loss_overshoot']['overshoot_count']} |"
+            )
+            lines.append(
+                f"| stop_loss_worst_loss_pct | "
+                f"{before['stop_loss_overshoot']['worst_loss_pct']} | "
+                f"{after['stop_loss_overshoot']['worst_loss_pct']} |"
+            )
             lines.append("")
             continue
 
