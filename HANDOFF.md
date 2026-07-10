@@ -76,46 +76,43 @@ in the daily resample path, with the `"natural"` path byte-identical.
 
 (review = codex, 2026-07-11)
 
-Rejected: A39 is closer, but the review gates and report-shape acceptance criteria are still not
-met.
+Rejected: A39 still does not satisfy the handoff acceptance criteria. The report-shape fixes from
+the previous review are present, but the exact acceptance gates still fail and the natural
+equivalence evidence is still not a true golden comparison.
 
 Actionable findings:
 
 1. The exact unit-test acceptance command did not pass:
    `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`.
-   First run failed during collection because `vnpy.trader.logger` tried to write
-   `C:\Users\Admin\.vntrader\log\vt_20260711.log` and hit `PermissionError`. After creating the
-   repo-local ignored `.vntrader\log`, pytest progressed but still ended with `288 passed,
-   2 deselected, 85 errors`; the errors were all pytest `tmp_path` setup failures because the
+   Current review result: `289 passed, 2 deselected, 87 errors`. The errors are pytest `tmp_path`
+   setup failures because the
    default temp root `C:\Users\Admin\AppData\Local\Temp\pytest-of-Admin` is not accessible in this
    managed workspace. Make the required test command runnable without external user-profile write
    access, or document/update the gate if a specific temp/log setup is mandatory.
 2. The exact preflight gate failed:
    `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`.
    Failure occurred at "Compile SimNow capture script" with `WinError 5` while Python tried to
-   replace `examples\czsc_strategy\diagnostics\__pycache__\simnow_daily_capture.cpython-314.pyc`.
+   replace `examples\czsc_strategy\diagnostics\__pycache__\simnow_daily_capture.cpython-314.pyc`
+   from a temporary `.pyc.<id>` file.
    The acceptance command must pass as written.
-3. The generated rollover JSON omits required before/after metric blocks for unavailable symbols.
-   `RB888` and `A888` contain `unavailable` and `detection_method`, but no `before` / `after`
-   `trade_count`, `return`, `drawdown`, or `stop_loss_overshoot`. The design review checklist
-   rejects if any before/after report field is missing or hidden.
-4. The generated report evidence does not carry the explicit `RESEARCH-ONLY` label. `rg` found
-   `RESEARCH-ONLY` only in `examples/czsc_strategy/RISK_NOTE_888_SPLICE.md`, not in
-   `rollover_exclusion_report_2026-07-10.{json,md}`. If the intended required text is only
-   `Diagnostic only, not a trading recommendation.`, update the acceptance wording; otherwise add
-   the explicit label to both report outputs.
-5. Natural equivalence evidence is weak against the stated contract. The real-db test is marked
-   `realdb` and excluded by the required unit command, and it checks populated daily bars rather
-   than comparing against a cached/pre-change golden sequence on >=2 symbols x 1 year. Add a
-   decidable golden comparison or update the acceptance criterion to match the available evidence.
+3. Natural equivalence evidence is still weak against the stated contract. In
+   `examples/czsc_strategy/tests/unit/test_data_adapter.py`, `test_natural_agg_golden_two_symbols`
+   compares `resample_bars(..., daily_agg=None)` to `resample_bars(..., daily_agg="natural")`
+   within the same current implementation, so both sides can drift together. The real-db
+   `test_natural_agg_matches_cached_golden` remains marked `realdb`/`slow` and is excluded by the
+   required unit command; it also checks populated structural fields rather than comparing against
+   a cached/pre-change daily-bar sequence on >=2 symbols x 1 year. Add a decidable golden
+   comparison or update the acceptance criterion to match the available evidence.
 
 Checks that did pass in this review:
 
 - `python tools/sync_check.py`
 - `python tools/sync_check.py --root examples/czsc_strategy`
-- The cumulative A39 diff is scoped to expected files, and no new
-  `send_order` / `cancel_order` / `buy` / `sell` / `short` / `cover` calls were found in the task
-  diff.
+- Expected A39 implementation/evidence files are tracked.
+- `rollover_exclusion_report_2026-07-11.{json,md}` both carry `RESEARCH-ONLY`, contain no
+  `GOAL PASSED`, and unavailable symbols now include `before` / `after` metric blocks.
+- No live order-path additions were found in the A39 implementation files; forbidden-call search
+  hits were tests, docs, or work-log text.
 
 (review = codex, 2026-07-10)
 
@@ -209,4 +206,6 @@ Actionable findings:
 | 2026-07-10 | codex → kimi-code | review → dev | 打回: A39 implementation and tracked evidence are still missing |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 report fields and acceptance gates still fail |
+| 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented |
+| 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 acceptance gates fail |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented |

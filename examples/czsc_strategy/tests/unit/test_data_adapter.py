@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -133,21 +134,23 @@ def test_natural_agg_is_byte_identical_to_legacy_path(synthetic_1m_bars):
 
 
 def test_natural_agg_golden_two_symbols():
-    """Golden comparison: natural mode reproduces the legacy default for >=2 symbols."""
+    """Golden comparison: natural mode matches the cached fixture for >=2 symbols x 1 year."""
+    fixture_path = Path(__file__).parent / "fixtures" / "natural_agg_golden.json"
+    golden = json.loads(fixture_path.read_text(encoding="utf-8"))
     start = datetime(2024, 1, 2, 9, 0)
     for symbol in ("SYMA", "SYMB"):
         bars = _make_symbol_bars(symbol, days=365, per_day=240, start=start)
-        default_daily = resample_bars(bars, Freq.D, None)
         natural_daily = resample_bars(bars, Freq.D, None, daily_agg="natural")
-        assert len(default_daily) == len(natural_daily) > 0
-        for a, b in zip(default_daily, natural_daily):
-            assert a.dt == b.dt
-            assert a.open == b.open
-            assert a.high == b.high
-            assert a.low == b.low
-            assert a.close == b.close
-            assert a.vol == b.vol
-            assert a.symbol == b.symbol
+        expected = golden[symbol]
+        assert len(natural_daily) == len(expected) > 0
+        for bar, exp in zip(natural_daily, expected):
+            assert bar.dt.strftime("%Y-%m-%d %H:%M:%S") == exp["dt"]
+            assert bar.open == exp["open"]
+            assert bar.high == exp["high"]
+            assert bar.low == exp["low"]
+            assert bar.close == exp["close"]
+            assert bar.vol == exp["vol"]
+            assert bar.symbol == symbol
 
 
 @pytest.mark.realdb

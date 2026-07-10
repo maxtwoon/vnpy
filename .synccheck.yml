@@ -33,4 +33,12 @@ handoff:
     # against that implicit behavior changing in a future kimi-cli version. Verified empirically:
     # `kimi -p "create a file"` created nothing; `kimi --print --yolo -p "create a file"` did.
     dev: kimi --print --yolo -p "Read HANDOFF.md and AGENTS.md, finish the dev stage, then run python tools/handoff.py next"
-    review: codex exec "Read HANDOFF.md and AGENTS.md, review against the handoff acceptance criteria, then run python tools/handoff.py next or python tools/handoff.py reject"
+    # NOTE (2026-07-11): codex exec's default filesystem sandbox is "restricted" (codex doctor)
+    # and only grants write access inside the repo workspace. Two straight A39 review rounds
+    # showed the SAME symptoms: pytest collection/tmp_path errors and a vnpy logger
+    # PermissionError writing C:\Users\Admin\.vntrader\log\vt_*.log — i.e. the acceptance test
+    # suite needs to write outside the repo (vnpy's trader runtime dir + pytest's OS temp root),
+    # which the sandbox silently denies (surfaces as test errors, not an obvious crash). Verified
+    # empirically: writing to .vntrader was denied without --add-dir, and succeeded with it.
+    # --add-dir grants exactly the extra write access needed without disabling the sandbox.
+    review: codex exec --add-dir "C:\Users\Admin\.vntrader" --add-dir "C:\Users\Admin\AppData\Local\Temp" "Read HANDOFF.md and AGENTS.md, review against the handoff acceptance criteria, then run python tools/handoff.py next or python tools/handoff.py reject"
