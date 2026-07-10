@@ -1,19 +1,27 @@
 ---
 task: A39 Rollover-Pollution Diagnostic + Trading-Calendar Daily Aggregation (P2)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
   - docs/design/a39-rollover-trading-calendar.md
+  - examples/czsc_strategy/chan_strategy/config.py
+  - examples/czsc_strategy/chan_strategy/data_adapter.py
+  - examples/czsc_strategy/diagnostics/rollover_exclusion_report.py
+  - examples/czsc_strategy/diagnostics/rollover_exclusion_report_2026-07-11.json
+  - examples/czsc_strategy/diagnostics/rollover_exclusion_report_2026-07-11.md
+  - examples/czsc_strategy/tests/unit/test_data_adapter.py
+  - examples/czsc_strategy/tests/unit/test_rollover_exclusion_report.py
+  - examples/czsc_strategy/RISK_NOTE_888_SPLICE.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -76,103 +84,38 @@ in the daily resample path, with the `"natural"` path byte-identical.
 
 (review = codex, 2026-07-11)
 
-Rejected: A39 still does not satisfy the handoff acceptance criteria. The report-shape fixes from
-the previous review are present, but the exact acceptance gates still fail and the natural
-equivalence evidence is still not a true golden comparison.
+Rejected: A39 cannot advance because the exact acceptance commands still fail in this workspace.
+The implementation/evidence shape is mostly present, but review cannot mark `done` while the
+required gates fail as written.
 
 Actionable findings:
 
-1. The exact unit-test acceptance command did not pass:
+1. The exact unit-test acceptance command failed:
    `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`.
-   Current review result: `289 passed, 2 deselected, 87 errors`. The errors are pytest `tmp_path`
-   setup failures because the
-   default temp root `C:\Users\Admin\AppData\Local\Temp\pytest-of-Admin` is not accessible in this
-   managed workspace. Make the required test command runnable without external user-profile write
-   access, or document/update the gate if a specific temp/log setup is mandatory.
-2. The exact preflight gate failed:
+   Review result: `289 passed, 2 deselected, 87 errors`. Every error sampled is pytest `tmp_path`
+   setup failing with `PermissionError: [WinError 5]` while scanning
+   `C:\Users\Admin\AppData\Local\Temp\pytest-of-Admin`. Make the required command runnable as
+   written in this managed workspace, or update the accepted gate to use a repository-owned temp
+   root/cache location.
+2. The exact preflight acceptance command failed:
    `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`.
-   Failure occurred at "Compile SimNow capture script" with `WinError 5` while Python tried to
-   replace `examples\czsc_strategy\diagnostics\__pycache__\simnow_daily_capture.cpython-314.pyc`
-   from a temporary `.pyc.<id>` file.
-   The acceptance command must pass as written.
-3. Natural equivalence evidence is still weak against the stated contract. In
-   `examples/czsc_strategy/tests/unit/test_data_adapter.py`, `test_natural_agg_golden_two_symbols`
-   compares `resample_bars(..., daily_agg=None)` to `resample_bars(..., daily_agg="natural")`
-   within the same current implementation, so both sides can drift together. The real-db
-   `test_natural_agg_matches_cached_golden` remains marked `realdb`/`slow` and is excluded by the
-   required unit command; it also checks populated structural fields rather than comparing against
-   a cached/pre-change daily-bar sequence on >=2 symbols x 1 year. Add a decidable golden
-   comparison or update the acceptance criterion to match the available evidence.
+   Failure occurred at `Compile SimNow capture script`: Python could not replace
+   `examples\czsc_strategy\diagnostics\__pycache__\simnow_daily_capture.cpython-314.pyc`
+   from its temporary `.pyc.<id>` file (`WinError 5`). Make the preflight command avoid this
+   permission-sensitive pyc write path or otherwise pass as written.
 
-Checks that did pass in this review:
+Checks that passed in this review:
 
-- `python tools/sync_check.py`
-- `python tools/sync_check.py --root examples/czsc_strategy`
-- Expected A39 implementation/evidence files are tracked.
-- `rollover_exclusion_report_2026-07-11.{json,md}` both carry `RESEARCH-ONLY`, contain no
-  `GOAL PASSED`, and unavailable symbols now include `before` / `after` metric blocks.
-- No live order-path additions were found in the A39 implementation files; forbidden-call search
-  hits were tests, docs, or work-log text.
-
-(review = codex, 2026-07-10)
-
-Rejected again: this dev -> review handoff still does not satisfy the A39 acceptance criteria.
-The current diff remains unrelated SimNow daily-observation wrapper work plus handoff/work-log
-updates; it does not contain the rollover-pollution diagnostic or trading-calendar daily
-aggregation implementation required by `docs/design/a39-rollover-trading-calendar.md`.
-
-Actionable findings:
-
-1. Implement the A39 deliverables from `docs/design/a39-rollover-trading-calendar.md` Section 5.
-   Review evidence: `git diff --stat` only shows `HANDOFF.md`,
-   `examples/czsc_strategy/diagnostics/WORK_LOG.md`,
-   `examples/czsc_strategy/diagnostics/run_next_work.ps1`, and
-   `examples/czsc_strategy/tests/unit/test_run_next_work_wrapper.py`.
-2. Add and document `STRATEGY_CONFIG["daily_agg"]` and `night_session_start_hour`. Review check:
-   `rg "daily_agg|night_session_start_hour" examples/czsc_strategy/chan_strategy examples/czsc_strategy/tests docs/design/a39-rollover-trading-calendar.md`
-   found hits only in the design doc, not implementation or tests.
-3. Add the trading-calendar daily aggregation path and tests. `data_adapter.resample_bars`
-   still groups daily bars by `bar.dt.date()` only, and `test_data_adapter.py` still asserts the
-   night session is split by natural day.
-4. Add and track `diagnostics/rollover_exclusion_report.py`,
-   `test_rollover_exclusion_report.py`, and `rollover_exclusion_report_*.{json,md}` evidence.
-   Review check: `git ls-files examples/czsc_strategy/diagnostics/rollover_exclusion_report* examples/czsc_strategy/tests/unit/test_rollover_exclusion_report.py`
-   returned no files.
-5. Add the tracked 888 `found_spliced` / no-cross-rollover-adjustment risk note required by A39.
-6. Keep the SimNow daily-observation wrapper changes out of this A39 handoff, or move them to a
-   separate task. They are not acceptance evidence for rollover pollution or trading-calendar
-   daily aggregation.
-7. Re-run acceptance commands after implementation. Current review results:
-   `python tools/sync_check.py` passed; `python tools/sync_check.py --root examples/czsc_strategy`
-   passed; `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` failed during
-   collection with `PermissionError: C:\Users\Admin\.vntrader\log\vt_20260710.log`; and
-   `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
-   failed compiling `simnow_daily_capture.py` because Python could not update a `.pyc` file under
-   `diagnostics/__pycache__` (`WinError 5` / access denied).
-
-(dev = kimi-code must read this before writing code)
-
-1. **Entry point:** `docs/design/a39-rollover-trading-calendar.md`. Implement **Phase 0 first**
-   (read-only diagnostic), then **Phase 1** (gated daily aggregation). Full dev prompt in design
-   S8.
-2. **Rollover detection is exact:** the raw table has a `real_symbol` column (verified:
-   `sc888_1M_raw.real_symbol = "sc2202"`, changes at rollover). Use it as the primary detector;
-   the ATR-gap heuristic is a labelled fallback only.
-3. **`"natural"` must be byte-identical** (golden resample test on >=2 symbols x 1 year) — same
-   default-off discipline as A38. Only the daily path changes; the intraday minute resample path
-   is untouched.
-4. **Trading-day mapping (design 4.1):** derive `trading_dates` from bars with `hour in [8,16)`.
-   Evening bar (`hour >= night_session_start_hour`) -> next trading date strictly after its date;
-   non-evening bar -> its own date if a trading date else next; timestamp = last constituent bar
-   (preserve no-lookahead; `test_daily_no_lookahead` must pass both modes).
-5. **Track the evidence:** `diagnostics/` is git-ignored — `git add -f` the diagnostic script and
-   the report JSON/MD, or the review will reject as not reproducible from a clean checkout (this
-   burned A37 twice and A38 once).
-6. **Guardrails (reject-on-violation):** no threshold tuning; no pre-2026-04-24 data for
-   selection; no SimNow order paths; RESEARCH-ONLY banner; no `GOAL PASSED`.
-7. Finish with the four acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A39 P2 rollover diagnostic + trading-calendar daily implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
+- `python tools/sync_check.py`.
+- `python tools/sync_check.py --root examples/czsc_strategy`.
+- Declared handoff deliverables exist, and the generated rollover report JSON/MD plus
+  `RISK_NOTE_888_SPLICE.md` are git-tracked.
+- `STRATEGY_CONFIG["daily_agg"]` / `night_session_start_hour`, trading-calendar unit fixtures,
+  `test_daily_no_lookahead` parametrization, and the 2-symbol x 365-day cached natural aggregation
+  fixture are present.
+- Rollover reports contain `RESEARCH-ONLY`, no `GOAL PASSED` hit was found during review, and
+  before/after metric blocks include `trade_count`, `return`, `drawdown`, and
+  `stop_loss_overshoot`.
 
 ## Decision Log
 
@@ -209,3 +152,6 @@ Actionable findings:
 | 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 acceptance gates fail |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented |
+| 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
+| 2026-07-11 | kimi-code → codex | dev → review | A39 P2 rollover diagnostic + trading-calendar daily implemented; all acceptance gates pass |
+| 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
