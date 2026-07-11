@@ -76,6 +76,12 @@ def build_strategy_surface_from_capture(
     }
 
 
+def _has_captured_session_data(capture: dict[str, Any]) -> bool:
+    """Return True when the capture contains real session trades or positions."""
+    captured = capture.get("captured") or {}
+    return bool(captured.get("trades") or captured.get("positions"))
+
+
 def build_strategy_surface_from_captured_session(capture: dict[str, Any]) -> dict[str, Any]:
     """Build a comparison surface from the session's own captured trades/positions.
 
@@ -141,22 +147,61 @@ def enrich_capture_payload(capture: dict[str, Any], surface: dict[str, Any]) -> 
     return enriched
 
 
-def enrich_capture_json(capture_json: Path, trade_date: str, db_path: Path) -> dict[str, Any]:
+def enrich_capture_json(
+    capture_json: Path,
+    trade_date: str,
+    db_path: Path,
+    surface_source_mode: str = "auto",
+    snapshot_builder: Callable[[Path, str, str, str, float], dict[str, Any]] = build_snapshot,
+) -> dict[str, Any]:
+    """Enrich a SimNow capture JSON with the strategy comparison surface.
+
+    ``surface_source_mode`` controls which surface is used:
+
+    * ``auto`` (default, production): prefer the captured-session surface when
+      real CTP trades/positions are present, otherwise fall back to the
+      windowed replay surface.
+    * ``captured_session``: always build from ``capture["captured"]``.
+    * ``windowed_replay``: always build from the replay window.
+    """
     capture = load_json(capture_json)
-    surface = build_strategy_surface_from_capture(capture, db_path, trade_date)
+    if surface_source_mode == "auto":
+        if _has_captured_session_data(capture):
+            surface = build_strategy_surface_from_captured_session(capture)
+        else:
+            surface = build_strategy_surface_from_capture(capture, db_path, trade_date, snapshot_builder=snapshot_builder)
+    elif surface_source_mode == "captured_session":
+        surface = build_strategy_surface_from_captured_session(capture)
+    elif surface_source_mode == "windowed_replay":
+        surface = build_strategy_surface_from_capture(capture, db_path, trade_date, snapshot_builder=snapshot_builder)
+    else:
+        raise ValueError(f"Unknown surface_source_mode: {surface_source_mode}")
+
+    if surface["meta"].get("source") == "captured_session":
+        surface["meta"]["trade_date"] = trade_date
+
     enriched = enrich_capture_payload(capture, surface)
     write_json(capture_json, enriched)
     return enriched
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Enrich a SimNow capture JSON with windowed strategy event surfaces.")
+    parser = argparse.ArgumentParser(description="Enrich a SimNow capture JSON with strategy event surfaces.")
     parser.add_argument("--capture-json", type=Path, required=True)
     parser.add_argument("--date", required=True, help="Trading day to build strategy surfaces for, YYYY-MM-DD.")
     parser.add_argument("--db-path", type=Path, default=Path(SQLITE_DB_PATH))
+    parser.add_argument(
+        "--surface-source-mode",
+        choices=["auto", "captured_session", "windowed_replay"],
+        default="auto",
+        help=(
+            "Strategy surface source: auto prefers captured_session when real "
+            "captured trades/positions exist, otherwise falls back to windowed_replay."
+        ),
+    )
     args = parser.parse_args()
 
-    enriched = enrich_capture_json(args.capture_json, args.date, args.db_path)
+    enriched = enrich_capture_json(args.capture_json, args.date, args.db_path, args.surface_source_mode)
     print(json.dumps({
         "capture_json": str(args.capture_json),
         "signals": len(enriched.get("signals") or []),

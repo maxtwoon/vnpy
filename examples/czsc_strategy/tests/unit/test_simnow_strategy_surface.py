@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -9,6 +10,8 @@ if str(DIAG) not in sys.path:
 
 from simnow_strategy_surface import (  # noqa: E402
     build_strategy_surface_from_capture,
+    build_strategy_surface_from_captured_session,
+    enrich_capture_json,
     enrich_capture_payload,
     filter_events_to_window,
 )
@@ -88,6 +91,30 @@ def test_build_strategy_surface_from_capture_uses_capture_window():
     assert surface["meta"]["window_end"] == "2026-07-07T09:19:59+08:00"
 
 
+def _captured_trade():
+    return {
+        "dt": "2026-07-07 09:17:00",
+        "symbol": "sc2608",
+        "direction": "多",
+        "offset": "OPEN",
+        "price": 500.0,
+        "volume": 1.0,
+        "vt_tradeid": "t1",
+    }
+
+
+def _captured_position():
+    return {
+        "dt": "2026-07-07 09:18:00",
+        "symbol": "sc2608",
+        "direction": "多",
+        "volume": 1.0,
+        "yd_volume": 0.0,
+        "price": 500.0,
+        "pnl": 0.0,
+    }
+
+
 def test_enrich_capture_payload_writes_strategy_surface_to_top_level():
     capture = _capture_payload()
     surface = {
@@ -104,3 +131,109 @@ def test_enrich_capture_payload_writes_strategy_surface_to_top_level():
     assert enriched["positions"] == surface["positions"]
     assert enriched["raw"]["trades"] == []
     assert enriched["meta"]["strategy_surface"]["window_start"] == "2026-07-07T09:14:59+08:00"
+
+
+def test_enrich_capture_json_auto_prefers_captured_session_when_data_present(tmp_path):
+    capture = _capture_payload()
+    capture["captured"] = {
+        "trades": [_captured_trade()],
+        "positions": [_captured_position()],
+        "orders": [],
+    }
+    capture_json = tmp_path / "capture.json"
+    capture_json.write_text(json.dumps(capture), encoding="utf-8")
+
+    enriched = enrich_capture_json(capture_json, "2026-07-07", tmp_path / "fake.db")
+
+    assert enriched["meta"]["strategy_surface"]["source"] == "captured_session"
+    assert enriched["meta"]["strategy_surface"]["trade_date"] == "2026-07-07"
+    assert len(enriched["trades"]) == 1
+    assert enriched["trades"][0]["symbol"] == "SC2608"
+    assert enriched["trades"][0]["strategy"] == "simnow_trade"
+    assert len(enriched["positions"]) == 1
+    assert enriched["positions"][0]["strategy"] == "simnow_position"
+
+
+def test_enrich_capture_json_auto_falls_back_to_windowed_replay_when_no_captured_data(tmp_path):
+    capture = _capture_payload()
+    assert "captured" not in capture or not capture.get("captured")
+    capture_json = tmp_path / "capture.json"
+    capture_json.write_text(json.dumps(capture), encoding="utf-8")
+
+    def snapshot_builder(db_path, start, end, day, cost_factor):
+        return {
+            "signals": [],
+            "trades": [{"dt": "2026-07-07 09:17:00", "symbol": "SC888", "strategy": "strategy_trade", "operate": "OPEN"}],
+            "positions": [],
+            "meta": {"replay_available": True},
+        }
+
+    enriched = enrich_capture_json(
+        capture_json,
+        "2026-07-07",
+        tmp_path / "fake.db",
+        snapshot_builder=snapshot_builder,
+    )
+
+    # File-based round-trip should use the windowed replay path.
+    assert enriched["meta"]["strategy_surface"]["source"] == "windowed_strategy_replay"
+
+
+def test_enrich_capture_json_explicit_modes_override_auto(tmp_path):
+    capture = _capture_payload()
+    capture["captured"] = {
+        "trades": [_captured_trade()],
+        "positions": [_captured_position()],
+        "orders": [],
+    }
+    capture_json = tmp_path / "capture.json"
+    capture_json.write_text(json.dumps(capture), encoding="utf-8")
+
+    def snapshot_builder(db_path, start, end, day, cost_factor):
+        return {
+            "signals": [],
+            "trades": [{"dt": "2026-07-07 09:17:00", "symbol": "SC888", "strategy": "strategy_trade", "operate": "OPEN"}],
+            "positions": [],
+            "meta": {"replay_available": True},
+        }
+
+    # Explicit windowed_replay ignores captured data.
+    enriched = enrich_capture_json(
+        capture_json,
+        "2026-07-07",
+        tmp_path / "fake.db",
+        surface_source_mode="windowed_replay",
+        snapshot_builder=snapshot_builder,
+    )
+    assert enriched["meta"]["strategy_surface"]["source"] == "windowed_strategy_replay"
+
+
+def test_cli_enrich_capture_json_uses_auto_default(tmp_path):
+    capture = _capture_payload()
+    capture["captured"] = {
+        "trades": [_captured_trade()],
+        "positions": [_captured_position()],
+        "orders": [],
+    }
+    capture_json = tmp_path / "capture.json"
+    capture_json.write_text(json.dumps(capture), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(DIAG / "simnow_strategy_surface.py"),
+            "--capture-json", str(capture_json),
+            "--date", "2026-07-07",
+            "--db-path", str(tmp_path / "fake.db"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    summary = json.loads(result.stdout)
+    assert summary["strategy_surface"]["source"] == "captured_session"
+    assert summary["trades"] == 1
+
+    # Verify the file was actually overwritten.
+    enriched = json.loads(capture_json.read_text(encoding="utf-8"))
+    assert enriched["meta"]["strategy_surface"]["source"] == "captured_session"

@@ -1,19 +1,19 @@
 ---
 task: A41 SimNow Authenticity Fix
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a41-simnow-authenticity-fix.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -263,3 +263,4 @@ regression here is caught in the future.
 | 2026-07-11 | claude-code → kimi-code | design → dev | A41 promoted from draft to active task; re-verified no drift from A40 |
 | 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: Finding #3 fix never wired into production pipeline: consistency check will always report unavailable, 20-day gate can never pass again |
+| 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
