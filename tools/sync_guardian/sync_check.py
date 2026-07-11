@@ -451,11 +451,10 @@ def _check_deliverables_are_tracked_and_fresh(
 
     if ignored_untracked:
         errors.append(f"handoff[{label}]: deliverable 未强制加入版本控制: {', '.join(ignored_untracked)}")
-    if stale_deliverables:
-        errors.append(f"handoff[{label}]: deliverable 未在 design->dev 之后新鲜跟踪: {', '.join(stale_deliverables)}")
-    if not freshly_tracked and not stale_deliverables and not ignored_untracked:
-        # 全部 deliverable 都是 git-ignored 且没被 add -f，但上面已经报错了；这里兜底
-        errors.append(f"handoff[{label}]: 无有效 deliverable 可验证 dev 阶段产出")
+    if not freshly_tracked and not ignored_untracked:
+        # 没有任何 deliverable 在 design->dev 之后被新鲜跟踪：dev 阶段没有可审计的产出
+        details = "; ".join(stale_deliverables) if stale_deliverables else "无 deliverable"
+        errors.append(f"handoff[{label}]: 没有 deliverable 在 design->dev 之后被新鲜跟踪 ({details})")
 
 
 def _check_handoff_file(root: Path, ho: Any, fp: Path, label: str, errors: List[str]) -> None:

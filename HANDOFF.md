@@ -1,8 +1,8 @@
 ---
 task: A42 sync-guardian Hardening
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
@@ -20,11 +20,11 @@ deliverables:
   - tests/test_sync_guardian.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -166,3 +166,4 @@ strategy/backtest/SimNow code touched — scope is strictly `tools/`, `.syncchec
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | A42 promoted from draft to active task after A41 reached done |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A42 promoted from draft to active task; re-verified no drift from A40/A41 |
+| 2026-07-12 | kimi-code → codex | dev → review | A42 sync-guardian hardening implemented |
