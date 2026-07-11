@@ -12,6 +12,11 @@ archive_dir: diagnostics/archive/  # 历史诊断文档归档区（缺失仅 WAR
 
 allow_history_notes: true          # 行尾加 "synccheck:ignore" 可豁免版本扫描（沿革注释等）
 
+deliverables_policy:
+  require_new_evidence_on_dev_to_review: true
+  # dev -> review 转换时，要求 HANDOFF.md deliverables 中至少有一项在 design->dev 之后被 git 跟踪更新；
+  # 若 deliverable 位于 git-ignored 目录，必须出现在 dev-stage commit 的 git show --stat 中（即 git add -f）。
+
 handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]
@@ -19,4 +24,5 @@ handoff:
     design: claude-cowork
     dev: code-agent
     review: claude-cowork
+  no_auto_advance: [review]        # review 必须显式 next/reject；run 循环不得因 agent 静默退出而自动推进
   # commands 未配置：本流水线由人工/agent 自触发（handoff.py next / reject）

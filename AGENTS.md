@@ -364,8 +364,11 @@ Mutation testing is configured for the local Chan example:
 5. `ruff check .`
 6. `mypy vnpy`
 7. `uv build`
+8. `python tools/sync_check.py`
+9. `python tools/sync_check.py --root examples/czsc_strategy`
+10. `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`
 
-There is **no automated pytest step** in CI at the moment; tests are intended to be run locally.
+The workflow now runs the czsc_strategy unit-test suite and both sync_check gates in CI.
 
 ---
 

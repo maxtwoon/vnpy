@@ -7,6 +7,17 @@ updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a42-sync-guardian-hardening.md
+  - tools/sync_guardian/handoff.py
+  - tools/sync_guardian/sync_check.py
+  - tools/handoff.py
+  - tools/sync_check.py
+  - .synccheck.yml
+  - examples/czsc_strategy/.synccheck.yml
+  - examples/czsc_strategy/HANDOFF.md
+  - examples/czsc_strategy/diagnostics/archive/HANDOFF-A32-archived-2026-07-11.md
+  - .github/workflows/pythonapp.yml
+  - AGENTS.md
+  - tests/test_sync_guardian.py
 blockers: []
 last_transition_kind: next
 last_transition_actor: claude-code

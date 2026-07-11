@@ -39,3 +39,12 @@ jobs:
 
       - name: Build
         run: uv build
+
+      - name: sync_check (root)
+        run: python tools/sync_check.py
+
+      - name: sync_check (czsc_strategy)
+        run: python tools/sync_check.py --root examples/czsc_strategy
+
+      - name: pytest (czsc_strategy unit, not realdb)
+        run: python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"

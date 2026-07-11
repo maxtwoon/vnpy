@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_DIR = Path(r"D:\repo\ashare\skills\sync-guardian\scripts")
+SCRIPT_DIR = Path(__file__).resolve().parent / "sync_guardian"
 
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(ROOT))

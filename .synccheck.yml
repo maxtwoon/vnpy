@@ -15,6 +15,15 @@ archive_must_not_be_in_root:
 
 allow_history_notes: true
 
+deliverables_policy:
+  require_new_evidence_on_dev_to_review: true
+  # When the stage transition is dev -> review, sync_check additionally requires
+  # that at least one deliverable listed in HANDOFF.md's front matter has a git
+  # commit newer than the preceding design->dev transition (i.e. dev actually
+  # touched/added something tracked). Diagnostics evidence under a git-ignored
+  # directory must appear in `git show --stat` for a dev-stage commit (i.e. was
+  # `git add -f`'d), not merely exist on disk untracked.
+
 handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]
@@ -22,6 +31,8 @@ handoff:
     design: claude-code
     dev: kimi-code
     review: codex
+  no_auto_advance: [review]   # review must explicitly next/reject; pipeline run loop must not
+                              # silently treat "agent exited 0 without transitioning" as accept
   commands:
     design: claude -p "Read HANDOFF.md and AGENTS.md, finish the design stage, then run python tools/handoff.py next"
     # NOTE (2026-07-10): plain `kimi -p "..."` is NOT headless — `-p`/`--prompt` only seeds the
