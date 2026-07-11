@@ -117,6 +117,11 @@ changed.
 
 ## P3 (A40) - Real Position Sizing (ATR-Risk Units + Contract Multiplier + Margin)
 
+> **Superseded.** `docs/design/a40-real-position-sizing.md` is the authoritative A40 contract —
+> it replaces this section's illustrative/placeholder `contract_specs` with real, cited exchange
+> contract specs (AP/RB/SC/A/ZN multiplier, tick, margin_rate sourced 2026-07-11) and grounds the
+> design against the current `Position`/`BacktestEngine` code. Read that document, not this one.
+
 ### Rationale
 `Position` is direction-only (`pos in {-1,0,1}`, `volume==1`), equity weighted post-hoc
 (`backtest_engine.py:322-359`). Reported returns are a signal-quality index, not tradeable PnL,
