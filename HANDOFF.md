@@ -1,267 +1,157 @@
 ---
-task: A41 SimNow Authenticity Fix
+task: A42 sync-guardian Hardening
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
-  - docs/design/a41-simnow-authenticity-fix.md
+  - docs/design/a42-sync-guardian-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Diagnostics-integrity work, not part of the P1-P8 backtest-return-quality roadmap
-(`docs/design/a38-phase-contracts-p2-p8.md`) — a parallel line of work, started after A40 (P3
-real position sizing) reached `done`. Promoted 2026-07-11 from a DRAFT design produced during an
-independent read-only 3-way audit; re-verified at promotion time that A40's changes (scoped to
-`chan_strategy/`) did not touch any of A41's target files.
+Tooling/process hardening, not part of the P1-P8 backtest-return-quality roadmap
+(`docs/design/a38-phase-contracts-p2-p8.md`) — same parallel diagnostics-integrity line of work
+as A41, started after A41 (SimNow authenticity fix) reached `done`. Promoted 2026-07-12 from a
+DRAFT design produced during the same independent read-only 3-way audit that produced A40's §7a
+addendum and A41; re-verified at promotion time that none of A42's five target findings drifted
+during A40/A41 (both scoped to `chan_strategy/` and `diagnostics/simnow_*.py` respectively, never
+`tools/`, `.synccheck.yml`, or `.github/workflows/`).
 
-Three independent defects were found in the SimNow observation pipeline, all downstream of the
-same root pattern — a diagnostic silently substitutes a synthetic or placeholder value for a real
-measurement without labeling the substitution:
+Five gaps in the sync-guardian workflow itself, verified 2026-07-11 and re-verified 2026-07-12:
 
-1. `simnow_daily_capture.py:234-259` (`build_risk`) emits an all-zero risk block for every
-   genuinely risk-relevant field; `simnow_daily_monitor.py:380` prioritizes this placeholder over
-   the replay-computed real risk via Python truthiness (a dict of zeros is still truthy).
-2. `simnow_strategy_surface.py:58-76` constructs the "live" comparison surface **from the replay
-   itself**, windowed to the capture's timestamps; genuinely-captured CTP callbacks are confined
-   to `raw.*` and never promoted to the fields the consistency check actually compares — so that
-   check can only prove windowing-logic self-consistency, never real captured-session agreement.
-3. `simnow_tick_bars.py:159-202` (`upsert_bars_to_sqlite`) writes SimNow-derived ticks directly
-   into `{symbol}_1M_raw` — the exact tables `BacktestEngine` reads for every historical
-   backtest — via `INSERT OR REPLACE` with no staging step, no dry-run, no promotion gate.
+1. `tools/handoff.py:9` / `tools/sync_check.py:9` hardcode
+   `SCRIPT_DIR = Path(r"D:\repo\ashare\skills\sync-guardian\scripts")` — fails on any
+   machine/CI runner without that exact external path.
+2. `no_auto_advance` is real, existing functionality in the external `handoff.py`, but neither
+   `.synccheck.yml` (root or `examples/czsc_strategy`) sets it — every stage, including `review`,
+   is eligible for the automated `run` loop's silent auto-transition-on-agent-silence behavior.
+3. `sync_check.py`'s deliverables check only verifies files **exist on disk**, not that they were
+   actually touched during the current stage — a stage can complete without ever registering its
+   real output as a tracked deliverable.
+4. `examples/czsc_strategy/HANDOFF.md` is stale and misleading: `task: A32`, `stage: design`,
+   `owner: claude-cowork`, `updated: 2026-07-03`, frozen since before A34 while all real work has
+   flowed through the root `HANDOFF.md` since.
+5. `.github/workflows/pythonapp.yml` runs lint/typecheck/build only — no pytest step, no
+   `sync_check` step — so a version/handoff-state drift or broken acceptance gate is only ever
+   caught locally.
 
-Single source of truth: `docs/design/a41-simnow-authenticity-fix.md`.
+Single source of truth: `docs/design/a42-sync-guardian-hardening.md`.
 
 ## Goal
 
-Ship three independent fixes to the SimNow diagnostics layer only (no order/cancel/send path
-changes, no `chan_strategy/` runtime changes): (1) a labeled risk-source selection
-(`select_risk_metrics`) that never lets a known-placeholder `simnow.risk` block silently satisfy
-a warning/halt threshold (new `"unproven"` status when only the placeholder is available); (2) a
-`build_strategy_surface_from_captured_session` path using the session's own captured
-trades/positions, with the consistency check reporting `"unavailable"` (never a pass) when only
-replay-derived data exists; (3) staged K-line writes (`{symbol}_1M_raw_staging` by default,
-promotion via an explicit `dry_run=False` call only). All three new defaults **change today's
-unsafe behavior** — a deliberate deviation from the usual default-off house style, justified in
-design §2's "Default-justification note" because today's behavior is a silent bug in a safety
-gate, not a conservative baseline.
+Vendor `tools/handoff.py`/`tools/sync_check.py`'s external dependency into
+`tools/sync_guardian/` for reproducibility; add `handoff.no_auto_advance: [review]` to both
+`.synccheck.yml` files; add a deliverables-freshness enforcement check to the vendored
+`sync_check.py` (fails loudly, not a warning, when a `dev`→`review` transition's deliverables
+weren't freshly git-tracked — including `git add -f` for git-ignored paths); archive the stale
+`examples/czsc_strategy/HANDOFF.md` and replace it with a truthful current-state file; add
+`sync_check` (root + child) and the `czsc_strategy` unit-test suite as new CI steps in
+`.github/workflows/pythonapp.yml`; update `AGENTS.md`'s CI section accordingly. No
+strategy/backtest/SimNow code touched — scope is strictly `tools/`, `.synccheck.yml` files,
+`.github/workflows/pythonapp.yml`, `AGENTS.md`, `examples/czsc_strategy/HANDOFF.md`/archive.
 
 ## Acceptance Criteria
 
-- [ ] `SIMNOW_MONITOR_CONFIG` exists with `risk_priority` (`"replay_first"` default |
-      `"legacy_simnow_first"`), `consistency_source_mode` (`"require_captured"` default |
-      `"replay_derived_allowed"`), `kline_write_mode` (`"staging"` default | `"direct"`, gated by
-      an additional `--allow-direct-write` CLI flag).
-- [ ] `select_risk_metrics` returns `(dict, risk_source_label)`; a fixture where `simnow.risk` is
-      the known all-zero placeholder shape and `replay.risk` has nonzero fields returns
-      `replay.risk`/`"replay_computed"` under the default mode; the same fixture under
-      `"legacy_simnow_first"` reproduces today's exact old behavior (returns the placeholder) for
-      A/B diffing.
-- [ ] `evaluate_thresholds`/`make_record` never report `record["status"] == "pass"` when
-      `risk_source == "simnow_capture_placeholder"` was the only available source (unit test with
-      a fixture that would have passed under old behavior and must not pass under new).
-- [ ] `build_strategy_surface_from_captured_session` exists and is exercised by a fixture using
-      `capture["captured"]["trades"/"positions"]` (not replay-derived) as the comparison basis;
-      `compare_simnow_replay` under `consistency_source_mode="require_captured"` returns
-      `status="unavailable"` (never `matched=True`/`False` treated as a pass) for a fixture whose
-      surface `meta.source != "captured_session"`.
-- [ ] `record["status"]` is never `"pass"` when `consistency["status"] == "unavailable"` (unit
-      test).
-- [ ] `simnow_tick_bars.py` under default `kline_write_mode="staging"` writes only to
-      `{symbol}_1M_raw_staging`, never touches `{symbol}_1M_raw`; a test asserts `{symbol}_1M_raw`
-      row count is unchanged after an `upsert_bars_to_sqlite` call under the default mode.
-- [ ] `promote_staged_bars(dry_run=True)` (default) writes nothing and returns a diff summary;
-      `promote_staged_bars(dry_run=False)` (requires explicit `--promote --no-dry-run`) performs
-      the `INSERT OR REPLACE` and only after that call does `{symbol}_1M_raw` change.
-- [ ] Before/after diff proving the new defaults change unsafe old output: a fixture-based test
-      (or a recorded before/after report pair, git-tracked) demonstrates at least one concrete
-      case per finding where `"legacy_*"`/`"direct"` mode would have produced a `"pass"`/silent-
-      write outcome that the new default mode correctly downgrades to
-      `"unproven"`/`"unavailable"`/staged-not-promoted.
-- [ ] Every new/modified report emitted by `simnow_daily_monitor.py` carries the
-      `Diagnostic only, not a trading recommendation.` (RESEARCH-ONLY) banner.
-- [ ] No SimNow order/cancel/send path changed (grep diff — none added); no threshold value
-      tuned via backtest/capture-data selection; no pre-2026-04-24 data used for any parameter
-      choice.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
-      pass (or the Manual-verification accommodation in `.synccheck.yml`/HANDOFF.md applies if
-      the codex-sandbox symlink limitation is still unresolved at review time).
-
-## Notes for the Next Agent
-
-**2026-07-12 (review reject) — general-purpose Claude Code subagent standing in for codex
-(codex hit its own external usage-limit quota; one-time stand-in at repo owner's request, not a
-role-division change).**
-
-I independently re-verified the diff, ran all four acceptance commands myself (not sandboxed —
-no WinError 5 symlink issue hit, so no Manual-verification accommodation was needed), and found
-that most of the work is solid:
-
-- `SIMNOW_MONITOR_CONFIG` (`examples/czsc_strategy/diagnostics/simnow_monitor_config.py`) has all
-  three keys with the correct safe-by-default values.
-- `select_risk_metrics`/`evaluate_thresholds`/`make_record` in `simnow_daily_monitor.py` genuinely
-  never let a `simnow_capture_placeholder` risk source produce `"pass"` — verified by reading the
-  logic (not just the docstring): `evaluate_thresholds` (line ~226) forces `status = "unproven"`
-  whenever `risk_source == "simnow_capture_placeholder"`, unconditionally (even under
-  `legacy_simnow_first` mode — confirmed intentional and tested via
-  `test_make_record_legacy_mode_selects_placeholder_but_still_not_pass` in
-  `test_simnow_risk_priority.py`), and `make_record` maps `"unproven"`/`"unavailable"` to
-  `record["status"] = "pending"`, never `"pass"`.
-- `simnow_tick_bars.py`: staging-by-default write path verified correct — `upsert_bars_to_sqlite`
-  raises `ValueError` if `kline_write_mode="direct"` without `allow_direct_write=True`;
-  `promote_staged_bars` defaults to `dry_run=True` and only performs `INSERT OR REPLACE` into
-  `{symbol}_1M_raw` when called with `dry_run=False` (CLI-gated behind `--promote --no-dry-run`).
-- `test_simnow_a41_before_after.py` genuinely demonstrates old-would-pass vs
-  new-default-downgrades for all three findings, not just new-behavior-in-isolation.
-- All four acceptance commands pass cleanly: `pytest examples/czsc_strategy/tests/unit -q -m "not
-  realdb"` (433 passed), `python tools/sync_check.py` (PASS, root), `python tools/sync_check.py
-  --root examples/czsc_strategy` (PASS, child), and the PowerShell preflight
-  (`run_next_work.ps1 -Preflight`, 151 passed, no live capture attempted).
-- Guardrail scan clean: zero `send_order`/`cancel_order`/`buy(`/`sell(`/`short(`/`cover(` calls
-  added; no `GOAL PASSED` string; RESEARCH-ONLY banner (`Diagnostic only, not a trading
-  recommendation.`) present in `write_20d_markdown`, the only markdown-report writer in
-  `simnow_daily_monitor.py`; no `chan_strategy/` runtime files touched (diff --stat confirms only
-  `diagnostics/` + `tests/unit/` files changed, plus `HANDOFF.md`).
-- Both `simnow_strategy_surface.py` and `simnow_monitor_config.py` are properly git-tracked now
-  (`git ls-files` shows both, plus `test_simnow_strategy_surface.py`).
-
-**Rejecting on one genuine defect: Finding #3's fix is never reachable in the real production
-pipeline — `compare_simnow_replay` will now report `"unavailable"` for every single day, forever,
-making the 20-day SimNow observation gate permanently unable to accumulate a `"pass"` day.**
-
-Root cause: `build_strategy_surface_from_captured_session` (new function,
-`simnow_strategy_surface.py:79-102`) is correctly implemented and unit-tested in isolation (e.g.
-`test_simnow_risk_priority.py::test_make_record_passes_with_replay_risk_and_captured_surface`,
-`test_simnow_consistency_source.py::test_make_record_passes_with_captured_session_surface_match`)
-— but it is **never called from any production code path**. I grepped the entire
-`examples/czsc_strategy` tree (excluding tests) for `build_strategy_surface_from_captured_session`
-and `captured_session` and the only hits are the function's own definition/docstring and its use
-inside `compare_simnow_replay`'s comparison logic — nothing calls it to actually *build* a surface
-for a real capture. The only code that ever sets `meta.strategy_surface` on a real capture JSON is
-`simnow_strategy_surface.py`'s `main()`/`enrich_capture_json()` (lines 144-166), and that function
-unconditionally calls `build_strategy_surface_from_capture` (the *windowed-replay* builder,
-producing `meta.source == "windowed_strategy_replay"`) — never the new captured-session builder.
-`simnow_daily_capture.py`'s `build_export` doesn't set `meta.strategy_surface` either (confirmed
-by grep — only the new `"captured"` field was added there, per spec, but nothing wires it into a
-surface). I confirmed this is exactly what the real orchestration script invokes:
-`run_next_work.ps1:255-267` calls `simnow_strategy_surface.py --capture-json ... --date ...` with
-no flag to select captured-session mode — this is the *only* place in the repo that runs the
-enrichment step in the real 20-day-observation workflow.
-
-Consequence: under the new default `consistency_source_mode="require_captured"`, every real
-capture produced by the actual pipeline will have `meta.strategy_surface.source ==
-"windowed_strategy_replay"` forever (nothing can ever change it to `"captured_session"`), so
-`compare_simnow_replay` will always take the `source != "captured_session"` branch and return
-`status="unavailable"`, and `make_record` will therefore never produce `record["status"] ==
-"pass"` again for any day, no matter how genuinely the strategy traded and matched replay. This
-isn't the intended fix — the design's Background explicitly frames Finding #3 as needing a check
-that can "prove a captured session agrees with the backtest" when real data is available, not a
-check that is permanently incapable of a positive verdict. This also isn't covered by design's
-in-scope-Boundaries §6 (which only excludes retroactive re-scoring and automated K-line
-promotion, not this).
-
-**Fix expectation for the next dev round:** wire `build_strategy_surface_from_captured_session`
-into the actual production enrichment path so `meta.strategy_surface.source` can genuinely become
-`"captured_session"` for a real trading day. Concretely: in `simnow_strategy_surface.py`'s
-`enrich_capture_json`/`main()` (or an equivalent orchestration point `run_next_work.ps1` calls),
-prefer `build_strategy_surface_from_captured_session(capture)` whenever
-`capture.get("captured", {}).get("trades")` (or positions) is non-empty for that day, falling back
-to the existing windowed-replay builder only when there is genuinely no captured session data to
-compare (e.g. the strategy didn't trade that day) — which is exactly the case
-`consistency_source_mode="require_captured"` is supposed to correctly report as `"unavailable"`.
-Add a test that exercises this through the actual `enrich_capture_json`/CLI entry point (not just
-a hand-built fixture calling `build_strategy_surface_from_captured_session` directly) so a
-regression here is caught in the future.
-
----
+- [ ] `tools/sync_guardian/handoff.py` and `tools/sync_guardian/sync_check.py` exist,
+      byte-content-equivalent (modulo the added provenance comment) to the source at
+      `D:\repo\ashare\skills\sync-guardian\scripts\`; `tools/handoff.py`/`tools/sync_check.py`'s
+      `SCRIPT_DIR` no longer references any path outside the repo.
+- [ ] `python tools/handoff.py status` and `python tools/sync_check.py` both succeed when run
+      from a fresh clone of the repo with `D:\repo\ashare` renamed/inaccessible (or simulated via
+      a temporarily-unset/invalid `D:\repo\ashare` path in a test harness) — direct reproducibility
+      proof for Finding #5 in the design's numbering (external-path removal).
+- [ ] `.synccheck.yml` (root) and `examples/czsc_strategy/.synccheck.yml` both set
+      `handoff.no_auto_advance: [review]`.
+- [ ] A test/fixture exercises the vendored `handoff.py run` loop with a stub agent command that
+      exits 0 without transitioning stage while at `stage: review`; the loop halts with a
+      non-zero exit and the stage remains `review` (does not silently auto-advance to `done`).
+- [ ] `sync_check`'s new deliverables-tracking check fails (non-zero exit, named deliverable in
+      the error) for a fixture HANDOFF.md at `stage: review` whose listed deliverables were not
+      touched by any commit after its `design`→`dev` transition; passes for a fixture where at
+      least one was.
+- [ ] The same check fails for a fixture deliverable path under a git-ignored directory that
+      exists on disk but was never `git add -f`'d into any tracked commit; passes once it is.
+- [ ] `examples/czsc_strategy/HANDOFF.md`'s `stage`/`task`/`updated` fields are truthful as of
+      the change date; the old content is preserved at
+      `examples/czsc_strategy/diagnostics/archive/HANDOFF-A32-archived-2026-07-11.md`
+      (git-tracked, added with `git add -f` since the archive dir sits under the git-ignored
+      `diagnostics/`).
+- [ ] `python tools/sync_check.py --root examples/czsc_strategy` still passes after the change.
+- [ ] `.github/workflows/pythonapp.yml` runs `python tools/sync_check.py`,
+      `python tools/sync_check.py --root examples/czsc_strategy`, and
+      `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` as CI steps; a
+      deliberately-broken `HANDOFF.md` (e.g. malformed front matter) in a throwaway test branch
+      is confirmed to fail the CI job (gate has teeth in CI, not just locally).
+- [ ] `AGENTS.md`'s CI section no longer states "no automated pytest step."
+- [ ] No SimNow/backtest/strategy code touched (diff scoped to `tools/`, `.synccheck.yml` files,
+      `.github/workflows/pythonapp.yml`, `AGENTS.md`, `examples/czsc_strategy/HANDOFF.md`/
+      archive).
+- [ ] `python tools/sync_check.py` (root, using the newly-vendored implementation) passes on this
+      task's own final state.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a41-simnow-authenticity-fix.md`. Full dev prompt in design §8.
-2. **This is diagnostics-layer-only work** — `examples/czsc_strategy/diagnostics/
-   simnow_daily_capture.py`, `simnow_daily_monitor.py`, `simnow_strategy_surface.py`,
-   `simnow_tick_bars.py`, plus a new `simnow_monitor_config.py`. Do not touch `chan_strategy/`
-   runtime (positions.py/backtest_engine.py/config.py) or SimNow order/cancel/send paths — none
-   of the three findings are there.
-3. **Why the defaults change unsafe behavior (design §2):** unlike every prior phase's
-   default-off discipline, all three new switches default to the *safe* mode, not the
-   *current* mode, because current behavior is a silent correctness bug in a safety gate (a risk
-   check that can never fire from real risk; a consistency check that structurally cannot prove
-   what it claims; a raw write path with no undo). The `"legacy_*"`/`"direct"` opt-outs exist
-   purely for A/B diffing — do not make them the default.
-4. **Core discipline: never silently default to "pass".** A diagnostic that cannot verify
-   something must report `"unavailable"`/`"unproven"`/`"pending"`. This is the single
-   load-bearing behavior change — `make_record`'s `record["status"]` computation must be updated
-   so both new non-authoritative states (placeholder-risk-only, replay-derived-only-consistency)
-   force it away from `"pass"`.
-5. **Staging is the highest blast-radius fix** — `kline_write_mode="direct"` requires an
-   *additional* explicit `--allow-direct-write` CLI flag on top of the config override
-   (belt-and-suspenders), since a bad write here corrupts the exact tables every historical
-   backtest reads.
-6. **Guardrails (reject-on-violation):** no tuning any threshold via captured/backtest data; no
-   pre-2026-04-24 data for any selection; no SimNow order/cancel/send paths; RESEARCH-ONLY
-   banner on every report; no `GOAL PASSED`.
-7. **Known environment accommodation:** if pytest/preflight hit the documented codex-sandbox
-   Windows-symlink limitation during review, that's covered by the standing Manual-verification
-   accommodation in `.synccheck.yml` — not something dev needs to fix. Add a fresh
-   Manual-verification block to this task's `HANDOFF.md` if/when it's needed (each task carries
-   its own; it doesn't persist automatically — see A40's history).
-8. Finish with the four acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A41 SimNow authenticity fix implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
+1. **Entry point:** `docs/design/a42-sync-guardian-hardening.md`. Full dev prompt in design §8;
+   review checklist in §9.
+2. **This is pure tooling/process work** — `tools/`, `.synccheck.yml` (both), `.github/workflows/
+   pythonapp.yml`, `AGENTS.md`, `examples/czsc_strategy/HANDOFF.md`. Do not touch
+   `chan_strategy/` or `diagnostics/simnow_*.py` — none of the five findings are there.
+3. **Vendoring scope is exactly two files** (§3a): `handoff.py` + `sync_check.py` from
+   `D:\repo\ashare\skills\sync-guardian\scripts\`, preserving their mutual import relationship.
+   Do NOT vendor `dashboard.py`/`init_project.py` — confirmed via import-graph check that neither
+   is required.
+4. **`no_auto_advance: [review]` needs no new logic** — it's a config key the vendored
+   `handoff.py`'s existing `run` loop already consumes (confirmed at its lines ~544-552). Just
+   add the key to both `.synccheck.yml` files after vendoring.
+5. **§3d (stale sub-project HANDOFF.md) is a judgment call** — pick (a) mark
+   `examples/czsc_strategy/HANDOFF.md` as done/superseded pointing to root, or (b) keep it active
+   with a distinct honest purpose. The acceptance criterion only requires truthful fields and a
+   passing `--root examples/czsc_strategy` gate, not a specific choice. Record the decision in a
+   decision-log entry either way.
+6. **Deliverables-freshness check (§3c) must fail loudly** — non-zero exit with the specific
+   deliverable named, not a warning. This is the single highest-value check in this task: it's
+   what would have caught A40/A41's repeated "report/module not git-tracked" defects automatically
+   instead of requiring manual `git ls-files` due diligence each time.
+7. **CI-gate-has-teeth evidence is required**, not just "the steps exist" — a deliberately-broken
+   fixture/branch shown to fail the new CI job.
+8. **Guardrails (reject-on-violation):** no `chan_strategy/`/SimNow code touched; no threshold
+   tuning; `handoff.py`/`sync_check.py`'s public CLI surface (`python tools/handoff.py ...`)
+   unchanged for all existing callers.
+9. **Known environment accommodation:** if pytest/preflight hit the documented codex-sandbox
+   Windows-symlink limitation during review, add a fresh Manual-verification block to this task's
+   HANDOFF.md (doesn't persist automatically across tasks).
+10. Finish with the acceptance commands, then
+    `python tools/handoff.py next --actor kimi-code --summary "A42 sync-guardian hardening implemented"`.
+    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-12 (review) - Reviewed by a general-purpose Claude Code subagent standing in for codex
-  this one round only (codex hit its own external usage-limit quota, not a role-division change —
-  mirrors the prior claude-code-for-codex stand-in recorded for A40's review). Rejected: Finding
-  #3's `build_strategy_surface_from_captured_session` is correct but never wired into the real
-  production pipeline (`simnow_strategy_surface.py` `main()`/`enrich_capture_json`, the only entry
-  point `run_next_work.ps1` calls, always uses the windowed-replay builder), so
-  `compare_simnow_replay` will report `"unavailable"` for every real day forever and the 20-day
-  gate can never accumulate a `"pass"` day again. See Notes for the Next Agent for full detail.
-- 2026-07-11 - A41 promoted from DRAFT to an active HANDOFF task after A40 reached `done`,
-  matching the user's chosen sequencing ("先完成 A40 再依次 A41→A42"). Re-verified all four
-  cited file:line targets are unchanged since the draft was written — A40's changes were scoped
-  entirely to `chan_strategy/`, no drift in `diagnostics/simnow_*.py`.
-- 2026-07-11 (design, original) - Chose safe-by-default (not current-behavior-by-default)
-  switches for all three fixes, a deliberate deviation from the A37-A40 house style, because
-  today's behavior in each case is a silent bug in a safety gate rather than a conservative
-  baseline worth preserving as the default.
-- 2026-07-11 (design, original) - Scoped strictly to the diagnostics layer; does not attempt to
-  fix `build_risk()`'s zero placeholders at the source (would need portfolio-level context the
-  live capture doesn't have) — only ensures downstream code never mistakes the placeholder for a
-  real measurement.
-- 2026-07-12 (dev complete, pre-commit check) - Found `examples/czsc_strategy/diagnostics/
-  simnow_strategy_surface.py` was **never git-tracked at all** (`git ls-files` returns empty),
-  despite being an actively-imported module (`simnow_daily_monitor.py` depends on it) predating
-  this task — a genuine pre-existing reproducibility gap, not something A41 introduced (every
-  other `simnow_*.py` module IS tracked; verified this is isolated to this one file plus the new
-  `simnow_monitor_config.py`, not a systemic "whole diagnostics dir untracked" problem). Force-
-  added both at commit time so A41's `build_strategy_surface_from_captured_session` addition is
-  actually reviewable/reproducible from a clean checkout — this is exactly the class of gap A42
-  targets at the harness-tooling level; worth flagging there too if any other diagnostics *code*
-  modules (not just generated reports) turn out to share this problem.
+- 2026-07-12 - A42 promoted from DRAFT to an active HANDOFF task after A41 reached `done`,
+  matching the user's chosen sequencing ("先完成 A40 再依次 A41→A42"). Re-verified all cited
+  file:line targets are unchanged since the draft was written — A40/A41's changes never touched
+  `tools/`, `.synccheck.yml`, or `.github/workflows/`.
+- 2026-07-11 (design, original) - Scoped vendoring to exactly the two files
+  (`handoff.py`/`sync_check.py`) required for the existing CLI surface to keep working;
+  `dashboard.py`/`init_project.py` explicitly excluded (not imported by either).
+- 2026-07-11 (design, original) - §3d (stale sub-project HANDOFF.md) deliberately left as an
+  explicit human judgment call rather than resolved unilaterally by the design, since it depends
+  on whether the sub-project gate is meant to track something distinct from the root gate going
+  forward.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-11 | codex → claude-code | done → design | A41 promoted from draft to active task after A40 reached done |
-| 2026-07-11 | claude-code → kimi-code | design → dev | A41 promoted from draft to active task; re-verified no drift from A40 |
-| 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
-| 2026-07-12 | codex → kimi-code | review → dev | 打回: Finding #3 fix never wired into production pipeline: consistency check will always report unavailable, 20-day gate can never pass again |
-| 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
-| 2026-07-12 | codex → codex | review → done | A41 review (codex stand-in): verified enrich_capture_json's new surface_source_mode=auto default is genuinely wired into the production path (run_next_work.ps1 invokes simnow_strategy_surface.py with no --surface-source-mode override, confirmed by grep). CLI subprocess test test_cli_enrich_capture_json_uses_auto_default proves meta.strategy_surface.source becomes captured_session for real captured data via the actual entry point, not just direct function calls. Windowed-replay fallback preserved for no-captured-data days (test_enrich_capture_json_auto_falls_back_to_windowed_replay_when_no_captured_data). All commands pass: pytest test_simnow_strategy_surface.py + test_simnow_a41_before_after.py (10 passed), full unit suite -m 'not realdb' (437 passed, no WinError 5 sandbox issue), sync_check.py root and --root examples/czsc_strategy both PASS. Guardrail diff clean: only simnow_strategy_surface.py + its test file + HANDOFF.md changed, no send_order/cancel_order/buy/sell/short/cover additions. Dead-code wiring gap from prior reject is closed. |
+| 2026-07-12 | codex → claude-code | done → design | A42 promoted from draft to active task after A41 reached done |
+| 2026-07-12 | claude-code → kimi-code | design → dev | A42 promoted from draft to active task; re-verified no drift from A40/A41 |

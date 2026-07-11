@@ -1,12 +1,15 @@
 # A42 Design: sync-guardian Hardening
 
-> **Status: DRAFT — not yet started as a HANDOFF task.** Produced 2026-07-11 by a read-only
-> planning pass over an independent 3-way audit, at the same time as the A40 acceptance-criteria
-> addendum (`docs/design/a40-real-position-sizing.md` §7a) and A41
-> (`docs/design/a41-simnow-authenticity-fix.md`). Sequencing relative to A40/A41 is a pending user
-> decision — do not `handoff.py new`/promote this to an active task without that decision. §3d
-> (stale sub-project HANDOFF.md cleanup) contains an explicit judgment call flagged for a human,
-> not resolved by this draft.
+> **Status: ACTIVE — promoted to a HANDOFF task 2026-07-12**, after A41 (SimNow authenticity fix)
+> reached `done`. Originally produced 2026-07-11 by a read-only planning pass over an independent
+> 3-way audit, alongside the A40 acceptance-criteria addendum
+> (`docs/design/a40-real-position-sizing.md` §7a) and A41
+> (`docs/design/a41-simnow-authenticity-fix.md`). Re-verified at promotion time: `tools/handoff.py:9`
+> and `tools/sync_check.py:9` still hardcode the external `SCRIPT_DIR`; neither `.synccheck.yml`
+> sets `no_auto_advance`; `examples/czsc_strategy/HANDOFF.md` is still frozen at A32/design/
+> 2026-07-03 — no drift since the draft was written. §3d (stale sub-project HANDOFF.md cleanup)
+> still contains an explicit judgment call flagged for the human reviewing this plan, not resolved
+> by this promotion.
 
 **Task:** Hardens the sync-guardian tooling itself: vendors the external
 `tools/handoff.py`/`tools/sync_check.py` dependency (Finding #5) into the repo for
