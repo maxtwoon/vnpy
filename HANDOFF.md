@@ -1,19 +1,19 @@
 ---
 task: A41 SimNow Authenticity Fix
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a41-simnow-authenticity-fix.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -99,6 +99,94 @@ gate, not a conservative baseline.
 
 ## Notes for the Next Agent
 
+**2026-07-12 (review reject) — general-purpose Claude Code subagent standing in for codex
+(codex hit its own external usage-limit quota; one-time stand-in at repo owner's request, not a
+role-division change).**
+
+I independently re-verified the diff, ran all four acceptance commands myself (not sandboxed —
+no WinError 5 symlink issue hit, so no Manual-verification accommodation was needed), and found
+that most of the work is solid:
+
+- `SIMNOW_MONITOR_CONFIG` (`examples/czsc_strategy/diagnostics/simnow_monitor_config.py`) has all
+  three keys with the correct safe-by-default values.
+- `select_risk_metrics`/`evaluate_thresholds`/`make_record` in `simnow_daily_monitor.py` genuinely
+  never let a `simnow_capture_placeholder` risk source produce `"pass"` — verified by reading the
+  logic (not just the docstring): `evaluate_thresholds` (line ~226) forces `status = "unproven"`
+  whenever `risk_source == "simnow_capture_placeholder"`, unconditionally (even under
+  `legacy_simnow_first` mode — confirmed intentional and tested via
+  `test_make_record_legacy_mode_selects_placeholder_but_still_not_pass` in
+  `test_simnow_risk_priority.py`), and `make_record` maps `"unproven"`/`"unavailable"` to
+  `record["status"] = "pending"`, never `"pass"`.
+- `simnow_tick_bars.py`: staging-by-default write path verified correct — `upsert_bars_to_sqlite`
+  raises `ValueError` if `kline_write_mode="direct"` without `allow_direct_write=True`;
+  `promote_staged_bars` defaults to `dry_run=True` and only performs `INSERT OR REPLACE` into
+  `{symbol}_1M_raw` when called with `dry_run=False` (CLI-gated behind `--promote --no-dry-run`).
+- `test_simnow_a41_before_after.py` genuinely demonstrates old-would-pass vs
+  new-default-downgrades for all three findings, not just new-behavior-in-isolation.
+- All four acceptance commands pass cleanly: `pytest examples/czsc_strategy/tests/unit -q -m "not
+  realdb"` (433 passed), `python tools/sync_check.py` (PASS, root), `python tools/sync_check.py
+  --root examples/czsc_strategy` (PASS, child), and the PowerShell preflight
+  (`run_next_work.ps1 -Preflight`, 151 passed, no live capture attempted).
+- Guardrail scan clean: zero `send_order`/`cancel_order`/`buy(`/`sell(`/`short(`/`cover(` calls
+  added; no `GOAL PASSED` string; RESEARCH-ONLY banner (`Diagnostic only, not a trading
+  recommendation.`) present in `write_20d_markdown`, the only markdown-report writer in
+  `simnow_daily_monitor.py`; no `chan_strategy/` runtime files touched (diff --stat confirms only
+  `diagnostics/` + `tests/unit/` files changed, plus `HANDOFF.md`).
+- Both `simnow_strategy_surface.py` and `simnow_monitor_config.py` are properly git-tracked now
+  (`git ls-files` shows both, plus `test_simnow_strategy_surface.py`).
+
+**Rejecting on one genuine defect: Finding #3's fix is never reachable in the real production
+pipeline — `compare_simnow_replay` will now report `"unavailable"` for every single day, forever,
+making the 20-day SimNow observation gate permanently unable to accumulate a `"pass"` day.**
+
+Root cause: `build_strategy_surface_from_captured_session` (new function,
+`simnow_strategy_surface.py:79-102`) is correctly implemented and unit-tested in isolation (e.g.
+`test_simnow_risk_priority.py::test_make_record_passes_with_replay_risk_and_captured_surface`,
+`test_simnow_consistency_source.py::test_make_record_passes_with_captured_session_surface_match`)
+— but it is **never called from any production code path**. I grepped the entire
+`examples/czsc_strategy` tree (excluding tests) for `build_strategy_surface_from_captured_session`
+and `captured_session` and the only hits are the function's own definition/docstring and its use
+inside `compare_simnow_replay`'s comparison logic — nothing calls it to actually *build* a surface
+for a real capture. The only code that ever sets `meta.strategy_surface` on a real capture JSON is
+`simnow_strategy_surface.py`'s `main()`/`enrich_capture_json()` (lines 144-166), and that function
+unconditionally calls `build_strategy_surface_from_capture` (the *windowed-replay* builder,
+producing `meta.source == "windowed_strategy_replay"`) — never the new captured-session builder.
+`simnow_daily_capture.py`'s `build_export` doesn't set `meta.strategy_surface` either (confirmed
+by grep — only the new `"captured"` field was added there, per spec, but nothing wires it into a
+surface). I confirmed this is exactly what the real orchestration script invokes:
+`run_next_work.ps1:255-267` calls `simnow_strategy_surface.py --capture-json ... --date ...` with
+no flag to select captured-session mode — this is the *only* place in the repo that runs the
+enrichment step in the real 20-day-observation workflow.
+
+Consequence: under the new default `consistency_source_mode="require_captured"`, every real
+capture produced by the actual pipeline will have `meta.strategy_surface.source ==
+"windowed_strategy_replay"` forever (nothing can ever change it to `"captured_session"`), so
+`compare_simnow_replay` will always take the `source != "captured_session"` branch and return
+`status="unavailable"`, and `make_record` will therefore never produce `record["status"] ==
+"pass"` again for any day, no matter how genuinely the strategy traded and matched replay. This
+isn't the intended fix — the design's Background explicitly frames Finding #3 as needing a check
+that can "prove a captured session agrees with the backtest" when real data is available, not a
+check that is permanently incapable of a positive verdict. This also isn't covered by design's
+in-scope-Boundaries §6 (which only excludes retroactive re-scoring and automated K-line
+promotion, not this).
+
+**Fix expectation for the next dev round:** wire `build_strategy_surface_from_captured_session`
+into the actual production enrichment path so `meta.strategy_surface.source` can genuinely become
+`"captured_session"` for a real trading day. Concretely: in `simnow_strategy_surface.py`'s
+`enrich_capture_json`/`main()` (or an equivalent orchestration point `run_next_work.ps1` calls),
+prefer `build_strategy_surface_from_captured_session(capture)` whenever
+`capture.get("captured", {}).get("trades")` (or positions) is non-empty for that day, falling back
+to the existing windowed-replay builder only when there is genuinely no captured session data to
+compare (e.g. the strategy didn't trade that day) — which is exactly the case
+`consistency_source_mode="require_captured"` is supposed to correctly report as `"unavailable"`.
+Add a test that exercises this through the actual `enrich_capture_json`/CLI entry point (not just
+a hand-built fixture calling `build_strategy_surface_from_captured_session` directly) so a
+regression here is caught in the future.
+
+---
+
+## Notes for the Next Agent
+
 (dev = kimi-code must read this before writing code)
 
 1. **Entry point:** `docs/design/a41-simnow-authenticity-fix.md`. Full dev prompt in design §8.
@@ -136,6 +224,14 @@ gate, not a conservative baseline.
 
 ## Decision Log
 
+- 2026-07-12 (review) - Reviewed by a general-purpose Claude Code subagent standing in for codex
+  this one round only (codex hit its own external usage-limit quota, not a role-division change —
+  mirrors the prior claude-code-for-codex stand-in recorded for A40's review). Rejected: Finding
+  #3's `build_strategy_surface_from_captured_session` is correct but never wired into the real
+  production pipeline (`simnow_strategy_surface.py` `main()`/`enrich_capture_json`, the only entry
+  point `run_next_work.ps1` calls, always uses the windowed-replay builder), so
+  `compare_simnow_replay` will report `"unavailable"` for every real day forever and the 20-day
+  gate can never accumulate a `"pass"` day again. See Notes for the Next Agent for full detail.
 - 2026-07-11 - A41 promoted from DRAFT to an active HANDOFF task after A40 reached `done`,
   matching the user's chosen sequencing ("先完成 A40 再依次 A41→A42"). Re-verified all four
   cited file:line targets are unchanged since the draft was written — A40's changes were scoped
@@ -166,3 +262,4 @@ gate, not a conservative baseline.
 | 2026-07-11 | codex → claude-code | done → design | A41 promoted from draft to active task after A40 reached done |
 | 2026-07-11 | claude-code → kimi-code | design → dev | A41 promoted from draft to active task; re-verified no drift from A40 |
 | 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: Finding #3 fix never wired into production pipeline: consistency check will always report unavailable, 20-day gate can never pass again |
