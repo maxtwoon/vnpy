@@ -260,11 +260,6 @@ def main() -> dict[str, Any]:
             elif t["exit_type"] == "close_based":
                 summary["close_based_stop_exits"] += 1
         summary["total_trades"] += len(trades)
-        summary["total_stop_exits"] += (
-            summary["touch_based_stop_exits"]
-            + summary["gap_fill_stop_exits"]
-            + summary["close_based_stop_exits"]
-        )
 
         per_symbol[symbol] = {
             "report": {
@@ -274,6 +269,12 @@ def main() -> dict[str, Any]:
             },
             "trade_count": len(trades),
         }
+
+    summary["total_stop_exits"] = (
+        summary["touch_based_stop_exits"]
+        + summary["gap_fill_stop_exits"]
+        + summary["close_based_stop_exits"]
+    )
 
     report_payload = {
         "disclaimer": BANNER,

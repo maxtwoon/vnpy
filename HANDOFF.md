@@ -1,19 +1,19 @@
 ---
 task: A40 Real Position Sizing (P3 - ATR-Risk Units + Contract Multiplier + Margin)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
   - docs/design/a40-real-position-sizing.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -47,55 +47,55 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
 
 ## Acceptance Criteria
 
-- [ ] `STRATEGY_CONFIG["sizing_model"]` (`"research"` default | `"risk"`),
+- [x] `STRATEGY_CONFIG["sizing_model"]` (`"research"` default | `"risk"`),
       `risk_per_trade_pct` (0.005), `max_margin_pct` (0.50), `equity_mode` (`"fixed"`), and
       `contract_specs` (AP888/RB888/SC888/A888/ZN888, each with `multiplier`/`tick`/
       `margin_rate` and an inline source citation comment) exist in `config.py`.
-- [ ] Research equivalence: with `sizing_model="research"`, the equity curve and every
+- [x] Research equivalence: with `sizing_model="research"`, the equity curve and every
       `Position.pairs` entry's `pnl_pct`/`open_price`/`close_price`/`bars_held`/`reason` are
       byte-identical to the pre-A40 baseline on >=2 symbols x 1 year (empty diff). `volume`/
       `pnl_currency` may be present but equal `1`/`pnl_pct * entry_price` and are not read by any
       existing report/diagnostic code path.
-- [ ] Risk sizing (unit): given a fixture, `volume == floor(risk_amount/(stop_distance*
+- [x] Risk sizing (unit): given a fixture, `volume == floor(risk_amount/(stop_distance*
       multiplier))` exactly, long and short.
-- [ ] Zero-size skip: `raw_volume < 1` skips the open entirely (no `pairs`/`trades` entry, no
+- [x] Zero-size skip: `raw_volume < 1` skips the open entirely (no `pairs`/`trades` entry, no
       forced 1-lot floor); increments a `size_zero_skip` counter.
-- [ ] Margin cap: a fixture whose sized `volume` breaches `equity_at_entry * max_margin_pct`
+- [x] Margin cap: a fixture whose sized `volume` breaches `equity_at_entry * max_margin_pct`
       reduces to the largest lot count that fits (>=1), else skips (`margin_cap_skip` counter).
-- [ ] Currency PnL: `pnl_currency == (exit-entry)*volume*multiplier*sign -
+- [x] Currency PnL: `pnl_currency == (exit-entry)*volume*multiplier*sign -
       (2*commission_rate+slippage)*entry*volume*multiplier`, long and short, within float
       tolerance.
-- [ ] No-lookahead: `equity_at_entry`/margin-cap decisions read only bars up to and including the
+- [x] No-lookahead: `equity_at_entry`/margin-cap decisions read only bars up to and including the
       entry bar; `BacktestEngine.run` step ordering unchanged beyond new optional sizing params.
-- [ ] Report header (and risk-mode equity-curve rows) print `sizing_model` and (risk mode)
+- [x] Report header (and risk-mode equity-curve rows) print `sizing_model` and (risk mode)
       `total_open_margin`/`margin_utilization_pct`.
-- [ ] No threshold tuned via backtest selection; no pre-2026-04-24 data used for any parameter
+- [x] No threshold tuned via backtest selection; no pre-2026-04-24 data used for any parameter
       choice; no SimNow order/cancel/send paths changed; no new `send_order`/`cancel_order`/
       `buy`/`sell`/`short`/`cover` calls.
 
 ### Addendum (2026-07-11, post independent read-only audit — see design doc §7a for full rationale)
 
-- [ ] AC-A40-9: one new command produces a single git-tracked report showing, for the same
+- [x] AC-A40-9: one new command produces a single git-tracked report showing, for the same
       backtest run, real sizing (a), A38 stop-execution mode + touch-vs-close exit counts (b),
       and whether a SimNow replay risk caliber was consulted (c) — `"status":
       "not_available_pending_A41"` if A41 hasn't landed, never a fabricated number.
-- [ ] AC-A40-10: no judgment this report derives from `simnow_daily_capture.py`'s `build_risk()`
+- [x] AC-A40-10: no judgment this report derives from `simnow_daily_capture.py`'s `build_risk()`
       output may treat its hardcoded-zero fields as a real measurement; a `simnow.risk`-sourced
       figure must be labelled `"risk_source": "simnow_capture_placeholder"` vs
       `"replay_computed"` and a placeholder zero must never silently satisfy a warning/halt
       threshold.
-- [ ] AC-A40-11: a test/report section confirms the risk-mode `stop_distance` sizing denominator
+- [x] AC-A40-11: a test/report section confirms the risk-mode `stop_distance` sizing denominator
       is the same value A38's `stop_execution_model="intrabar"` actually uses to trigger an exit.
-- [ ] AC-A40-12: a dedicated test exercises `sizing_model="risk"` + `stop_execution_model=
+- [x] AC-A40-12: a dedicated test exercises `sizing_model="risk"` + `stop_execution_model=
       "intrabar"` together (long+short), asserting `pnl_currency` on a touch-based exit uses the
       actual touched stop price, not `bar.close`.
-- [ ] AC-A40-13: the AC-A40-9 report carries the RESEARCH-ONLY banner and states its PnL/margin
+- [x] AC-A40-13: the AC-A40-9 report carries the RESEARCH-ONLY banner and states its PnL/margin
       figures use exchange-*minimum* margin rates, not production-ready numbers.
 
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
+- [x] `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
       passes (or the Manual-verification accommodation in `.synccheck.yml`/HANDOFF.md applies if
       the codex-sandbox symlink limitation is still unresolved at review time).
 
@@ -218,6 +218,13 @@ Verification notes from this review:
   double-counts `total_stop_exits` inside the per-symbol loop (real bug, dev to fix); (3) no
   Manual-verification block existed for this task yet (added above, matching the A39 pattern —
   each task's `HANDOFF.md` carries its own current block, it doesn't persist automatically).
+- 2026-07-11 (dev fix) - kimi-code fixed the two review-reject issues: (1) regenerated the
+  AC-A40-9 report for AP888/ZN888 2023-01-01~2025-12-31 and `git add -f`'d the artifact so it
+  is tracked despite the dead `.gitignore` negation; (2) corrected `total_stop_exits` to be
+  computed once from final component counts after the per-symbol loop, eliminating the
+  cumulative double-count; (3) also cleaned `_open_long`/`_open_short` to return immediately on
+  a sized `volume < 1` without resetting `volume` to 1, reinforcing the "no forced 1-lot floor"
+  semantics. All unit tests, both sync checks, and the preflight pass.
 
 ## 交接历史
 
@@ -229,3 +236,4 @@ Verification notes from this review:
 | 2026-07-11 | claude-code → kimi-code | design → dev | A40 design addendum: AC-A40-9..13 (unified report, no zero-placeholder risk, A38 stop-distance cross-check, sizing x intrabar-stop interaction) after independent audit |
 | 2026-07-11 | kimi-code → codex | dev → review | A40 P3 real position sizing implemented |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A40 report artifact is ignored/untracked and stop-exit total is inconsistent |
+| 2026-07-11 | kimi-code → codex | dev → review | A40 P3 real position sizing implemented (review-reject fixes: git-tracked report + stop-exit total consistency) |

@@ -560,8 +560,6 @@ class Position:
                 price, equity_at_entry, total_open_margin
             )
             if self.volume < 1:
-                self.volume = 1
-                self.contract_multiplier = 1
                 return
         else:
             self.volume = 1
@@ -655,8 +653,6 @@ class Position:
                 price, equity_at_entry, total_open_margin
             )
             if self.volume < 1:
-                self.volume = 1
-                self.contract_multiplier = 1
                 return
         else:
             self.volume = 1
