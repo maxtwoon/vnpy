@@ -10,6 +10,7 @@ RESEARCH-ONLY — Diagnostic only, not a trading recommendation.
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import sqlite3
 import sys
@@ -139,16 +140,19 @@ def _parse_dt(value: str) -> datetime | None:
 
 
 def _trading_dates_from_bars(db_path: Path, symbol: str) -> set[date]:
-    """Return dates with at least one day-session (hour in [8,16)) bar."""
+    """Return all calendar dates with at least one bar for the symbol.
+
+    Previously this filtered to day-session hours only, which produced sparse
+    trading-date sets for futures with night sessions and caused non-adjacent
+    dates to be picked as the ``transition ± 1 trading day`` exclusion window.
+    """
     table = f"{symbol.lower()}_1M_raw"
     trading_dates: set[date] = set()
     conn = sqlite3.connect(str(db_path))
     try:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT DISTINCT DATE(datetime) FROM {table} "
-            f"WHERE symbol = ? COLLATE NOCASE AND CAST(STRFTIME('%H', datetime) AS INTEGER) >= 8 "
-            f"AND CAST(STRFTIME('%H', datetime) AS INTEGER) < 16",
+            f"SELECT DISTINCT DATE(datetime) FROM {table} WHERE symbol = ? COLLATE NOCASE",
             (symbol,),
         )
         for row in cur.fetchall():
@@ -161,31 +165,60 @@ def _trading_dates_from_bars(db_path: Path, symbol: str) -> set[date]:
         conn.close()
 
 
-def _exclusion_dates(transition_dates: list[dict[str, Any]], trading_dates: set[date]) -> set[date]:
-    """Expand each transition date to {prev, transition, next} trading dates."""
+def _exclusion_dates(
+    transition_dates: list[dict[str, Any]], trading_dates: set[date]
+) -> tuple[set[date], list[dict[str, Any]]]:
+    """Expand each transition date to {prev, transition, next} actual adjacent trading dates.
+
+    Only immediately adjacent observed trading dates are used.  If the adjacent
+    date is missing from the diagnostic data (gap larger than a normal holiday
+    window), the corresponding side is marked unavailable instead of picking a
+    non-adjacent date months away.
+    """
     excluded: set[date] = set()
+    notes: list[dict[str, Any]] = []
     sorted_trading = sorted(trading_dates)
+    # Normal futures holiday windows are <= 7 calendar days; anything larger is
+    # treated as missing data rather than an actual adjacent trading date.
+    max_gap_days = 7
+
     for tr in transition_dates:
         tr_date = date.fromisoformat(str(tr["date"]))
-        if tr_date in trading_dates:
+        tr_notes: dict[str, Any] = {
+            "date": tr_date.isoformat(),
+            "prev": None,
+            "next": None,
+        }
+
+        idx = bisect.bisect_left(sorted_trading, tr_date)
+        if idx < len(sorted_trading) and sorted_trading[idx] == tr_date:
+            # Transition date itself is an observed trading date.
             excluded.add(tr_date)
-        # Previous trading date
-        prev_idx = None
-        for i, d in enumerate(sorted_trading):
-            if d >= tr_date:
-                prev_idx = i - 1
-                break
-        if prev_idx is not None and prev_idx >= 0:
-            excluded.add(sorted_trading[prev_idx])
-        # Next trading date
-        next_idx = None
-        for i, d in enumerate(sorted_trading):
-            if d > tr_date:
-                next_idx = i
-                break
-        if next_idx is not None:
-            excluded.add(sorted_trading[next_idx])
-    return excluded
+            # Previous trading date
+            if idx > 0 and (tr_date - sorted_trading[idx - 1]).days <= max_gap_days:
+                excluded.add(sorted_trading[idx - 1])
+            else:
+                tr_notes["prev"] = "absent_from_diagnostic_window"
+            # Next trading date
+            if idx < len(sorted_trading) - 1 and (sorted_trading[idx + 1] - tr_date).days <= max_gap_days:
+                excluded.add(sorted_trading[idx + 1])
+            else:
+                tr_notes["next"] = "absent_from_diagnostic_window"
+        else:
+            # Transition date is not an observed trading date; bracket it with
+            # the nearest observed dates when they are close enough.
+            if idx > 0 and (tr_date - sorted_trading[idx - 1]).days <= max_gap_days:
+                excluded.add(sorted_trading[idx - 1])
+            else:
+                tr_notes["prev"] = "absent_from_diagnostic_window"
+            if idx < len(sorted_trading) and (sorted_trading[idx] - tr_date).days <= max_gap_days:
+                excluded.add(sorted_trading[idx])
+            else:
+                tr_notes["next"] = "absent_from_diagnostic_window"
+
+        notes.append(tr_notes)
+
+    return excluded, notes
 
 
 def _pair_in_exclusion_window(
@@ -291,7 +324,9 @@ def _run_symbol(
     all_pairs = engine.strategy.get_combined_trades()
 
     trading_dates = _trading_dates_from_bars(db_path, symbol)
-    excluded_dates = _exclusion_dates(transitions.get("transition_dates", []), trading_dates)
+    excluded_dates, exclusion_notes = _exclusion_dates(
+        transitions.get("transition_dates", []), trading_dates
+    )
     filtered_pairs = [p for p in all_pairs if not _pair_in_exclusion_window(p, excluded_dates)]
 
     return {
@@ -299,6 +334,7 @@ def _run_symbol(
         "detection_method": transitions.get("detection_method"),
         "transition_dates": transitions.get("transition_dates", []),
         "excluded_dates": sorted(d.isoformat() for d in excluded_dates),
+        "exclusion_notes": exclusion_notes,
         "before": _metrics_from_pairs(all_pairs),
         "after": _metrics_from_pairs(filtered_pairs),
         "baseline_report_summary": {
@@ -375,6 +411,18 @@ def _write_outputs(
                 f"  - {tr['date']}: {tr['from_contract']} -> {tr['to_contract']}"
             )
         lines.append(f"- **Excluded dates:** {', '.join(data['excluded_dates'])}")
+        if data.get("exclusion_notes"):
+            lines.append("- **Exclusion notes:**")
+            for note in data["exclusion_notes"]:
+                prev_note = note.get("prev")
+                next_note = note.get("next")
+                parts: list[str] = []
+                if prev_note:
+                    parts.append(f"previous side {prev_note}")
+                if next_note:
+                    parts.append(f"next side {next_note}")
+                if parts:
+                    lines.append(f"  - {note['date']}: " + "; ".join(parts))
         lines.append("")
         lines.append("| Metric | Before | After |")
         lines.append("|--------|--------|-------|")

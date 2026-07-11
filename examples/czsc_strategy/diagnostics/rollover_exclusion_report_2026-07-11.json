@@ -1,6 +1,6 @@
 {
   "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
-  "generated_at": "2026-07-10T16:58:55.192383+00:00",
+  "generated_at": "2026-07-11T05:21:31.555171+00:00",
   "window": "2026-04-24 ~ 2026-07-09",
   "db_path": "D:\\BaiduNetdiskDownload\\新数据库\\ssquant数据库_20260425\\kline_data.db",
   "symbols": {
@@ -9,6 +9,7 @@
       "detection_method": "real_symbol",
       "transition_dates": [],
       "excluded_dates": [],
+      "exclusion_notes": [],
       "before": {
         "trade_count": 2,
         "return": -5.8398,
@@ -73,9 +74,15 @@
         }
       ],
       "excluded_dates": [
-        "2026-04-24",
         "2026-07-01",
         "2026-07-02"
+      ],
+      "exclusion_notes": [
+        {
+          "date": "2026-07-01",
+          "prev": "absent_from_diagnostic_window",
+          "next": null
+        }
       ],
       "before": {
         "trade_count": 0,
@@ -148,9 +155,15 @@
         }
       ],
       "excluded_dates": [
-        "2026-04-24",
         "2026-07-01",
         "2026-07-02"
+      ],
+      "exclusion_notes": [
+        {
+          "date": "2026-07-01",
+          "prev": "absent_from_diagnostic_window",
+          "next": null
+        }
       ],
       "before": {
         "trade_count": 0,

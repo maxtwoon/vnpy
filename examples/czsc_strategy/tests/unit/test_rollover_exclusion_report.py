@@ -75,10 +75,42 @@ def test_detect_transitions_mark_missing_column(tmp_path: Path):
 def test_exclusion_window_expands_to_neighbor_trading_dates(rollover_db: Path):
     transitions = report._detect_transitions(rollover_db, "AP888")
     trading_dates = report._trading_dates_from_bars(rollover_db, "AP888")
-    excluded = report._exclusion_dates(transitions["transition_dates"], trading_dates)
+    excluded, notes = report._exclusion_dates(transitions["transition_dates"], trading_dates)
     # Transition on 2024-01-04 excludes prev (01-03), transition (01-04), and next (none in fixture).
     assert date("2024-01-03") in excluded
     assert date("2024-01-04") in excluded
+    assert notes[0]["prev"] is None
+    assert notes[0]["next"] == "absent_from_diagnostic_window"
+
+
+def test_exclusion_window_marks_large_gap_unavailable(tmp_path: Path):
+    """A missing adjacent trading date must not pull in a date months away."""
+    db = tmp_path / "gap.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE sc888_1M_raw ("
+        "datetime TEXT, symbol TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, amount REAL, real_symbol TEXT"
+        ")"
+    )
+    rows = [
+        # Old contract at start of window
+        ("2026-04-24 09:00:00", "SC888", 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0, "sc2606"),
+        # New contract appears months later with no intervening bars
+        ("2026-07-01 09:00:00", "SC888", 110.0, 111.0, 109.0, 110.0, 1000.0, 100000.0, "sc2608"),
+        ("2026-07-02 09:00:00", "SC888", 110.0, 111.0, 109.0, 110.0, 1000.0, 100000.0, "sc2608"),
+    ]
+    conn.executemany("INSERT INTO sc888_1M_raw VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    conn.commit()
+    conn.close()
+
+    transitions = report._detect_transitions(db, "SC888")
+    trading_dates = report._trading_dates_from_bars(db, "SC888")
+    excluded, notes = report._exclusion_dates(transitions["transition_dates"], trading_dates)
+    assert date("2026-07-01") in excluded
+    assert date("2026-07-02") in excluded
+    assert date("2026-04-24") not in excluded
+    assert notes[0]["prev"] == "absent_from_diagnostic_window"
+    assert notes[0]["next"] is None
 
 
 def test_unavailable_symbol_still_reports_before_after_metrics(rollover_db: Path):

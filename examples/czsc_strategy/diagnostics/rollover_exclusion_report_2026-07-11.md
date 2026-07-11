@@ -1,6 +1,6 @@
 # Rollover Exclusion Diagnostic Report
 
-**Generated at:** 2026-07-10T16:58:55.192383+00:00
+**Generated at:** 2026-07-11T05:21:31.555171+00:00
 **Window:** 2026-04-24 ~ 2026-07-09
 
 > RESEARCH-ONLY — Diagnostic only, not a trading recommendation.
@@ -46,7 +46,9 @@
 - **Detection method:** real_symbol
 - **Transitions:** 1
   - 2026-07-01: sc2606 -> sc2608
-- **Excluded dates:** 2026-04-24, 2026-07-01, 2026-07-02
+- **Excluded dates:** 2026-07-01, 2026-07-02
+- **Exclusion notes:**
+  - 2026-07-01: previous side absent_from_diagnostic_window
 
 | Metric | Before | After |
 |--------|--------|-------|
@@ -74,7 +76,9 @@
 - **Detection method:** real_symbol
 - **Transitions:** 1
   - 2026-07-01: zn2606 -> zn2608
-- **Excluded dates:** 2026-04-24, 2026-07-01, 2026-07-02
+- **Excluded dates:** 2026-07-01, 2026-07-02
+- **Exclusion notes:**
+  - 2026-07-01: previous side absent_from_diagnostic_window
 
 | Metric | Before | After |
 |--------|--------|-------|

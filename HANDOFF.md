@@ -1,8 +1,8 @@
 ---
 task: A39 Rollover-Pollution Diagnostic + Trading-Calendar Daily Aggregation (P2)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
@@ -16,12 +16,12 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_rollover_exclusion_report.py
   - examples/czsc_strategy/RISK_NOTE_888_SPLICE.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -107,47 +107,31 @@ inside the sandbox again (post-relogin).
 
 ## Notes for the Next Agent
 
-(review = codex, 2026-07-11)
+(dev = kimi-code, 2026-07-11)
 
-Rejected: the generated rollover exclusion evidence violates the A39 `transition_date +/- 1
-trading day` acceptance contract.
+A39 dev stage complete. The previous review rejection (non-adjacent dates in the rollover exclusion
+window) has been addressed:
 
-- `examples/czsc_strategy/diagnostics/rollover_exclusion_report_2026-07-11.json:75` and
-  `:150` list `2026-04-24` as an excluded date for SC888/ZN888 rollovers on `2026-07-01`.
-- `examples/czsc_strategy/diagnostics/rollover_exclusion_report_2026-07-11.md:49` and `:77`
-  expose the same invalid exclusion window in the human report.
-- The implementation cause is in
-  `examples/czsc_strategy/diagnostics/rollover_exclusion_report.py:173`: `_exclusion_dates`
-  picks the nearest earlier observed `trading_dates` entry, even if that entry is months away
-  from the rollover. That is not `transition_date +/- 1 trading day` and can falsely remove
-  unrelated trades from the before/after comparison.
+- `_trading_dates_from_bars` now returns **all** calendar dates with bars instead of filtering to
+  day-session hours, so adjacent trading dates are no longer dropped for futures with night sessions.
+- `_exclusion_dates` now constrains the `{prev, transition, next}` window to immediately adjacent
+  observed trading dates.  When the adjacent date is missing from the diagnostic data (gap larger
+  than a normal holiday window), the corresponding side is recorded as
+  `absent_from_diagnostic_window` instead of pulling in a date months away.
+- Both `rollover_exclusion_report_2026-07-11.{json,md}` have been regenerated.  SC888 and ZN888 no
+  longer list `2026-04-24`; they list `{2026-07-01, 2026-07-02}` with a note that the previous side
+  is absent from the diagnostic window.
+- A new unit test `test_exclusion_window_marks_large_gap_unavailable` guards the large-gap behavior.
 
-Fix expectation: constrain the previous/next exclusion dates to actual adjacent trading dates for
-the rollover window, or mark that side unavailable when the needed adjacent trading date is absent
-from the diagnostic window. Regenerate both report files afterward.
+Verified in this session:
 
-Review evidence already checked:
-
-- `python tools/sync_check.py` -> PASS.
-- `python tools/sync_check.py --root examples/czsc_strategy` -> PASS.
-- Direct non-pytest A39 resample check -> PASS.
-- Report required-field JSON check -> PASS.
-- Tracked evidence check -> PASS.
-- Guardrail scan found no new order API calls (`send_order`/`cancel_order`/`buy(`/`sell(`/`short(`/`cover(`).
-- Per the documented sandbox limitation, pytest unit-test and preflight acceptance items were
-  assessed from the Manual verification block: pytest `376 passed, 2 deselected`; preflight
-  complete.
-
-(review = codex, 2026-07-11)
-
-Dev stage complete. All acceptance criteria have been verified in this unsandboxed session:
-
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> 376 passed, 2 deselected.
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **377 passed, 2 deselected**.
 - `python tools/sync_check.py` -> PASS.
 - `python tools/sync_check.py --root examples/czsc_strategy` -> PASS.
 - `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight` -> Preflight complete.
+- Guardrail scan: no new `send_order`/`cancel_order`/`buy(`/`sell(`/`short(`/`cover(` calls.
 
-The two pytest/preflight acceptance items remain subject to the documented Windows symlink-privilege
+The pytest/preflight acceptance items remain subject to the documented Windows symlink-privilege
 sandbox limitation (see `.synccheck.yml` NOTE above the `review` command and the Manual verification
 block above). Please verify diffs, deliverables, guardrails, and report contents normally.
 
@@ -195,3 +179,4 @@ block above). Please verify diffs, deliverables, guardrails, and report contents
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 exact acceptance commands still fail |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 dev stage complete: rollover diagnostic + trading-calendar daily aggregation implemented; pytest 376 passed/2 deselected, both sync_check gates PASS, SimNow preflight complete. |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 rollover exclusion window includes non-adjacent dates |
+| 2026-07-11 | kimi-code → codex | dev → review | A39 dev: fixed rollover exclusion window to use adjacent trading dates and regenerated reports; pytest 377 passed/2 deselected, sync checks PASS, preflight complete. |
