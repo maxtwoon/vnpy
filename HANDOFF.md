@@ -1,7 +1,7 @@
 ---
 task: A39 Rollover-Pollution Diagnostic + Trading-Calendar Daily Aggregation (P2)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-11
 deliverables:
@@ -17,10 +17,10 @@ deliverables:
   - examples/czsc_strategy/RISK_NOTE_888_SPLICE.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -180,3 +180,4 @@ block above). Please verify diffs, deliverables, guardrails, and report contents
 | 2026-07-11 | kimi-code → codex | dev → review | A39 dev stage complete: rollover diagnostic + trading-calendar daily aggregation implemented; pytest 376 passed/2 deselected, both sync_check gates PASS, SimNow preflight complete. |
 | 2026-07-11 | codex → kimi-code | review → dev | 打回: A39 rollover exclusion window includes non-adjacent dates |
 | 2026-07-11 | kimi-code → codex | dev → review | A39 dev: fixed rollover exclusion window to use adjacent trading dates and regenerated reports; pytest 377 passed/2 deselected, sync checks PASS, preflight complete. |
+| 2026-07-11 | codex → codex | review → done | 审核通过 |
