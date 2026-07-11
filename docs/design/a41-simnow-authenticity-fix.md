@@ -1,13 +1,13 @@
 # A41 Design: SimNow Authenticity Fix
 
-> **Status: DRAFT — not yet started as a HANDOFF task.** Produced 2026-07-11 by a read-only
-> planning pass over an independent 3-way audit, at the same time as the A40 acceptance-criteria
-> addendum (see `docs/design/a40-real-position-sizing.md` §7a) and A42
-> (`docs/design/a42-sync-guardian-hardening.md`). Sequencing relative to A40/A42 is a pending
-> user decision — do not `handoff.py new`/promote this to an active task without that decision.
-> All file:line citations below were re-verified against the working tree at the time this draft
-> was written; re-verify again before starting dev, since A40 may still be landing changes to
-> nearby files.
+> **Status: ACTIVE — promoted to a HANDOFF task 2026-07-11**, after A40 (P3) reached `done`.
+> Originally produced 2026-07-11 by a read-only planning pass over an independent 3-way audit,
+> alongside the A40 acceptance-criteria addendum (`docs/design/a40-real-position-sizing.md` §7a)
+> and A42 (`docs/design/a42-sync-guardian-hardening.md`, still draft). Re-verified at promotion
+> time: all four cited file:line targets (`simnow_daily_capture.py:234`,
+> `simnow_daily_monitor.py:380`, `simnow_strategy_surface.py:58`,
+> `simnow_tick_bars.py:159`) are unchanged — A40's changes were scoped entirely to
+> `chan_strategy/`, not `diagnostics/simnow_*.py`, so no drift occurred.
 
 **Task:** Diagnostics-integrity work, addressing three independently-verified authenticity bugs
 in the SimNow observation pipeline that could make the 20-day SimNow observation gate pass when

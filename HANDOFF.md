@@ -1,239 +1,157 @@
 ---
-task: A40 Real Position Sizing (P3 - ATR-Risk Units + Contract Multiplier + Margin)
+task: A41 SimNow Authenticity Fix
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
-  - docs/design/a40-real-position-sizing.md
+  - docs/design/a41-simnow-authenticity-fix.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Roadmap phase **P3** (see `docs/design/a38-phase-contracts-p2-p8.md` §P3), now a standalone task
-after A39 (P2) reached `done`. `Position` is currently direction-only (`pos in {-1,0,1}`, no
-`volume`) — PnL is a percentage per pair, turned into money only via `BacktestEngine`'s post-hoc
-fixed-weight loop (`pos_1buy=0.10`, `pos_2buy=0.20`, `pos_3buy=0.30`, ...), regardless of the
-symbol's actual volatility, the trade's actual stop distance, or the contract's real value. Every
-reported return/drawdown/Sharpe in every prior diagnostic (A31-A39) is therefore a signal-quality
-index, not tradeable PnL, and no future Tier B/C profitability claim can be trusted until this is
-fixed.
+Diagnostics-integrity work, not part of the P1-P8 backtest-return-quality roadmap
+(`docs/design/a38-phase-contracts-p2-p8.md`) — a parallel line of work, started after A40 (P3
+real position sizing) reached `done`. Promoted 2026-07-11 from a DRAFT design produced during an
+independent read-only 3-way audit; re-verified at promotion time that A40's changes (scoped to
+`chan_strategy/`) did not touch any of A41's target files.
 
-A40 gives `Position` real integer-lot sizing and currency PnL behind a gated switch
-(`sizing_model`: `"research"` default = byte-identical current behavior | `"risk"` = ATR-style
-risk-per-trade sizing against the P1 stop distance, contract multiplier, and a margin cap).
-Contract specs (multiplier/tick/margin_rate) for AP/RB/SC/A/ZN were sourced and cited from the
-exchanges' own published contract rules during design (2026-07-11) — see the design doc §2 for
-citations; do not alter these numbers without a new citation.
+Three independent defects were found in the SimNow observation pipeline, all downstream of the
+same root pattern — a diagnostic silently substitutes a synthetic or placeholder value for a real
+measurement without labeling the substitution:
 
-Single source of truth: `docs/design/a40-real-position-sizing.md`.
+1. `simnow_daily_capture.py:234-259` (`build_risk`) emits an all-zero risk block for every
+   genuinely risk-relevant field; `simnow_daily_monitor.py:380` prioritizes this placeholder over
+   the replay-computed real risk via Python truthiness (a dict of zeros is still truthy).
+2. `simnow_strategy_surface.py:58-76` constructs the "live" comparison surface **from the replay
+   itself**, windowed to the capture's timestamps; genuinely-captured CTP callbacks are confined
+   to `raw.*` and never promoted to the fields the consistency check actually compares — so that
+   check can only prove windowing-logic self-consistency, never real captured-session agreement.
+3. `simnow_tick_bars.py:159-202` (`upsert_bars_to_sqlite`) writes SimNow-derived ticks directly
+   into `{symbol}_1M_raw` — the exact tables `BacktestEngine` reads for every historical
+   backtest — via `INSERT OR REPLACE` with no staging step, no dry-run, no promotion gate.
+
+Single source of truth: `docs/design/a41-simnow-authenticity-fix.md`.
 
 ## Goal
 
-Implement: `Position` gains `volume` (default 1) and `contract_multiplier` (default 1); under
-`sizing_model="risk"`, opens are sized by
-`floor(equity_at_entry * risk_per_trade_pct / (stop_distance * multiplier))`, skip (no forced
-1-lot floor) when that's `< 1`, and capped by `max_margin_pct` of equity (reduce or skip);
-`pairs` gain `pnl_currency`. `BacktestEngine` threads `equity_at_entry`/margin state into opens
-under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop is untouched.
+Ship three independent fixes to the SimNow diagnostics layer only (no order/cancel/send path
+changes, no `chan_strategy/` runtime changes): (1) a labeled risk-source selection
+(`select_risk_metrics`) that never lets a known-placeholder `simnow.risk` block silently satisfy
+a warning/halt threshold (new `"unproven"` status when only the placeholder is available); (2) a
+`build_strategy_surface_from_captured_session` path using the session's own captured
+trades/positions, with the consistency check reporting `"unavailable"` (never a pass) when only
+replay-derived data exists; (3) staged K-line writes (`{symbol}_1M_raw_staging` by default,
+promotion via an explicit `dry_run=False` call only). All three new defaults **change today's
+unsafe behavior** — a deliberate deviation from the usual default-off house style, justified in
+design §2's "Default-justification note" because today's behavior is a silent bug in a safety
+gate, not a conservative baseline.
 
 ## Acceptance Criteria
 
-- [x] `STRATEGY_CONFIG["sizing_model"]` (`"research"` default | `"risk"`),
-      `risk_per_trade_pct` (0.005), `max_margin_pct` (0.50), `equity_mode` (`"fixed"`), and
-      `contract_specs` (AP888/RB888/SC888/A888/ZN888, each with `multiplier`/`tick`/
-      `margin_rate` and an inline source citation comment) exist in `config.py`.
-- [x] Research equivalence: with `sizing_model="research"`, the equity curve and every
-      `Position.pairs` entry's `pnl_pct`/`open_price`/`close_price`/`bars_held`/`reason` are
-      byte-identical to the pre-A40 baseline on >=2 symbols x 1 year (empty diff). `volume`/
-      `pnl_currency` may be present but equal `1`/`pnl_pct * entry_price` and are not read by any
-      existing report/diagnostic code path.
-- [x] Risk sizing (unit): given a fixture, `volume == floor(risk_amount/(stop_distance*
-      multiplier))` exactly, long and short.
-- [x] Zero-size skip: `raw_volume < 1` skips the open entirely (no `pairs`/`trades` entry, no
-      forced 1-lot floor); increments a `size_zero_skip` counter.
-- [x] Margin cap: a fixture whose sized `volume` breaches `equity_at_entry * max_margin_pct`
-      reduces to the largest lot count that fits (>=1), else skips (`margin_cap_skip` counter).
-- [x] Currency PnL: `pnl_currency == (exit-entry)*volume*multiplier*sign -
-      (2*commission_rate+slippage)*entry*volume*multiplier`, long and short, within float
-      tolerance.
-- [x] No-lookahead: `equity_at_entry`/margin-cap decisions read only bars up to and including the
-      entry bar; `BacktestEngine.run` step ordering unchanged beyond new optional sizing params.
-- [x] Report header (and risk-mode equity-curve rows) print `sizing_model` and (risk mode)
-      `total_open_margin`/`margin_utilization_pct`.
-- [x] No threshold tuned via backtest selection; no pre-2026-04-24 data used for any parameter
-      choice; no SimNow order/cancel/send paths changed; no new `send_order`/`cancel_order`/
-      `buy`/`sell`/`short`/`cover` calls.
-
-### Addendum (2026-07-11, post independent read-only audit — see design doc §7a for full rationale)
-
-- [x] AC-A40-9: one new command produces a single git-tracked report showing, for the same
-      backtest run, real sizing (a), A38 stop-execution mode + touch-vs-close exit counts (b),
-      and whether a SimNow replay risk caliber was consulted (c) — `"status":
-      "not_available_pending_A41"` if A41 hasn't landed, never a fabricated number.
-- [x] AC-A40-10: no judgment this report derives from `simnow_daily_capture.py`'s `build_risk()`
-      output may treat its hardcoded-zero fields as a real measurement; a `simnow.risk`-sourced
-      figure must be labelled `"risk_source": "simnow_capture_placeholder"` vs
-      `"replay_computed"` and a placeholder zero must never silently satisfy a warning/halt
-      threshold.
-- [x] AC-A40-11: a test/report section confirms the risk-mode `stop_distance` sizing denominator
-      is the same value A38's `stop_execution_model="intrabar"` actually uses to trigger an exit.
-- [x] AC-A40-12: a dedicated test exercises `sizing_model="risk"` + `stop_execution_model=
-      "intrabar"` together (long+short), asserting `pnl_currency` on a touch-based exit uses the
-      actual touched stop price, not `bar.close`.
-- [x] AC-A40-13: the AC-A40-9 report carries the RESEARCH-ONLY banner and states its PnL/margin
-      figures use exchange-*minimum* margin rates, not production-ready numbers.
-
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
-      pass.
-- [x] `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
-      passes (or the Manual-verification accommodation in `.synccheck.yml`/HANDOFF.md applies if
+- [ ] `SIMNOW_MONITOR_CONFIG` exists with `risk_priority` (`"replay_first"` default |
+      `"legacy_simnow_first"`), `consistency_source_mode` (`"require_captured"` default |
+      `"replay_derived_allowed"`), `kline_write_mode` (`"staging"` default | `"direct"`, gated by
+      an additional `--allow-direct-write` CLI flag).
+- [ ] `select_risk_metrics` returns `(dict, risk_source_label)`; a fixture where `simnow.risk` is
+      the known all-zero placeholder shape and `replay.risk` has nonzero fields returns
+      `replay.risk`/`"replay_computed"` under the default mode; the same fixture under
+      `"legacy_simnow_first"` reproduces today's exact old behavior (returns the placeholder) for
+      A/B diffing.
+- [ ] `evaluate_thresholds`/`make_record` never report `record["status"] == "pass"` when
+      `risk_source == "simnow_capture_placeholder"` was the only available source (unit test with
+      a fixture that would have passed under old behavior and must not pass under new).
+- [ ] `build_strategy_surface_from_captured_session` exists and is exercised by a fixture using
+      `capture["captured"]["trades"/"positions"]` (not replay-derived) as the comparison basis;
+      `compare_simnow_replay` under `consistency_source_mode="require_captured"` returns
+      `status="unavailable"` (never `matched=True`/`False` treated as a pass) for a fixture whose
+      surface `meta.source != "captured_session"`.
+- [ ] `record["status"]` is never `"pass"` when `consistency["status"] == "unavailable"` (unit
+      test).
+- [ ] `simnow_tick_bars.py` under default `kline_write_mode="staging"` writes only to
+      `{symbol}_1M_raw_staging`, never touches `{symbol}_1M_raw`; a test asserts `{symbol}_1M_raw`
+      row count is unchanged after an `upsert_bars_to_sqlite` call under the default mode.
+- [ ] `promote_staged_bars(dry_run=True)` (default) writes nothing and returns a diff summary;
+      `promote_staged_bars(dry_run=False)` (requires explicit `--promote --no-dry-run`) performs
+      the `INSERT OR REPLACE` and only after that call does `{symbol}_1M_raw` change.
+- [ ] Before/after diff proving the new defaults change unsafe old output: a fixture-based test
+      (or a recorded before/after report pair, git-tracked) demonstrates at least one concrete
+      case per finding where `"legacy_*"`/`"direct"` mode would have produced a `"pass"`/silent-
+      write outcome that the new default mode correctly downgrades to
+      `"unproven"`/`"unavailable"`/staged-not-promoted.
+- [ ] Every new/modified report emitted by `simnow_daily_monitor.py` carries the
+      `Diagnostic only, not a trading recommendation.` (RESEARCH-ONLY) banner.
+- [ ] No SimNow order/cancel/send path changed (grep diff — none added); no threshold value
+      tuned via backtest/capture-data selection; no pre-2026-04-24 data used for any parameter
+      choice.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+      pass (or the Manual-verification accommodation in `.synccheck.yml`/HANDOFF.md applies if
       the codex-sandbox symlink limitation is still unresolved at review time).
-
-## Manual verification (symlink-privilege sandbox limitation)
-
-(claude-code, 2026-07-11 — see `.synccheck.yml` NOTE above the `review` command for the full
-root-cause writeup; codex should trust this block for these two items instead of re-running them)
-
-Root cause (unchanged from A39; relogin/reboot to activate Developer Mode has not happened yet):
-codex exec's sandbox cannot create Windows symlinks, and pytest's `tmp_path` fixture creates a
-"-current" symlink per temp dir, so tmp_path setup fails with `PermissionError [WinError 5]`
-regardless of `--add-dir`. Manually verified in this unsandboxed session:
-
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **402 passed,
-  4 deselected** (2026-07-11, this session).
-- `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
-  -> **Preflight complete** (2026-07-11, this session).
-
-Everything else (diffs, `sync_check` gates, guardrail scans, deliverable tracking, report content
-correctness) should still be verified normally by review. Remove this block once a review round
-passes both commands cleanly inside the sandbox again (post-relogin).
 
 ## Notes for the Next Agent
 
-(review = codex, 2026-07-11)
-
-Review rejected on A40 acceptance:
-
-1. AC-A40-9 requires the generated position-sizing report to be git-tracked. The file
-   `examples/czsc_strategy/diagnostics/position_sizing_report_risk_2023-01-01_2025-12-31.json`
-   exists locally but is ignored and absent from `git ls-files`. Root cause: `.gitignore` unignores
-   `position_sizing_report_*.json` at lines 82-83, but the later
-   `examples/czsc_strategy/diagnostics/` rule at line 110 re-ignores the directory. Fix the ignore
-   ordering/rules and commit the report artifact, or explicitly `git add -f` it.
-2. The AC-A40-9 report's stop-exit summary is internally inconsistent:
-   `touch_based_stop_exits=0`, `gap_fill_stop_exits=0`, `close_based_stop_exits=34`, but
-   `total_stop_exits=47`. In `run_position_sizing_report.py`, `summary["total_stop_exits"] +=`
-   the cumulative component totals inside the per-symbol loop, double-counting earlier symbols.
-   Set the total once from the final component counts, or increment it only per trade.
-
-Verification notes from this review:
-- `python tools/sync_check.py` passed.
-- `python tools/sync_check.py --root examples/czsc_strategy` passed.
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` failed with the documented
-  sandbox `tmp_path` / `pytest-of-Admin` `PermissionError [WinError 5]` signature after 313 passed,
-  4 deselected, 89 setup errors; no `Manual verification` block was present in `HANDOFF.md`.
-- `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
-  failed with the same documented sandbox signature after 110 passed and 34 setup errors.
-
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a40-real-position-sizing.md`. Full dev prompt in design §8.
-2. **`contract_specs` numbers are sourced, not placeholders — do not alter them.** AP888
-   multiplier=10/tick=1.0/margin_rate=0.07; RB888 multiplier=10/tick=1.0/margin_rate=0.05; SC888
-   multiplier=1000/tick=0.1/margin_rate=0.05; A888 multiplier=10/tick=1.0/margin_rate=0.05; ZN888
-   multiplier=5/tick=5.0/margin_rate=0.05. Citations in design §2 and §9 (exchange source URLs).
-   These are **exchange minimum** margin rates, not production/broker rates — design §6 makes
-   this explicit; don't "fix" it by adding a markup, that's out of scope.
-3. **Sizing formula (design §3.1):** `stop_distance = price * stop_loss / 10000` (the Position's
-   own nominal stop BP, same one P1's touch-based stop uses); `risk_amount = equity_at_entry *
-   risk_per_trade_pct`; `raw_volume = risk_amount / (stop_distance * multiplier)`;
-   `volume = floor(raw_volume)`; **no forced 1-lot floor** — `raw_volume < 1` skips the open.
-   Margin cap (step 5) can further reduce or skip.
-4. **`"research"` must stay byte-identical** — same default-off discipline as every prior phase
-   (A37/A38/A39). Only `"risk"` mode changes `Position`'s open-sizing and `BacktestEngine`'s
-   equity computation; the existing fixed-weight loop must be untouched under `"research"`.
-5. **`pnl_currency` is additive, not a replacement** — `pnl_pct` stays exactly as-is (every
-   existing diagnostic keys off it); `pnl_currency` is a new field on `pairs`.
-6. **Guardrails (reject-on-violation):** no tuning `risk_per_trade_pct`/`max_margin_pct` via
-   backtest results; no pre-2026-04-24 data for any selection; no SimNow order paths; no
-   `GOAL PASSED`.
-7. **Known environment accommodation:** if the pytest/preflight acceptance commands hit the
-   documented codex-sandbox Windows-symlink limitation during review, that's covered by the
-   standing Manual-verification accommodation already in `.synccheck.yml` (see the NOTE above the
-   `review` command) — not something dev needs to fix.
-8. **Addendum (AC-A40-9..13, design §7a):** added after an independent read-only 3-way audit,
-   before any dev work started. Build one new unified report script
-   (`diagnostics/run_position_sizing_report.py`) joining real sizing + A38 stop-execution mode +
-   a SimNow-risk-caliber placeholder field; label any risk figure sourced from
-   `simnow_daily_capture.py`'s known-placeholder `build_risk()` output so it can never silently
-   satisfy a threshold (that root cause is A41's job — this only guards A40's own new report);
-   add a stop-distance cross-check against A38 and a sizing×intrabar-stop interaction test.
-9. Finish with the four acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A40 P3 real position sizing implemented"`.
+1. **Entry point:** `docs/design/a41-simnow-authenticity-fix.md`. Full dev prompt in design §8.
+2. **This is diagnostics-layer-only work** — `examples/czsc_strategy/diagnostics/
+   simnow_daily_capture.py`, `simnow_daily_monitor.py`, `simnow_strategy_surface.py`,
+   `simnow_tick_bars.py`, plus a new `simnow_monitor_config.py`. Do not touch `chan_strategy/`
+   runtime (positions.py/backtest_engine.py/config.py) or SimNow order/cancel/send paths — none
+   of the three findings are there.
+3. **Why the defaults change unsafe behavior (design §2):** unlike every prior phase's
+   default-off discipline, all three new switches default to the *safe* mode, not the
+   *current* mode, because current behavior is a silent correctness bug in a safety gate (a risk
+   check that can never fire from real risk; a consistency check that structurally cannot prove
+   what it claims; a raw write path with no undo). The `"legacy_*"`/`"direct"` opt-outs exist
+   purely for A/B diffing — do not make them the default.
+4. **Core discipline: never silently default to "pass".** A diagnostic that cannot verify
+   something must report `"unavailable"`/`"unproven"`/`"pending"`. This is the single
+   load-bearing behavior change — `make_record`'s `record["status"]` computation must be updated
+   so both new non-authoritative states (placeholder-risk-only, replay-derived-only-consistency)
+   force it away from `"pass"`.
+5. **Staging is the highest blast-radius fix** — `kline_write_mode="direct"` requires an
+   *additional* explicit `--allow-direct-write` CLI flag on top of the config override
+   (belt-and-suspenders), since a bad write here corrupts the exact tables every historical
+   backtest reads.
+6. **Guardrails (reject-on-violation):** no tuning any threshold via captured/backtest data; no
+   pre-2026-04-24 data for any selection; no SimNow order/cancel/send paths; RESEARCH-ONLY
+   banner on every report; no `GOAL PASSED`.
+7. **Known environment accommodation:** if pytest/preflight hit the documented codex-sandbox
+   Windows-symlink limitation during review, that's covered by the standing Manual-verification
+   accommodation in `.synccheck.yml` — not something dev needs to fix. Add a fresh
+   Manual-verification block to this task's `HANDOFF.md` if/when it's needed (each task carries
+   its own; it doesn't persist automatically — see A40's history).
+8. Finish with the four acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A41 SimNow authenticity fix implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-11 - A40 started after A39 reached `done`; scope = roadmap P3 (real position sizing),
-  promoted from A38's placeholder contract to a fully-specified standalone design.
-- 2026-07-11 - Sourced real exchange contract specs (multiplier/tick/margin_rate) for
-  AP/RB/SC/A/ZN via web search against the exchanges' own published contract rules, replacing
-  A38's explicitly-illustrative placeholder numbers, per that document's own instruction ("dev
-  MUST replace with cited exchange spec, do not fabricate") — done at design time instead of
-  leaving it to dev, since sourcing authoritative numbers is a research task better done once by
-  the design owner than repeated/guessed by dev.
-- 2026-07-11 - Sizing keys off the Position's own nominal stop_loss BP (P1's stop distance) as
-  the risk-budget denominator, not a separately-computed ATR, to keep sizing consistent with the
-  stop that actually bounds the trade's loss (an ATR-based stop distance is a different, larger
-  change belonging to a future exit-model task, not P3).
-- 2026-07-11 - `pnl_currency` is additive alongside the existing `pnl_pct`, not a replacement,
-  so no existing report/diagnostic code needs to change to consume A40's default (`"research"`)
-  output.
-- 2026-07-11 - Added acceptance-criteria addendum (AC-A40-9..13) after an independent read-only
-  3-way subagent audit found A40 in isolation would not close the real gap: a return/drawdown
-  number isn't trustworthy until real sizing, the actual A38 stop distance, and SimNow risk
-  observation are jointly reconciled in one report, and that report can't be fooled by a known
-  zero-placeholder risk value (`simnow_daily_capture.py`'s `build_risk()` — root-cause fix is a
-  new task, A41; A40 only has to not be undermined by it). Applied before dev started (no rework
-  needed) — reverted stage to `design` momentarily to make this edit honestly, then re-advanced
-  to `dev`. Full audit produced two further follow-on task plans (A41 SimNow authenticity fix,
-  A42 sync-guardian hardening) — not started as HANDOFF tasks yet, pending sequencing decision.
-- 2026-07-11 (review reject) - codex found: (1) the AC-A40-9 report JSON wasn't git-tracked
-  (`.gitignore`'s `!position_sizing_report_*.json` negation is structurally dead — a later
-  blanket `examples/czsc_strategy/diagnostics/` ignore rule always wins for files not already
-  tracked; this mirrors several other pre-existing negation lines in the same block that only
-  "work" for legacy already-tracked files. Not a new bug kimi introduced — left `.gitignore`
-  as-is and will `git add -f` the regenerated report at commit time instead, matching the
-  established A37-A40 pattern); (2) `run_position_sizing_report.py`'s stop-exit summary
-  double-counts `total_stop_exits` inside the per-symbol loop (real bug, dev to fix); (3) no
-  Manual-verification block existed for this task yet (added above, matching the A39 pattern —
-  each task's `HANDOFF.md` carries its own current block, it doesn't persist automatically).
-- 2026-07-11 (dev fix) - kimi-code fixed the two review-reject issues: (1) regenerated the
-  AC-A40-9 report for AP888/ZN888 2023-01-01~2025-12-31 and `git add -f`'d the artifact so it
-  is tracked despite the dead `.gitignore` negation; (2) corrected `total_stop_exits` to be
-  computed once from final component counts after the per-symbol loop, eliminating the
-  cumulative double-count; (3) also cleaned `_open_long`/`_open_short` to return immediately on
-  a sized `volume < 1` without resetting `volume` to 1, reinforcing the "no forced 1-lot floor"
-  semantics. All unit tests, both sync checks, and the preflight pass.
+- 2026-07-11 - A41 promoted from DRAFT to an active HANDOFF task after A40 reached `done`,
+  matching the user's chosen sequencing ("先完成 A40 再依次 A41→A42"). Re-verified all four
+  cited file:line targets are unchanged since the draft was written — A40's changes were scoped
+  entirely to `chan_strategy/`, no drift in `diagnostics/simnow_*.py`.
+- 2026-07-11 (design, original) - Chose safe-by-default (not current-behavior-by-default)
+  switches for all three fixes, a deliberate deviation from the A37-A40 house style, because
+  today's behavior in each case is a silent bug in a safety gate rather than a conservative
+  baseline worth preserving as the default.
+- 2026-07-11 (design, original) - Scoped strictly to the diagnostics layer; does not attempt to
+  fix `build_risk()`'s zero placeholders at the source (would need portfolio-level context the
+  live capture doesn't have) — only ensures downstream code never mistakes the placeholder for a
+  real measurement.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-11 | codex → claude-code | done → design | A40 (P3) real position sizing started |
-| 2026-07-11 | claude-code → kimi-code | design → dev | A40 design complete: P3 real position sizing spec with cited exchange contract specs (AP/RB/SC/A/ZN) |
-| 2026-07-11 | claude-code → claude-code | dev → design (self-revisit) | Reverted stage to design before dev started, to add acceptance-criteria addendum AC-A40-9..13 after an independent read-only 3-way audit |
-| 2026-07-11 | claude-code → kimi-code | design → dev | A40 design addendum: AC-A40-9..13 (unified report, no zero-placeholder risk, A38 stop-distance cross-check, sizing x intrabar-stop interaction) after independent audit |
-| 2026-07-11 | kimi-code → codex | dev → review | A40 P3 real position sizing implemented |
-| 2026-07-11 | codex → kimi-code | review → dev | 打回: A40 report artifact is ignored/untracked and stop-exit total is inconsistent |
-| 2026-07-11 | kimi-code → codex | dev → review | A40 P3 real position sizing implemented (review-reject fixes: git-tracked report + stop-exit total consistency) |
+| 2026-07-11 | codex → claude-code | done → design | A41 promoted from draft to active task after A40 reached done |
+| 2026-07-11 | claude-code → kimi-code | design → dev | A41 promoted from draft to active task; re-verified no drift from A40 |
