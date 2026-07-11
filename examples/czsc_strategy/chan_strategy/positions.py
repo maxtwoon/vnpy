@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 from enum import Enum
 from datetime import datetime
+from math import floor
 
 from czsc.objects import Direction
 
@@ -194,6 +195,21 @@ def _research_symbol_key(symbol: str) -> str:
     return str(symbol or "").upper().split(".")[0]
 
 
+def _research_contract_spec(symbol: str) -> dict:
+    """Return contract spec for a symbol, falling back to unit multiplier.
+
+    Keys are matched case-insensitively against STRATEGY_CONFIG['contract_specs'].
+    """
+    specs = STRATEGY_CONFIG.get("contract_specs") or {}
+    key = _research_symbol_key(symbol)
+    if key in specs:
+        return dict(specs[key])
+    # Fallback: try the raw upper-cased symbol as well.
+    if str(symbol or "").upper() in specs:
+        return dict(specs[str(symbol or "").upper()])
+    return {"multiplier": 1, "tick": 0.01, "margin_rate": 0.0}
+
+
 def _research_trailing_params(symbol: str) -> tuple[int, float]:
     """Return trailing params, optionally overridden per symbol for diagnostics."""
     overrides = STRATEGY_CONFIG.get("trailing_overrides") or {}
@@ -355,10 +371,16 @@ class Position:
         # 运行状态
         self.pos = 0  # 当前仓位
         self.cost = 0.0  # 持仓成本
+        self.volume = 1  # 持仓手数（A40; research=1, risk= sized lots）
+        self.contract_multiplier = 1  # 合约乘数（A40; research=1, risk=from spec）
         self.bars_since_open = 0  # 开仓后经过的K线数
         self.last_open_dt = None  # 最后开仓时间
         self.trades: List[TradeRecord] = []  # 交易记录
         self.pairs: List[dict] = []  # 配对交易
+
+        # A40 sizing skip counters
+        self.size_zero_skip = 0
+        self.margin_cap_skip = 0
 
         # 移动止损状态
         self.max_profit_bp = 0  # 持仓期间最大盈利(BP)
@@ -366,7 +388,9 @@ class Position:
 
     def update(self, signals_dict: dict, price: float, dt: datetime,
                bar_count: int = 1, execution_price: float = None,
-               bar_high: float = None, bar_low: float = None):
+               bar_high: float = None, bar_low: float = None,
+               equity_at_entry: float | None = None,
+               total_open_margin: float | None = None):
         """
         根据当前信号更新持仓状态
 
@@ -379,16 +403,18 @@ class Position:
         :param bar_high: 当根bar最高价（仅 stop_execution_model="intrabar" 时用于触价止损）
         :param bar_low: 当根bar最低价（仅 stop_execution_model="intrabar" 时用于触价止损）
                         为 None 时（旧调用方/close模型）固定止损回退到收盘价检查，保持基线一致
+        :param equity_at_entry: A40 risk-mode equity basis for lot sizing
+        :param total_open_margin: A40 risk-mode pre-open margin across all positions
         """
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
 
         if operate == Operate.LO and self.pos == 0:
-            self._open_long(trade_price, dt, event_name)
+            self._open_long(trade_price, dt, event_name, equity_at_entry, total_open_margin)
         elif operate == Operate.LC and self.pos > 0:
             self._close_long(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
         elif operate == Operate.SO and self.pos == 0:
-            self._open_short(trade_price, dt, event_name)
+            self._open_short(trade_price, dt, event_name, equity_at_entry, total_open_margin)
         elif operate == Operate.SC and self.pos < 0:
             self._close_short(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
 
@@ -526,65 +552,153 @@ class Position:
             return max(trigger, price) * (1 + penalty)
         return price
 
-    def _open_long(self, price: float, dt: datetime, reason: str = "开多"):
+    def _open_long(self, price: float, dt: datetime, reason: str = "开多",
+                   equity_at_entry: float | None = None,
+                   total_open_margin: float | None = None):
+        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+            self.volume, self.contract_multiplier = self._size_open(
+                price, equity_at_entry, total_open_margin
+            )
+            if self.volume < 1:
+                self.volume = 1
+                self.contract_multiplier = 1
+                return
+        else:
+            self.volume = 1
+            self.contract_multiplier = 1
+
         self.pos = 1
         self.cost = price
         self.bars_since_open = 0
         self.last_open_dt = dt
         self.max_profit_bp = 0
         self.trailing_active = False
-        self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, reason=reason))
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, volume=self.volume, reason=reason))
+
+    def _size_open(self, price: float, equity_at_entry: float | None,
+                   total_open_margin: float | None) -> Tuple[int, int]:
+        """Compute integer-lot size under A40 risk-mode sizing model.
+
+        Returns (volume, contract_multiplier).  volume < 1 means the open should be skipped.
+        """
+        spec = _research_contract_spec(self.symbol)
+        multiplier = int(spec.get("multiplier", 1))
+        margin_rate = float(spec.get("margin_rate", 0.0))
+
+        equity = equity_at_entry if equity_at_entry is not None else 0.0
+        risk_pct = STRATEGY_CONFIG.get("risk_per_trade_pct", 0.005)
+        max_margin_pct = STRATEGY_CONFIG.get("max_margin_pct", 0.50)
+
+        stop_distance = price * self.stop_loss / 10000
+        if stop_distance <= 0 or equity <= 0 or multiplier <= 0:
+            return 0, multiplier
+
+        risk_amount = equity * risk_pct
+        raw_volume = risk_amount / (stop_distance * multiplier)
+        volume = int(floor(raw_volume))
+        if volume < 1:
+            self.size_zero_skip += 1
+            return 0, multiplier
+
+        # Margin cap: reduce to the largest lot count that fits, or skip.
+        pre_open_margin = total_open_margin if total_open_margin is not None else 0.0
+        margin_cap = equity * max_margin_pct
+        required_margin_for_one = price * multiplier * margin_rate
+        if required_margin_for_one <= 0:
+            return volume, multiplier
+
+        if pre_open_margin + volume * required_margin_for_one > margin_cap:
+            max_fit = int(floor((margin_cap - pre_open_margin) / required_margin_for_one))
+            if max_fit >= 1:
+                volume = max_fit
+            else:
+                self.margin_cap_skip += 1
+                return 0, multiplier
+
+        return volume, multiplier
 
     def _close_long(self, price: float, dt: datetime, reason: str = ""):
         gross_pnl = (price - self.cost) / self.cost
         transaction_cost = 2 * self.commission_rate + self.slippage  # 开平两次手续费 + 滑点
         pnl = gross_pnl - transaction_cost
+        pnl_currency = (
+            (price - self.cost) * self.volume * self.contract_multiplier
+            - transaction_cost * self.cost * self.volume * self.contract_multiplier
+        )
         self.pairs.append({
             "open_dt": self.last_open_dt,
             "close_dt": dt,
             "open_price": self.cost,
             "close_price": price,
             "pnl_pct": pnl,
+            "pnl_currency": pnl_currency,
+            "volume": self.volume,
+            "contract_multiplier": self.contract_multiplier,
             "bars_held": self.bars_since_open,
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
         })
         self.pos = 0
         self.cost = 0
+        self.volume = 1
+        self.contract_multiplier = 1
         self.bars_since_open = 0
         self.max_profit_bp = 0
         self.trailing_active = False
-        self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, reason=reason))
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, volume=self.volume, reason=reason))
 
-    def _open_short(self, price: float, dt: datetime, reason: str = "开空"):
+    def _open_short(self, price: float, dt: datetime, reason: str = "开空",
+                    equity_at_entry: float | None = None,
+                    total_open_margin: float | None = None):
+        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+            self.volume, self.contract_multiplier = self._size_open(
+                price, equity_at_entry, total_open_margin
+            )
+            if self.volume < 1:
+                self.volume = 1
+                self.contract_multiplier = 1
+                return
+        else:
+            self.volume = 1
+            self.contract_multiplier = 1
+
         self.pos = -1
         self.cost = price
         self.bars_since_open = 0
         self.last_open_dt = dt
         self.max_profit_bp = 0
         self.trailing_active = False
-        self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, reason=reason))
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, volume=self.volume, reason=reason))
 
     def _close_short(self, price: float, dt: datetime, reason: str = ""):
         gross_pnl = (self.cost - price) / self.cost
         transaction_cost = 2 * self.commission_rate + self.slippage
         pnl = gross_pnl - transaction_cost
+        pnl_currency = (
+            (self.cost - price) * self.volume * self.contract_multiplier
+            - transaction_cost * self.cost * self.volume * self.contract_multiplier
+        )
         self.pairs.append({
             "open_dt": self.last_open_dt,
             "close_dt": dt,
             "open_price": self.cost,
             "close_price": price,
             "pnl_pct": pnl,
+            "pnl_currency": pnl_currency,
+            "volume": self.volume,
+            "contract_multiplier": self.contract_multiplier,
             "bars_held": self.bars_since_open,
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
         })
         self.pos = 0
         self.cost = 0
+        self.volume = 1
+        self.contract_multiplier = 1
         self.bars_since_open = 0
         self.max_profit_bp = 0
         self.trailing_active = False
-        self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, reason=reason))
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, volume=self.volume, reason=reason))
 
     def evaluate(self) -> dict:
         """评估策略绩效"""
@@ -1300,7 +1414,9 @@ class ChanTimingStrategy:
 
     def update(self, signals_dict: dict, price: float, dt: datetime,
                execution_price: float = None, czsc_obj=None,
-               bar_high: float = None, bar_low: float = None):
+               bar_high: float = None, bar_low: float = None,
+               equity_at_entry: float | None = None,
+               total_open_margin: float | None = None):
         """
         更新所有持仓子策略
 
@@ -1311,6 +1427,8 @@ class ChanTimingStrategy:
         :param czsc_obj: 可选的 CZSC 对象，用于补充一买锚点中的中枢信息
         :param bar_high: 当根bar最高价，透传给各子策略用于 intrabar 触价止损
         :param bar_low: 当根bar最低价，透传给各子策略用于 intrabar 触价止损
+        :param equity_at_entry: A40 risk-mode equity basis for lot sizing
+        :param total_open_margin: A40 risk-mode pre-open margin across all positions
         """
         # 记录日线趋势状态（便于验证日线过滤是否生效）
         self._log_daily_trend(signals_dict, dt)
@@ -1367,10 +1485,13 @@ class ChanTimingStrategy:
 
         # 一买和三买正常更新
         if buy1_pos.pos != 0 or _research_first_buy_allowed(self.symbol, signals_dict):
-            buy1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+            buy1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
         else:
-            buy1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
-        buy3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+            buy1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+        buy3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                        equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
 
         # 二买需要一买上下文: 仅当一买子策略有过历史交易记录或有一买锚点时才生效
         if buy1_pos.pairs or self.buy1_history:
@@ -1378,12 +1499,15 @@ class ChanTimingStrategy:
             # 研究参数只拦截新开仓，已有二买持仓仍接收退出/风控信号。
             trade_price = execution_price if execution_price is not None else price
             if buy2_pos.pos != 0 or _research_second_buy_allowed(self.symbol, self._last_buy1_anchor, trade_price):
-                buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+                buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
             else:
-                buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+                buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
         else:
             # 无一买上下文，二买仅执行风控（传空信号，不触发开仓）
-            buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+            buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
 
         if self.enable_short:
             sell1_pos = self.positions[3]  # 一卖子策略
@@ -1391,14 +1515,18 @@ class ChanTimingStrategy:
             sell3_pos = self.positions[5]  # 三卖子策略
 
             # 一卖和三卖正常更新
-            sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
-            sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+            sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+            sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
 
             # 二卖需要一卖上下文
             if sell1_pos.pairs or self.sell1_history:
-                sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+                sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
             else:
-                sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low)
+                sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
 
     def get_total_pos(self) -> int:
         """获取总仓位方向"""

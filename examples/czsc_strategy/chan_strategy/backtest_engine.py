@@ -189,6 +189,7 @@ class BacktestEngine:
         self.equity_curve = []
         self.signal_history = []
         self._cum_realized_pnl = {}
+        self._cum_realized_pnl_currency: dict[str, float] = {}
         self._pair_counts = {}
         self.trade_bars = []
         self.czsc_obj = None
@@ -273,16 +274,26 @@ class BacktestEngine:
               f"交易{len(trade_bars)-warmup_bars}根K线")
 
         pending_signals = None  # 上一根bar产生的待执行信号
+        sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
+        risk_mode = sizing_model == "risk"
 
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]
+
+            # Pre-update equity/margin for A40 risk-mode sizing (no lookahead).
+            # Uses bar.open, the same delayed-fill execution price used by opens.
+            equity_at_entry = None
+            total_open_margin = None
+            if risk_mode:
+                equity_at_entry, total_open_margin = self._compute_equity_and_margin(bar.open)
 
             # 1. 先执行上一根bar产生的待执行信号（用当根开盘价成交）
             if pending_signals is not None:
                 self.strategy.update(
                     pending_signals, bar.close, bar.dt,
                     execution_price=bar.open, czsc_obj=czsc_trade,
-                    bar_high=bar.high, bar_low=bar.low
+                    bar_high=bar.high, bar_low=bar.low,
+                    equity_at_entry=equity_at_entry, total_open_margin=total_open_margin,
                 )
                 pending_signals = None
             else:
@@ -290,7 +301,8 @@ class BacktestEngine:
                 # 传入空信号字典，只触发风控逻辑
                 # intrabar 触价止损用当根 bar 的 high/low（仅当前bar，无未来函数）
                 self.strategy.update({}, bar.close, bar.dt, czsc_obj=czsc_trade,
-                                     bar_high=bar.high, bar_low=bar.low)
+                                     bar_high=bar.high, bar_low=bar.low,
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
 
             # 2. 更新交易周期CZSC
             czsc_trade.update(bar)
@@ -327,59 +339,101 @@ class BacktestEngine:
             # 5. 存储信号，下一根bar再执行
             pending_signals = signals
 
-            # 计算当前权益（增量更新，避免每根bar遍历全部历史pairs）
-            pos_weights = {
-                "一买多头": STRATEGY_CONFIG.get("pos_1buy", 0.10),
-                "二买多头": STRATEGY_CONFIG.get("pos_2buy", 0.20),
-                "三买多头": STRATEGY_CONFIG.get("pos_3buy", 0.30),
-                "一卖空头": STRATEGY_CONFIG.get("pos_1sell", 0.10),
-                "二卖空头": STRATEGY_CONFIG.get("pos_2sell", 0.20),
-                "三卖空头": STRATEGY_CONFIG.get("pos_3sell", 0.30),
-            }
-            weight_symbol = self.table_name.split("_")[0] if self.table_name else self.symbol
-            pos_weights = _apply_symbol_position_overrides(pos_weights, weight_symbol)
-            total_pnl = 0
-            long_exposure = 0.0
-            short_exposure = 0.0
-            for pos in self.strategy.positions:
-                weight = pos_weights.get(pos.name, 0.10)
-                if pos.pos > 0:
-                    long_exposure += weight
-                elif pos.pos < 0:
-                    short_exposure += weight
-                prev_count = self._pair_counts.get(pos.name, 0)
-                curr_count = len(pos.pairs)
-                # 只有当 pair 数量增加时，才累加新增 pair 的盈亏
-                if curr_count > prev_count:
-                    new_pairs = pos.pairs[prev_count:curr_count]
-                    new_pnl = sum(p["pnl_pct"] for p in new_pairs) * self.initial_capital * weight
-                    self._cum_realized_pnl[pos.name] = self._cum_realized_pnl.get(pos.name, 0.0) + new_pnl
-                    self._pair_counts[pos.name] = curr_count
-                realized_pnl = self._cum_realized_pnl.get(pos.name, 0.0)
-                # 加入未实现盈亏
-                if pos.pos != 0 and pos.cost > 0:
+            if risk_mode:
+                # A40 real-money equity curve: incrementally track currency PnL,
+                # then compute equity and margin at this bar's close.
+                self._update_realized_currency()
+                equity, total_open_margin_now = self._compute_equity_and_margin(bar.close)
+                margin_utilization_pct = (
+                    total_open_margin_now / equity if equity > 0 else 0.0
+                )
+
+                long_exposure = 0.0
+                short_exposure = 0.0
+                for pos in self.strategy.positions:
+                    if pos.pos == 0 or pos.cost <= 0:
+                        continue
+                    spec = self._contract_spec_for_position(pos)
+                    multiplier = int(spec.get("multiplier", 1))
+                    notional = pos.volume * pos.cost * multiplier
+                    if equity > 0:
+                        if pos.pos > 0:
+                            long_exposure += notional / equity
+                        else:
+                            short_exposure += notional / equity
+
+                net_exposure = long_exposure - short_exposure
+                gross_exposure = long_exposure + short_exposure
+
+                self.equity_curve.append({
+                    "dt": bar.dt,
+                    "price": bar.close,
+                    "equity": equity,
+                    "positions": sum(p.pos for p in self.strategy.positions),
+                    "long_exposure": long_exposure,
+                    "short_exposure": short_exposure,
+                    "net_exposure": net_exposure,
+                    "gross_exposure": gross_exposure,
+                    "both_long_short": long_exposure > 0 and short_exposure > 0,
+                    "sizing_model": sizing_model,
+                    "total_open_margin": total_open_margin_now,
+                    "margin_utilization_pct": margin_utilization_pct,
+                })
+            else:
+                # 计算当前权益（增量更新，避免每根bar遍历全部历史pairs）
+                pos_weights = {
+                    "一买多头": STRATEGY_CONFIG.get("pos_1buy", 0.10),
+                    "二买多头": STRATEGY_CONFIG.get("pos_2buy", 0.20),
+                    "三买多头": STRATEGY_CONFIG.get("pos_3buy", 0.30),
+                    "一卖空头": STRATEGY_CONFIG.get("pos_1sell", 0.10),
+                    "二卖空头": STRATEGY_CONFIG.get("pos_2sell", 0.20),
+                    "三卖空头": STRATEGY_CONFIG.get("pos_3sell", 0.30),
+                }
+                weight_symbol = self.table_name.split("_")[0] if self.table_name else self.symbol
+                pos_weights = _apply_symbol_position_overrides(pos_weights, weight_symbol)
+                total_pnl = 0
+                long_exposure = 0.0
+                short_exposure = 0.0
+                for pos in self.strategy.positions:
+                    weight = pos_weights.get(pos.name, 0.10)
                     if pos.pos > 0:
-                        unrealized_pnl = (bar.close - pos.cost) / pos.cost
-                    else:
-                        unrealized_pnl = (pos.cost - bar.close) / pos.cost
-                    realized_pnl += unrealized_pnl * self.initial_capital * weight
-                total_pnl += realized_pnl
+                        long_exposure += weight
+                    elif pos.pos < 0:
+                        short_exposure += weight
+                    prev_count = self._pair_counts.get(pos.name, 0)
+                    curr_count = len(pos.pairs)
+                    # 只有当 pair 数量增加时，才累加新增 pair 的盈亏
+                    if curr_count > prev_count:
+                        new_pairs = pos.pairs[prev_count:curr_count]
+                        new_pnl = sum(p["pnl_pct"] for p in new_pairs) * self.initial_capital * weight
+                        self._cum_realized_pnl[pos.name] = self._cum_realized_pnl.get(pos.name, 0.0) + new_pnl
+                        self._pair_counts[pos.name] = curr_count
+                    realized_pnl = self._cum_realized_pnl.get(pos.name, 0.0)
+                    # 加入未实现盈亏
+                    if pos.pos != 0 and pos.cost > 0:
+                        if pos.pos > 0:
+                            unrealized_pnl = (bar.close - pos.cost) / pos.cost
+                        else:
+                            unrealized_pnl = (pos.cost - bar.close) / pos.cost
+                        realized_pnl += unrealized_pnl * self.initial_capital * weight
+                    total_pnl += realized_pnl
 
-            equity = self.initial_capital + total_pnl
-            net_exposure = long_exposure - short_exposure
-            gross_exposure = long_exposure + short_exposure
+                equity = self.initial_capital + total_pnl
+                net_exposure = long_exposure - short_exposure
+                gross_exposure = long_exposure + short_exposure
 
-            self.equity_curve.append({
-                "dt": bar.dt,
-                "price": bar.close,
-                "equity": equity,
-                "positions": sum(p.pos for p in self.strategy.positions),
-                "long_exposure": long_exposure,
-                "short_exposure": short_exposure,
-                "net_exposure": net_exposure,
-                "gross_exposure": gross_exposure,
-                "both_long_short": long_exposure > 0 and short_exposure > 0,
-            })
+                self.equity_curve.append({
+                    "dt": bar.dt,
+                    "price": bar.close,
+                    "equity": equity,
+                    "positions": sum(p.pos for p in self.strategy.positions),
+                    "long_exposure": long_exposure,
+                    "short_exposure": short_exposure,
+                    "net_exposure": net_exposure,
+                    "gross_exposure": gross_exposure,
+                    "both_long_short": long_exposure > 0 and short_exposure > 0,
+                    "sizing_model": sizing_model,
+                })
 
             # 进度提示
             if (i - warmup_bars) % 500 == 0 and i > warmup_bars:
@@ -391,6 +445,52 @@ class BacktestEngine:
 
         # 生成报告
         return self.generate_report()
+
+    def _compute_equity_and_margin(self, price: float) -> tuple[float, float]:
+        """Compute running equity and total open initial margin in currency terms.
+
+        Used by A40 risk-mode sizing and equity-curve reporting.  Reads only the
+        current open positions and closed pairs known up to this bar.
+        """
+        realized_pnl = 0.0
+        for pos in self.strategy.positions:
+            realized_pnl += self._cum_realized_pnl_currency.get(pos.name, 0.0)
+
+        unrealized_pnl = 0.0
+        total_open_margin = 0.0
+        for pos in self.strategy.positions:
+            if pos.pos == 0 or pos.cost <= 0:
+                continue
+            spec = self._contract_spec_for_position(pos)
+            multiplier = int(spec.get("multiplier", 1))
+            margin_rate = float(spec.get("margin_rate", 0.0))
+            notional = pos.volume * pos.cost * multiplier
+            if pos.pos > 0:
+                unrealized_pnl += (price - pos.cost) * pos.volume * multiplier
+            else:
+                unrealized_pnl += (pos.cost - price) * pos.volume * multiplier
+            total_open_margin += notional * margin_rate
+
+        equity = self.initial_capital + realized_pnl + unrealized_pnl
+        return equity, total_open_margin
+
+    def _contract_spec_for_position(self, pos) -> dict:
+        """Resolve A40 contract spec for a Position's symbol."""
+        from chan_strategy.positions import _research_contract_spec
+        return _research_contract_spec(pos.symbol)
+
+    def _update_realized_currency(self) -> None:
+        """Incrementally track closed-pair currency PnL for risk-mode accounting."""
+        for pos in self.strategy.positions:
+            prev_count = self._pair_counts.get(pos.name, 0)
+            curr_count = len(pos.pairs)
+            if curr_count > prev_count:
+                new_pairs = pos.pairs[prev_count:curr_count]
+                new_pnl = sum(p.get("pnl_currency", 0.0) for p in new_pairs)
+                self._cum_realized_pnl_currency[pos.name] = (
+                    self._cum_realized_pnl_currency.get(pos.name, 0.0) + new_pnl
+                )
+                self._pair_counts[pos.name] = curr_count
 
     @staticmethod
     def _freq_to_minutes(freq_name: str) -> int:
@@ -420,6 +520,7 @@ class BacktestEngine:
         report = {
             "symbol": self.symbol,
             "freq": self.freq,
+            "sizing_model": STRATEGY_CONFIG.get("sizing_model", "research"),
             "exit_event_semantics": STRATEGY_CONFIG.get("exit_event_semantics", "legacy"),
             "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model", "close"),
             "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
@@ -435,6 +536,17 @@ class BacktestEngine:
         report["max_short_exposure"] = max((e.get("short_exposure", 0.0) for e in self.equity_curve), default=0.0)
         report["max_gross_exposure"] = max((e.get("gross_exposure", 0.0) for e in self.equity_curve), default=0.0)
         report["both_long_short_bars"] = sum(1 for e in self.equity_curve if e.get("both_long_short", False))
+
+        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+            report["max_total_open_margin"] = max(
+                (e.get("total_open_margin", 0.0) for e in self.equity_curve), default=0.0
+            )
+            report["max_margin_utilization_pct"] = max(
+                (e.get("margin_utilization_pct", 0.0) for e in self.equity_curve), default=0.0
+            )
+            report["final_total_open_margin"] = (
+                self.equity_curve[-1].get("total_open_margin", 0.0) if self.equity_curve else 0.0
+            )
 
         # 总体绩效
         all_pairs = self.strategy.get_combined_trades()
@@ -524,6 +636,7 @@ class BacktestEngine:
         print("=" * 60)
         print(f"标的: {report['symbol']}")
         print(f"频率: {report['freq']}")
+        print(f"仓位模型: {report.get('sizing_model', 'research')}")
         print(f"退出事件语义: {report.get('exit_event_semantics', 'legacy')}")
         print(f"回测区间: {report['period']}")
         print(f"K线总数: {report['total_bars']}")
@@ -549,6 +662,9 @@ class BacktestEngine:
         print(f"最大空头敞口: {report.get('max_short_exposure', 0)*100:.1f}%")
         print(f"最大总敞口: {report.get('max_gross_exposure', 0)*100:.1f}%")
         print(f"多空同时持仓bar数: {report.get('both_long_short_bars', 0)}")
+        if report.get('sizing_model') == "risk":
+            print(f"最大开仓保证金: {report.get('max_total_open_margin', 0):,.0f}")
+            print(f"最大保证金占用率: {report.get('max_margin_utilization_pct', 0)*100:.1f}%")
         print("-" * 60)
 
         # 子策略详情
@@ -563,8 +679,13 @@ class BacktestEngine:
                     print(f"  [{name}] 无交易")
 
         print("-" * 60)
-        print("注: 当前为信号研究模式（方向型仓位+事后加权），")
-        print("    未建模合约乘数/资金上限/复利，仅评估信号有效性。")
+        if report.get('sizing_model') == "risk":
+            print("注: 当前为A40风险仓位模型（整数手+合约乘数+保证金上限）。")
+            print("    pnl_currency/保证金数字使用 contract_specs 中交易所最低保证金率，")
+            print("    仅为回测研究，不是生产可用资金分配建议。")
+        else:
+            print("注: 当前为信号研究模式（方向型仓位+事后加权），")
+            print("    未建模合约乘数/资金上限/复利，仅评估信号有效性。")
         print("=" * 60)
 
 

@@ -39,7 +39,8 @@ class FakeStrategy:
         self.update_count = 0
 
     def update(self, signals, price, dt, execution_price=None, czsc_obj=None,
-               bar_high=None, bar_low=None):
+               bar_high=None, bar_low=None, equity_at_entry=None,
+               total_open_margin=None):
         self.update_count += 1
         if self.update_count == 1:
             self.positions[0].pairs.append({"open_dt": dt, "close_dt": dt, "pnl_pct": 0.10, "bars_held": 1})

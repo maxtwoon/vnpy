@@ -1,19 +1,19 @@
 ---
 task: A40 Real Position Sizing (P3 - ATR-Risk Units + Contract Multiplier + Margin)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
   - docs/design/a40-real-position-sizing.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -173,3 +173,4 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
 | 2026-07-11 | claude-code → kimi-code | design → dev | A40 design complete: P3 real position sizing spec with cited exchange contract specs (AP/RB/SC/A/ZN) |
 | 2026-07-11 | claude-code → claude-code | dev → design (self-revisit) | Reverted stage to design before dev started, to add acceptance-criteria addendum AC-A40-9..13 after an independent read-only 3-way audit |
 | 2026-07-11 | claude-code → kimi-code | design → dev | A40 design addendum: AC-A40-9..13 (unified report, no zero-placeholder risk, A38 stop-distance cross-check, sizing x intrabar-stop interaction) after independent audit |
+| 2026-07-11 | kimi-code → codex | dev → review | A40 P3 real position sizing implemented |

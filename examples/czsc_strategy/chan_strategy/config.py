@@ -70,6 +70,29 @@ STRATEGY_CONFIG = {
     # "trading_calendar" maps night-session bars past midnight to the next trading day.
     "daily_agg": "natural",               # "natural" | "trading_calendar"
     "night_session_start_hour": 20,       # bars with hour >= this are evening-session bars
+
+    # A40 real position sizing (P3). "research" is the legacy byte-identical default;
+    # "risk" sizes integer lots from equity, stop distance, contract multiplier and margin cap.
+    "sizing_model": "research",           # "research" (legacy, default) | "risk"
+    "risk_per_trade_pct": 0.005,          # fraction of equity risked per trade (0.5%)
+    "max_margin_pct": 0.50,               # cap on total open initial margin vs equity
+    "equity_mode": "fixed",               # "fixed" (running realized+unrealized off initial_capital)
+                                          # | "compound" (documented, NOT implemented in A40)
+    "contract_specs": {
+        # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
+        # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.
+        # Sourced 2026-07-11 from the exchanges' own published contract rules.
+        "AP888": {"multiplier": 10,   "tick": 1.0, "margin_rate": 0.07},
+        # source: CZCE 苹果期货合约规则 (czce.com.cn/cn/rootfiles/2021/09/09/1605597612939463-1605597612959828.pdf)
+        "RB888": {"multiplier": 10,   "tick": 1.0, "margin_rate": 0.05},
+        # source: SHFE 螺纹钢期货合约(修订版) (shfe.com.cn/products/futures/metal/ferrousandpreciousmetal/rb_f/standard_rb_f/202312/t20231205_327324.html)
+        "SC888": {"multiplier": 1000, "tick": 0.1, "margin_rate": 0.05},
+        # source: INE/SHFE 原油期货标准合约(SC) (ine.com.cn/products/futures/energyandchemical/sc_f/standard_sc_f/202312/t20231205_802540.html)
+        "A888":  {"multiplier": 10,   "tick": 1.0, "margin_rate": 0.05},
+        # source: DCE 黄大豆1号(A)期货合约及交割要素 (dce.com.cn ... 附件3:各品种合约)
+        "ZN888": {"multiplier": 5,    "tick": 5.0, "margin_rate": 0.05},
+        # source: SHFE 锌期货合约(修订版) (shfe.com.cn/products/futures/metal/nonferrousmetal/zn_f/standard_zn_f/202312/t20231205_309038.html)
+    },
 }
 
 # 回测参数

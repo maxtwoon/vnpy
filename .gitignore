@@ -79,6 +79,8 @@ examples/czsc_strategy/diagnostics/*.json
 !examples/czsc_strategy/diagnostics/platform_final_candidate_config.json
 examples/czsc_strategy/diagnostics/*.md
 !examples/czsc_strategy/diagnostics/AUTOMATION_PROMPT.md
+!examples/czsc_strategy/diagnostics/run_position_sizing_report.py
+!examples/czsc_strategy/diagnostics/position_sizing_report_*.json
 !examples/czsc_strategy/diagnostics/ACCEPTANCE.md
 !examples/czsc_strategy/diagnostics/NEXT_WORK.md
 !examples/czsc_strategy/diagnostics/WORK_LOG.md
