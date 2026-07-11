@@ -72,6 +72,26 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
 - [ ] No threshold tuned via backtest selection; no pre-2026-04-24 data used for any parameter
       choice; no SimNow order/cancel/send paths changed; no new `send_order`/`cancel_order`/
       `buy`/`sell`/`short`/`cover` calls.
+
+### Addendum (2026-07-11, post independent read-only audit — see design doc §7a for full rationale)
+
+- [ ] AC-A40-9: one new command produces a single git-tracked report showing, for the same
+      backtest run, real sizing (a), A38 stop-execution mode + touch-vs-close exit counts (b),
+      and whether a SimNow replay risk caliber was consulted (c) — `"status":
+      "not_available_pending_A41"` if A41 hasn't landed, never a fabricated number.
+- [ ] AC-A40-10: no judgment this report derives from `simnow_daily_capture.py`'s `build_risk()`
+      output may treat its hardcoded-zero fields as a real measurement; a `simnow.risk`-sourced
+      figure must be labelled `"risk_source": "simnow_capture_placeholder"` vs
+      `"replay_computed"` and a placeholder zero must never silently satisfy a warning/halt
+      threshold.
+- [ ] AC-A40-11: a test/report section confirms the risk-mode `stop_distance` sizing denominator
+      is the same value A38's `stop_execution_model="intrabar"` actually uses to trigger an exit.
+- [ ] AC-A40-12: a dedicated test exercises `sizing_model="risk"` + `stop_execution_model=
+      "intrabar"` together (long+short), asserting `pnl_currency` on a touch-based exit uses the
+      actual touched stop price, not `bar.close`.
+- [ ] AC-A40-13: the AC-A40-9 report carries the RESEARCH-ONLY banner and states its PnL/margin
+      figures use exchange-*minimum* margin rates, not production-ready numbers.
+
 - [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
 - [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
@@ -107,7 +127,14 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
    documented codex-sandbox Windows-symlink limitation during review, that's covered by the
    standing Manual-verification accommodation already in `.synccheck.yml` (see the NOTE above the
    `review` command) — not something dev needs to fix.
-8. Finish with the four acceptance commands, then
+8. **Addendum (AC-A40-9..13, design §7a):** added after an independent read-only 3-way audit,
+   before any dev work started. Build one new unified report script
+   (`diagnostics/run_position_sizing_report.py`) joining real sizing + A38 stop-execution mode +
+   a SimNow-risk-caliber placeholder field; label any risk figure sourced from
+   `simnow_daily_capture.py`'s known-placeholder `build_risk()` output so it can never silently
+   satisfy a threshold (that root cause is A41's job — this only guards A40's own new report);
+   add a stop-distance cross-check against A38 and a sizing×intrabar-stop interaction test.
+9. Finish with the four acceptance commands, then
    `python tools/handoff.py next --actor kimi-code --summary "A40 P3 real position sizing implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
@@ -128,6 +155,15 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
 - 2026-07-11 - `pnl_currency` is additive alongside the existing `pnl_pct`, not a replacement,
   so no existing report/diagnostic code needs to change to consume A40's default (`"research"`)
   output.
+- 2026-07-11 - Added acceptance-criteria addendum (AC-A40-9..13) after an independent read-only
+  3-way subagent audit found A40 in isolation would not close the real gap: a return/drawdown
+  number isn't trustworthy until real sizing, the actual A38 stop distance, and SimNow risk
+  observation are jointly reconciled in one report, and that report can't be fooled by a known
+  zero-placeholder risk value (`simnow_daily_capture.py`'s `build_risk()` — root-cause fix is a
+  new task, A41; A40 only has to not be undermined by it). Applied before dev started (no rework
+  needed) — reverted stage to `design` momentarily to make this edit honestly, then re-advanced
+  to `dev`. Full audit produced two further follow-on task plans (A41 SimNow authenticity fix,
+  A42 sync-guardian hardening) — not started as HANDOFF tasks yet, pending sequencing decision.
 
 ## 交接历史
 
@@ -135,3 +171,5 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
 |------|---------|----------|------|
 | 2026-07-11 | codex → claude-code | done → design | A40 (P3) real position sizing started |
 | 2026-07-11 | claude-code → kimi-code | design → dev | A40 design complete: P3 real position sizing spec with cited exchange contract specs (AP/RB/SC/A/ZN) |
+| 2026-07-11 | claude-code → claude-code | dev → design (self-revisit) | Reverted stage to design before dev started, to add acceptance-criteria addendum AC-A40-9..13 after an independent read-only 3-way audit |
+| 2026-07-11 | claude-code → kimi-code | design → dev | A40 design addendum: AC-A40-9..13 (unified report, no zero-placeholder risk, A38 stop-distance cross-check, sizing x intrabar-stop interaction) after independent audit |

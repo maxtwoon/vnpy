@@ -226,6 +226,51 @@ exactly as-is, byte for byte.
       choice; no SimNow order/cancel/send paths changed; no new `send_order`/`cancel_order`/
       `buy`/`sell`/`short`/`cover` calls; every generated report keeps the RESEARCH-ONLY
       disclaimer where applicable.
+
+### 7a. Addendum (2026-07-11, post independent read-only audit)
+
+Closes the gap between "sizing math is unit-tested" and "A40 done means the full observable
+chain — sizing, the P1 stop that bounds the loss, and any SimNow risk observation — is jointly
+reconciled in one regenerable report, and that report cannot be fooled by a known-zero
+placeholder." See the audit's Finding #2 (`simnow_daily_capture.py`'s `build_risk()` emits an
+all-zero risk block that `simnow_daily_monitor.py:380` can silently prioritize over a real
+replay-computed risk figure) — A41 will fix that root cause; this addendum only makes sure A40's
+own new report can't be undermined by it in the meantime.
+
+- [ ] **AC-A40-9 (unified regenerated report).** One new command (e.g.
+      `python examples/czsc_strategy/diagnostics/run_position_sizing_report.py --symbols
+      AP888,RB888 --sizing-model risk`) produces a single git-tracked report (`git add -f`'d,
+      since `diagnostics/` is git-ignored) that shows, for the same backtest run: (a)
+      `sizing_model="risk"` position sizes and `pnl_currency` per closed trade, (b) the
+      `stop_execution_model` in effect and a count of touch-based vs close-based stop exits
+      (A38), and (c) whether a SimNow replay-derived risk caliber was consulted — if A41 has not
+      landed yet, this field must read `"status": "not_available_pending_A41"`, never a
+      fabricated number.
+- [ ] **AC-A40-10 (no zero-placeholder risk in any risk-derived judgment).** Any judgment this
+      report derives from `simnow_daily_capture.py`'s `build_risk()` output must not treat its
+      hardcoded-zero fields (`daily_return_pct`, `drawdown_pct`, `gross_exposure`,
+      `net_exposure`, `both_long_short_symbols`, `consecutive_loss`, `symbol_concentration`,
+      `strategy_concentration`) as a real "0.0 observed" measurement. A risk figure sourced from
+      `simnow.risk` must be labelled (`"risk_source": "simnow_capture_placeholder"` vs
+      `"replay_computed"`) and a placeholder-sourced zero must never silently satisfy a
+      warning/halt threshold. A40 does not need to fix the root cause (A41's job) — only ensure
+      its own new report isn't fooled by it.
+- [ ] **AC-A40-11 (contract-spec cross-check against A38 stop distance).** A test/report section
+      confirms that for every `contract_specs` symbol, the risk-mode sizing denominator
+      `stop_distance = price * stop_loss / 10000` is the *same* value A38's
+      `stop_execution_model="intrabar"` actually uses to trigger an exit — catching future drift
+      if `stop_loss` defaults change in one code path but not the other.
+- [ ] **AC-A40-12 (`sizing_model="risk"` × `stop_execution_model="intrabar"` interaction test).**
+      A dedicated test exercises both simultaneously (long and short fixtures), asserting
+      `pnl_currency` on a touch-based stop exit uses the actual touched stop price — not
+      `bar.close` — times the sized `volume`/`multiplier`. Without this, A38 and A40 could each
+      pass their own unit tests while never being exercised together.
+- [ ] **AC-A40-13 (unified report banner and scope statement).** The AC-A40-9 report carries the
+      `Diagnostic only, not a trading recommendation.` (RESEARCH-ONLY) banner and its header
+      states that `pnl_currency`/`total_open_margin`/`margin_utilization_pct` are backtest
+      research outputs under `contract_specs`' exchange-*minimum* margin rates (§6), not
+      production-ready capital-allocation numbers.
+
 - [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
 - [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
