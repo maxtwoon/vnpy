@@ -1,19 +1,19 @@
 ---
 task: A40 Real Position Sizing (P3 - ATR-Risk Units + Contract Multiplier + Margin)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-11
 deliverables:
   - HANDOFF.md
   - docs/design/a40-real-position-sizing.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -99,7 +99,51 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
       passes (or the Manual-verification accommodation in `.synccheck.yml`/HANDOFF.md applies if
       the codex-sandbox symlink limitation is still unresolved at review time).
 
+## Manual verification (symlink-privilege sandbox limitation)
+
+(claude-code, 2026-07-11 — see `.synccheck.yml` NOTE above the `review` command for the full
+root-cause writeup; codex should trust this block for these two items instead of re-running them)
+
+Root cause (unchanged from A39; relogin/reboot to activate Developer Mode has not happened yet):
+codex exec's sandbox cannot create Windows symlinks, and pytest's `tmp_path` fixture creates a
+"-current" symlink per temp dir, so tmp_path setup fails with `PermissionError [WinError 5]`
+regardless of `--add-dir`. Manually verified in this unsandboxed session:
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **402 passed,
+  4 deselected** (2026-07-11, this session).
+- `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
+  -> **Preflight complete** (2026-07-11, this session).
+
+Everything else (diffs, `sync_check` gates, guardrail scans, deliverable tracking, report content
+correctness) should still be verified normally by review. Remove this block once a review round
+passes both commands cleanly inside the sandbox again (post-relogin).
+
 ## Notes for the Next Agent
+
+(review = codex, 2026-07-11)
+
+Review rejected on A40 acceptance:
+
+1. AC-A40-9 requires the generated position-sizing report to be git-tracked. The file
+   `examples/czsc_strategy/diagnostics/position_sizing_report_risk_2023-01-01_2025-12-31.json`
+   exists locally but is ignored and absent from `git ls-files`. Root cause: `.gitignore` unignores
+   `position_sizing_report_*.json` at lines 82-83, but the later
+   `examples/czsc_strategy/diagnostics/` rule at line 110 re-ignores the directory. Fix the ignore
+   ordering/rules and commit the report artifact, or explicitly `git add -f` it.
+2. The AC-A40-9 report's stop-exit summary is internally inconsistent:
+   `touch_based_stop_exits=0`, `gap_fill_stop_exits=0`, `close_based_stop_exits=34`, but
+   `total_stop_exits=47`. In `run_position_sizing_report.py`, `summary["total_stop_exits"] +=`
+   the cumulative component totals inside the per-symbol loop, double-counting earlier symbols.
+   Set the total once from the final component counts, or increment it only per trade.
+
+Verification notes from this review:
+- `python tools/sync_check.py` passed.
+- `python tools/sync_check.py --root examples/czsc_strategy` passed.
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` failed with the documented
+  sandbox `tmp_path` / `pytest-of-Admin` `PermissionError [WinError 5]` signature after 313 passed,
+  4 deselected, 89 setup errors; no `Manual verification` block was present in `HANDOFF.md`.
+- `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`
+  failed with the same documented sandbox signature after 110 passed and 34 setup errors.
 
 (dev = kimi-code must read this before writing code)
 
@@ -164,6 +208,16 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
   needed) — reverted stage to `design` momentarily to make this edit honestly, then re-advanced
   to `dev`. Full audit produced two further follow-on task plans (A41 SimNow authenticity fix,
   A42 sync-guardian hardening) — not started as HANDOFF tasks yet, pending sequencing decision.
+- 2026-07-11 (review reject) - codex found: (1) the AC-A40-9 report JSON wasn't git-tracked
+  (`.gitignore`'s `!position_sizing_report_*.json` negation is structurally dead — a later
+  blanket `examples/czsc_strategy/diagnostics/` ignore rule always wins for files not already
+  tracked; this mirrors several other pre-existing negation lines in the same block that only
+  "work" for legacy already-tracked files. Not a new bug kimi introduced — left `.gitignore`
+  as-is and will `git add -f` the regenerated report at commit time instead, matching the
+  established A37-A40 pattern); (2) `run_position_sizing_report.py`'s stop-exit summary
+  double-counts `total_stop_exits` inside the per-symbol loop (real bug, dev to fix); (3) no
+  Manual-verification block existed for this task yet (added above, matching the A39 pattern —
+  each task's `HANDOFF.md` carries its own current block, it doesn't persist automatically).
 
 ## 交接历史
 
@@ -174,3 +228,4 @@ under `"risk"` mode only; `"research"` mode's existing fixed-weight equity loop 
 | 2026-07-11 | claude-code → claude-code | dev → design (self-revisit) | Reverted stage to design before dev started, to add acceptance-criteria addendum AC-A40-9..13 after an independent read-only 3-way audit |
 | 2026-07-11 | claude-code → kimi-code | design → dev | A40 design addendum: AC-A40-9..13 (unified report, no zero-placeholder risk, A38 stop-distance cross-check, sizing x intrabar-stop interaction) after independent audit |
 | 2026-07-11 | kimi-code → codex | dev → review | A40 P3 real position sizing implemented |
+| 2026-07-11 | codex → kimi-code | review → dev | 打回: A40 report artifact is ignored/untracked and stop-exit total is inconsistent |
