@@ -296,6 +296,14 @@ def build_export(
         # with replay portfolio exposures.
         "positions": [],
         "risk": build_risk(state),
+        # Genuinely captured CTP callbacks, distinct from the replay-derived
+        # enrichment path. These are the only trades/positions/orders that may
+        # be used to prove live-session agreement with replay.
+        "captured": {
+            "trades": trades,
+            "positions": list(state.positions.values()),
+            "orders": orders,
+        },
         "raw": {
             "logs": state.logs,
             "ticks": state.ticks,

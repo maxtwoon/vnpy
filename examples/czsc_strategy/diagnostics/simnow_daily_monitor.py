@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from simnow_action_summary import _record_reason, build_action_summary
+from simnow_monitor_config import SIMNOW_MONITOR_CONFIG
 from simnow_observation_rules import is_valid_observation
 from simnow_strategy_surface import filter_events_to_window
 
@@ -53,6 +54,72 @@ def _risk_root(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _abs_pct(value: float | int | None) -> float:
     return abs(float(value or 0.0))
+
+
+def _is_zero_placeholder_risk(risk: dict[str, Any]) -> bool:
+    """Return True when ``risk`` matches build_risk()'s known placeholder shape.
+
+    The live capture cannot compute genuine daily return, drawdown, exposure,
+    or concentration without portfolio-level context, so build_risk() hardcodes
+    these fields to zero. This function detects that specific placeholder so
+    downstream code never mistakes it for a real zero-risk measurement.
+    """
+    if not risk:
+        return True
+    consecutive = risk.get("consecutive_loss") or {}
+    symbol_conc = risk.get("symbol_concentration") or {}
+    strategy_conc = risk.get("strategy_concentration") or {}
+    checks = [
+        risk.get("daily_return_pct") in (0, 0.0, None),
+        risk.get("drawdown_pct") in (0, 0.0, None),
+        risk.get("gross_exposure") in (0, 0.0, None),
+        risk.get("net_exposure") in (0, 0.0, None),
+        risk.get("both_long_short_symbols") in (0, 0.0, None),
+        consecutive.get("days") in (0, 0.0, None),
+        consecutive.get("cumulative_return_pct") in (0, 0.0, None),
+        symbol_conc.get("top1_abs_share") in (0, 0.0, None),
+        strategy_conc.get("top1_abs_share") in (0, 0.0, None),
+    ]
+    return all(checks)
+
+
+def select_risk_metrics(
+    risk: dict[str, Any] | None,
+    simnow: dict[str, Any],
+    replay: dict[str, Any],
+    mode: str = "replay_first",
+) -> tuple[dict[str, Any], str]:
+    """Return (raw_risk_dict, risk_source_label).
+
+    Never silently prefers a known-placeholder simnow.risk block over a real
+    replay-computed one. ``mode`` is read from ``SIMNOW_MONITOR_CONFIG``.
+    """
+    if risk is not None:
+        return risk, "explicit_risk_json"
+    simnow_risk = simnow.get("risk") or {}
+    replay_risk = replay.get("risk") or {}
+    simnow_is_placeholder = _is_zero_placeholder_risk(simnow_risk)
+    if mode == "legacy_simnow_first":
+        chosen = simnow_risk or replay_risk or {}
+        if simnow_risk and simnow_is_placeholder:
+            return chosen, "simnow_capture_placeholder"
+        if simnow_risk:
+            return chosen, "simnow_capture"
+        if replay_risk:
+            return chosen, "replay_computed"
+        return chosen, "no_risk_available"
+    # mode == "replay_first" (new default): prefer replay-computed risk
+    # whenever simnow's own risk block is the known placeholder shape; a
+    # genuinely non-placeholder simnow.risk (future capture format upgrade)
+    # still wins over replay, since a real live measurement is more authoritative
+    # than a replay approximation.
+    if simnow_risk and not simnow_is_placeholder:
+        return simnow_risk, "simnow_capture"
+    if replay_risk:
+        return replay_risk, "replay_computed"
+    if simnow_risk:
+        return simnow_risk, "simnow_capture_placeholder"
+    return {}, "no_risk_available"
 
 
 def build_thresholds(baseline_payload: dict[str, Any], warning_ratio: float = 0.9) -> dict[str, Threshold]:
@@ -134,7 +201,11 @@ def normalize_daily_metrics(raw: dict[str, Any]) -> dict[str, float]:
     }
 
 
-def evaluate_thresholds(metrics: dict[str, float], thresholds: dict[str, Threshold]) -> dict[str, Any]:
+def evaluate_thresholds(
+    metrics: dict[str, float],
+    thresholds: dict[str, Threshold],
+    risk_source: str = "",
+) -> dict[str, Any]:
     rows = []
     status = "pass"
     for name, threshold in thresholds.items():
@@ -155,7 +226,11 @@ def evaluate_thresholds(metrics: dict[str, float], thresholds: dict[str, Thresho
             "level": level,
             "unit": threshold.unit,
         })
-    return {"status": status, "rows": rows}
+    # A known-placeholder risk block must never produce an authoritative "pass"
+    # on its own. Downgrade to "unproven" so make_record treats it as pending.
+    if risk_source == "simnow_capture_placeholder":
+        status = "unproven"
+    return {"status": status, "rows": rows, "risk_source": risk_source}
 
 
 def _event_key(event: dict[str, Any]) -> tuple[str, str, str, str]:
@@ -206,8 +281,29 @@ def _windowed_replay(simnow: dict[str, Any], replay: dict[str, Any]) -> dict[str
     return replay_copy
 
 
-def compare_simnow_replay(simnow: dict[str, Any], replay: dict[str, Any]) -> dict[str, Any]:
-    """Compare exported SimNow events with replay events on signal/trade/position surfaces."""
+def compare_simnow_replay(
+    simnow: dict[str, Any],
+    replay: dict[str, Any],
+    *,
+    source: str | None = None,
+    consistency_source_mode: str = "replay_derived_allowed",
+) -> dict[str, Any]:
+    """Compare exported SimNow events with replay events on signal/trade/position surfaces.
+
+    ``source`` is the strategy surface source (``captured_session`` for real
+    captured CTP callbacks, ``windowed_strategy_replay`` for replay-derived).
+    Under ``consistency_source_mode="require_captured"`` (the safe default),
+    only ``captured_session`` surfaces may produce a ``matched`` verdict;
+    replay-derived surfaces report ``status="unavailable"`` instead.
+    """
+    if source is None:
+        source = simnow.get("meta", {}).get("strategy_surface", {}).get("source") or "windowed_strategy_replay"
+    if consistency_source_mode == "require_captured" and source != "captured_session":
+        return {
+            "status": "unavailable",
+            "reason": "no_captured_session_data_only_replay_derived",
+            "details": {},
+        }
     replay = _windowed_replay(simnow, replay)
     replay_meta = replay.get("meta") or {}
     if replay_meta.get("replay_available") is False:
@@ -372,16 +468,25 @@ def make_record(
     kline: dict[str, Any] | None = None,
     risk: dict[str, Any] | None = None,
     thresholds: dict[str, Threshold] | None = None,
+    monitor_config: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     simnow = simnow or {}
     replay = replay or {}
     kline = kline or {}
+    monitor_config = monitor_config or dict(SIMNOW_MONITOR_CONFIG)
     thresholds = thresholds or build_thresholds(baseline_payload)
-    metrics = normalize_daily_metrics(risk or simnow.get("risk") or replay.get("risk") or {})
-    threshold_result = evaluate_thresholds(metrics, thresholds)
+    metrics, risk_source = select_risk_metrics(
+        risk,
+        simnow,
+        replay,
+        mode=monitor_config.get("risk_priority", "replay_first"),
+    )
+    metrics = normalize_daily_metrics(metrics)
+    threshold_result = evaluate_thresholds(metrics, thresholds, risk_source=risk_source)
     skip_reason = _capture_skip_reason(simnow) if simnow else ""
     subscription = subscription_coverage(simnow) if simnow else {}
     safety = order_safety(simnow) if simnow else {}
+    surface_source = simnow.get("meta", {}).get("strategy_surface", {}).get("source")
     if skip_reason:
         consistency = {
             "matched": False,
@@ -389,7 +494,12 @@ def make_record(
             "reason": skip_reason,
         }
     else:
-        consistency = compare_simnow_replay(simnow, replay) if simnow and replay else {
+        consistency = compare_simnow_replay(
+            simnow,
+            replay,
+            source=surface_source,
+            consistency_source_mode=monitor_config.get("consistency_source_mode", "require_captured"),
+        ) if simnow and replay else {
             "matched": False,
             "details": {},
             "reason": "simnow_or_replay_export_missing",
@@ -433,6 +543,7 @@ def make_record(
         "order_safety": safety,
         "kline_coverage": kline,
         "risk_metrics": metrics,
+        "risk_source": risk_source,
         "thresholds": threshold_result,
         "consistency": consistency,
     }
@@ -440,10 +551,14 @@ def make_record(
     record["skip_reason"] = skip_reason
     if skip_reason:
         record["status"] = "skipped"
+    elif threshold_result["status"] == "halt" or safety.get("status") == "halt":
+        record["status"] = "halt"
+    elif threshold_result["status"] == "unproven" or consistency.get("status") == "unavailable":
+        # Core discipline: never silently default to "pass". A diagnostic that
+        # cannot verify something must report pending/unproven/unavailable.
+        record["status"] = "pending"
     else:
-        record["status"] = "halt" if threshold_result["status"] == "halt" or safety.get("status") == "halt" else (
-            "pass" if consistency.get("matched") else "pending"
-        )
+        record["status"] = "pass" if consistency.get("matched") else "pending"
     record["valid_observation"] = is_valid_observation(record)
     return record
 
@@ -556,9 +671,14 @@ def build_20d_report(records: list[dict[str, Any]], min_days: int = 20) -> dict[
     }
 
 
+RESEARCH_ONLY_BANNER = "Diagnostic only, not a trading recommendation."
+
+
 def write_20d_markdown(summary: dict[str, Any], out: Path) -> None:
     lines = [
         "# SimNow 20-Day Observation Report",
+        "",
+        f"> {RESEARCH_ONLY_BANNER}",
         "",
         f"- observed_days: `{summary['observed_days']}/{summary['required_days']}`",
         f"- valid_observation_days: `{summary['valid_observation_days']}/{summary['required_days']}`",
@@ -637,7 +757,23 @@ def main() -> None:
     parser.add_argument("--report-md", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--no-append", action="store_true")
     parser.add_argument("--min-days", type=int, default=20)
+    parser.add_argument(
+        "--risk-priority",
+        choices=["replay_first", "legacy_simnow_first"],
+        default=SIMNOW_MONITOR_CONFIG["risk_priority"],
+        help="Risk source priority (default: replay_first).",
+    )
+    parser.add_argument(
+        "--consistency-source-mode",
+        choices=["require_captured", "replay_derived_allowed"],
+        default=SIMNOW_MONITOR_CONFIG["consistency_source_mode"],
+        help="Consistency surface source mode (default: require_captured).",
+    )
     args = parser.parse_args()
+
+    monitor_config = dict(SIMNOW_MONITOR_CONFIG)
+    monitor_config["risk_priority"] = args.risk_priority
+    monitor_config["consistency_source_mode"] = args.consistency_source_mode
 
     baseline = load_json(args.baseline)
     thresholds = load_thresholds_config(args.thresholds) if args.thresholds and args.thresholds.exists() else None
@@ -645,7 +781,16 @@ def main() -> None:
     replay = load_json(args.replay_json) if args.replay_json else None
     kline = load_json(args.kline_json) if args.kline_json else None
     risk = load_json(args.risk_json) if args.risk_json else None
-    record = make_record(args.date, baseline, simnow=simnow, replay=replay, kline=kline, risk=risk, thresholds=thresholds)
+    record = make_record(
+        args.date,
+        baseline,
+        simnow=simnow,
+        replay=replay,
+        kline=kline,
+        risk=risk,
+        thresholds=thresholds,
+        monitor_config=monitor_config,
+    )
     if args.record_json:
         write_json(args.record_json, record)
     if not args.no_append:

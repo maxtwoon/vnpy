@@ -1,19 +1,19 @@
 ---
 task: A41 SimNow Authenticity Fix
 version: 4.4.0
-stage: dev
-owner: kimi-code
-updated: 2026-07-11
+stage: review
+owner: codex
+updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a41-simnow-authenticity-fix.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -148,6 +148,16 @@ gate, not a conservative baseline.
   fix `build_risk()`'s zero placeholders at the source (would need portfolio-level context the
   live capture doesn't have) — only ensures downstream code never mistakes the placeholder for a
   real measurement.
+- 2026-07-12 (dev complete, pre-commit check) - Found `examples/czsc_strategy/diagnostics/
+  simnow_strategy_surface.py` was **never git-tracked at all** (`git ls-files` returns empty),
+  despite being an actively-imported module (`simnow_daily_monitor.py` depends on it) predating
+  this task — a genuine pre-existing reproducibility gap, not something A41 introduced (every
+  other `simnow_*.py` module IS tracked; verified this is isolated to this one file plus the new
+  `simnow_monitor_config.py`, not a systemic "whole diagnostics dir untracked" problem). Force-
+  added both at commit time so A41's `build_strategy_surface_from_captured_session` addition is
+  actually reviewable/reproducible from a clean checkout — this is exactly the class of gap A42
+  targets at the harness-tooling level; worth flagging there too if any other diagnostics *code*
+  modules (not just generated reports) turn out to share this problem.
 
 ## 交接历史
 
@@ -155,3 +165,4 @@ gate, not a conservative baseline.
 |------|---------|----------|------|
 | 2026-07-11 | codex → claude-code | done → design | A41 promoted from draft to active task after A40 reached done |
 | 2026-07-11 | claude-code → kimi-code | design → dev | A41 promoted from draft to active task; re-verified no drift from A40 |
+| 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |

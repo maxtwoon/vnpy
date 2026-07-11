@@ -247,6 +247,12 @@ def test_make_record_classifies_connected_snapshot_without_ticks_as_skipped():
 
 def test_make_record_combines_consistency_threshold_and_attribution():
     simnow = _events()
+    simnow["meta"] = {
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+        "workflow_order_actions": [],
+        "strategy_surface": {"source": "captured_session"},
+    }
     simnow["raw"] = {
         "logs": [{"msg": "connected"}],
         "ticks": [{"dt": "2026-06-19 14:30", "symbol": "AP888"}],
@@ -255,6 +261,7 @@ def test_make_record_combines_consistency_threshold_and_attribution():
         "positions": [{"symbol": "AP888"}],
     }
     replay = _events()
+    replay["meta"] = {"replay_available": True}
     replay["meta"] = {"replay_available": True}
     simnow["trades"].append({
         "dt": "2026-06-19 15:00",
@@ -282,6 +289,7 @@ def test_make_record_combines_consistency_threshold_and_attribution():
     )
 
     assert record["status"] == "pass"
+    assert record["risk_source"] == "explicit_risk_json"
     assert record["consistency"]["matched"] is True
     assert record["attribution_watch"]["SC_SHORT"]["count"] == 1
 
@@ -458,7 +466,12 @@ def test_make_record_halts_when_workflow_order_safety_is_breached():
 
 def test_make_record_allows_observed_account_orders_when_workflow_is_read_only():
     simnow = _events()
-    simnow["meta"] = {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []}
+    simnow["meta"] = {
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+        "workflow_order_actions": [],
+        "strategy_surface": {"source": "captured_session"},
+    }
     simnow["raw"] = {
         "logs": [{"msg": "connected"}],
         "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
@@ -492,7 +505,7 @@ def test_make_record_infers_legacy_read_only_when_new_order_fields_never_existed
         "duration_seconds": 300,
         "contract_map": {"AP888": {"enabled": True}},
         "strategy_surface": {
-            "source": "windowed_strategy_replay",
+            "source": "captured_session",
             "window_start": "2026-06-22T15:21:23.265502+08:00",
             "window_end": "2026-06-22T15:26:23.598245+08:00",
             "trade_date": "2026-06-22",
@@ -538,7 +551,12 @@ def test_make_record_infers_legacy_read_only_when_new_order_fields_never_existed
 
 def test_make_record_marks_only_fully_matched_safe_days_as_valid_observations():
     simnow = _events()
-    simnow["meta"] = {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []}
+    simnow["meta"] = {
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+        "workflow_order_actions": [],
+        "strategy_surface": {"source": "captured_session"},
+    }
     simnow["raw"] = {
         "logs": [{"msg": "connected"}],
         "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
@@ -743,6 +761,7 @@ def _valid_simnow_and_replay():
 
 def test_action_recommendation_pass_valid_counts_for_20d():
     simnow, replay = _valid_simnow_and_replay()
+    simnow["meta"]["strategy_surface"] = {"source": "captured_session"}
     record = make_record(
         "2026-07-01",
         _baseline(),
@@ -766,6 +785,7 @@ def test_action_recommendation_pass_valid_counts_for_20d():
 
 def test_action_recommendation_pass_invalid_lists_gaps():
     simnow, replay = _valid_simnow_and_replay()
+    simnow["meta"]["strategy_surface"] = {"source": "captured_session"}
     # Remove read_only declaration so order_safety is unknown
     simnow["meta"].pop("read_only")
     record = make_record(
@@ -849,6 +869,11 @@ def test_action_recommendation_pending_historical_db_lag():
     record = make_record(
         "2026-06-22",
         _baseline(),
+        monitor_config={
+            "risk_priority": "legacy_simnow_first",
+            "consistency_source_mode": "replay_derived_allowed",
+            "kline_write_mode": "staging",
+        },
         simnow={
             "signals": [],
             "trades": [],
@@ -984,7 +1009,12 @@ def test_action_recommendation_pending_event_surface_mismatch():
         "2026-07-07",
         _baseline(),
         simnow={
-            "meta": {"read_only": True, "orders_sent_by_workflow": 0, "workflow_order_actions": []},
+            "meta": {
+                "read_only": True,
+                "orders_sent_by_workflow": 0,
+                "workflow_order_actions": [],
+                "strategy_surface": {"source": "captured_session"},
+            },
             "signals": [],
             "trades": [{"dt": "2026-07-07 09:14:59+08:00", "symbol": "sc2608", "strategy": "simnow_trade", "operate": "LONG"}],
             "positions": [],
@@ -1122,6 +1152,26 @@ def test_build_action_summary_returns_one_row_per_record():
     assert summary[0]["date"] == "2026-06-27"
     for row in summary:
         assert set(row.keys()) >= {"date", "status", "reason", "severity", "action", "counts_for_20d"}
+
+
+def test_write_20d_markdown_carries_research_only_banner(tmp_path):
+    records = [
+        {
+            "date": "2026-06-27",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+    summary = build_20d_report(records, min_days=1)
+    out = tmp_path / "report.md"
+    write_20d_markdown(summary, out)
+    text = out.read_text(encoding="utf-8")
+    assert "Diagnostic only, not a trading recommendation." in text
 
 
 def test_write_20d_markdown_includes_action_summary(tmp_path):

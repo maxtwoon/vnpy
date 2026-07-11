@@ -68,13 +68,15 @@ def test_build_export_matches_daily_monitor_schema(tmp_path):
         setting_masked={"用户名": "xx***xx"},
     )
 
-    assert set(["signals", "trades", "positions", "risk", "raw"]).issubset(payload)
+    assert set(["signals", "trades", "positions", "risk", "captured", "raw"]).issubset(payload)
     assert payload["meta"]["read_only"] is True
     assert payload["meta"]["orders_sent_by_workflow"] == 0
     assert payload["meta"]["workflow_order_actions"] == []
     assert payload["signals"] == []
     assert payload["trades"] == []
     assert payload["positions"] == []
+    assert payload["captured"]["trades"] == []
+    assert payload["captured"]["positions"][0]["symbol"] == "ap610"
     assert payload["raw"]["positions"][0]["symbol"] == "ap610"
     assert payload["risk"]["account_balance"] == 20000000
 
@@ -91,7 +93,17 @@ def test_build_export_matches_daily_monitor_schema(tmp_path):
             "strategy_concentration": {"top1_abs_share": 1},
         },
     }
-    record = make_record("2026-06-22", baseline, simnow=payload, replay={"signals": [], "trades": [], "positions": []})
+    record = make_record(
+        "2026-06-22",
+        baseline,
+        simnow=payload,
+        replay={"signals": [], "trades": [], "positions": []},
+        monitor_config={
+            "risk_priority": "legacy_simnow_first",
+            "consistency_source_mode": "replay_derived_allowed",
+            "kline_write_mode": "staging",
+        },
+    )
     assert record["consistency"]["details"]["positions"]["matched"] is True
 
 

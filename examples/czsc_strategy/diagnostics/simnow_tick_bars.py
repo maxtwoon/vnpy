@@ -15,6 +15,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from chan_strategy.config import SQLITE_DB_PATH  # noqa: E402
+from simnow_monitor_config import SIMNOW_MONITOR_CONFIG  # noqa: E402
+
+
+_FLOAT_TOLERANCE = 1e-9
 
 DEFAULT_OUT_DB = Path(SQLITE_DB_PATH)
 
@@ -156,13 +160,60 @@ def _ensure_meta_table(conn: sqlite3.Connection) -> None:
     )
 
 
-def upsert_bars_to_sqlite(db_path: Path, bars: list[dict[str, Any]]) -> dict[str, Any]:
+def _raw_table(symbol: str) -> str:
+    return f"{str(symbol).lower()}_1M_raw"
+
+
+def _staging_table(symbol: str) -> str:
+    return f"{str(symbol).lower()}_1M_raw_staging"
+
+
+def _bars_date_range(bars: list[dict[str, Any]]) -> tuple[str, str]:
+    datetimes = [str(bar["datetime"]) for bar in bars]
+    return (min(datetimes), max(datetimes)) if datetimes else ("", "")
+
+
+def _rows_close_enough(left: tuple[Any, ...], right: tuple[Any, ...]) -> bool:
+    """Compare two row tuples (datetime, symbol, open, high, low, close, volume, amount)."""
+    if len(left) < 7 or len(right) < 7:
+        return False
+    for idx in (2, 3, 4, 5, 6):  # open, high, low, close, volume
+        if abs(float(left[idx]) - float(right[idx])) > _FLOAT_TOLERANCE:
+            return False
+    return True
+
+
+def upsert_bars_to_sqlite(
+    db_path: Path,
+    bars: list[dict[str, Any]],
+    *,
+    kline_write_mode: str = "staging",
+    allow_direct_write: bool = False,
+) -> dict[str, Any]:
+    """Write SimNow-derived 1M bars to SQLite.
+
+    Default ``kline_write_mode="staging"`` writes to
+    ``{symbol}_1M_raw_staging`` and never touches ``{symbol}_1M_raw``.
+    ``kline_write_mode="direct"`` requires the additional
+    ``allow_direct_write=True`` flag and writes directly to the raw table
+    (legacy opt-out, for A/B diffing only).
+    """
+    if kline_write_mode == "direct" and not allow_direct_write:
+        raise ValueError(
+            "kline_write_mode='direct' requires allow_direct_write=True "
+            "(pass --allow-direct-write on the CLI)."
+        )
     db_path.parent.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now().isoformat(sep=" ", timespec="seconds")
+    written = 0
     with sqlite3.connect(db_path) as conn:
         _ensure_meta_table(conn)
         for bar in bars:
-            table = f"{str(bar['symbol']).lower()}_1M_raw"
+            symbol = str(bar["symbol"])
+            if kline_write_mode == "direct":
+                table = _raw_table(symbol)
+            else:
+                table = _staging_table(symbol)
             _ensure_bar_table(conn, table)
             conn.execute(
                 f"""INSERT OR REPLACE INTO {table}
@@ -194,12 +245,122 @@ def upsert_bars_to_sqlite(db_path: Path, bars: list[dict[str, Any]]) -> dict[str
                     generated_at,
                 ),
             )
+            written += 1
         conn.commit()
     return {
         "db_path": str(db_path),
         "bars": len(bars),
-        "inserted_or_replaced": len(bars),
+        "inserted_or_replaced": written,
+        "kline_write_mode": kline_write_mode,
     }
+
+
+def promote_staged_bars(
+    db_path: Path,
+    symbol: str,
+    date_range: tuple[str, str],
+    *,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Promote staged 1M bars into the primary ``{symbol}_1M_raw`` table.
+
+    Defaults to ``dry_run=True``: it returns a diff summary without writing.
+    Only ``dry_run=False`` performs the ``INSERT OR REPLACE``. The staging
+    table is left untouched so the operation is reviewable.
+    """
+    raw_table = _raw_table(symbol)
+    staging_table = _staging_table(symbol)
+    start_dt, end_dt = date_range
+    summary: dict[str, Any] = {
+        "db_path": str(db_path),
+        "symbol": symbol,
+        "raw_table": raw_table,
+        "staging_table": staging_table,
+        "date_range": [start_dt, end_dt],
+        "dry_run": dry_run,
+        "staged_count": 0,
+        "raw_count_before": 0,
+        "overlapping_rows": 0,
+        "materially_different_overwrites": 0,
+        "promoted_count": 0,
+    }
+    with sqlite3.connect(db_path) as conn:
+        # Verify staging table exists
+        staging_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (staging_table,),
+        ).fetchone()
+        if not staging_exists:
+            summary["reason"] = "staging_table_missing"
+            return summary
+
+        raw_exists = bool(conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (raw_table,),
+        ).fetchone())
+        if not dry_run:
+            _ensure_bar_table(conn, raw_table)
+
+        staged_rows = conn.execute(
+            f"""SELECT datetime, symbol, open, high, low, close, volume, amount
+                FROM {staging_table}
+                WHERE datetime >= ? AND datetime <= ?
+                ORDER BY datetime""",
+            (start_dt, end_dt),
+        ).fetchall()
+        summary["staged_count"] = len(staged_rows)
+
+        raw_rows = conn.execute(
+            f"""SELECT datetime, symbol, open, high, low, close, volume, amount
+                FROM {raw_table}
+                ORDER BY datetime""",
+        ).fetchall() if raw_exists else []
+        summary["raw_count_before"] = len(raw_rows)
+
+        raw_by_key = {(row[0], row[1]): row for row in raw_rows}
+        different_overwrites: list[dict[str, Any]] = []
+        for row in staged_rows:
+            key = (row[0], row[1])
+            if key in raw_by_key:
+                summary["overlapping_rows"] += 1
+                if not _rows_close_enough(row, raw_by_key[key]):
+                    summary["materially_different_overwrites"] += 1
+                    different_overwrites.append({
+                        "datetime": row[0],
+                        "symbol": row[1],
+                        "staged": {
+                            "open": row[2],
+                            "high": row[3],
+                            "low": row[4],
+                            "close": row[5],
+                            "volume": row[6],
+                            "amount": row[7],
+                        },
+                        "existing": {
+                            "open": raw_by_key[key][2],
+                            "high": raw_by_key[key][3],
+                            "low": raw_by_key[key][4],
+                            "close": raw_by_key[key][5],
+                            "volume": raw_by_key[key][6],
+                            "amount": raw_by_key[key][7],
+                        },
+                    })
+
+        if dry_run:
+            summary["materially_different_overwrites_details"] = different_overwrites
+            return summary
+
+        conn.execute(
+            f"""INSERT OR REPLACE INTO {raw_table}
+            (datetime, symbol, open, high, low, close, volume, amount)
+            SELECT datetime, symbol, open, high, low, close, volume, amount
+            FROM {staging_table}
+            WHERE datetime >= ? AND datetime <= ?""",
+            (start_dt, end_dt),
+        )
+        summary["promoted_count"] = conn.total_changes
+        conn.commit()
+    return summary
 
 
 def summarize_bars(
@@ -253,14 +414,65 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--db-path", type=Path, default=DEFAULT_OUT_DB)
     parser.add_argument("--summary-json", type=Path)
     parser.add_argument("--min-bars-per-symbol", type=int, default=1)
+    parser.add_argument(
+        "--kline-write-mode",
+        choices=["staging", "direct"],
+        default=SIMNOW_MONITOR_CONFIG["kline_write_mode"],
+        help="Where to write aggregated bars (default: staging).",
+    )
+    parser.add_argument(
+        "--allow-direct-write",
+        action="store_true",
+        help="Required additional flag to actually use kline_write_mode=direct.",
+    )
+    parser.add_argument(
+        "--promote",
+        action="store_true",
+        help="Promote staged bars into {symbol}_1M_raw (default dry_run=True).",
+    )
+    parser.add_argument(
+        "--no-dry-run",
+        action="store_true",
+        help="With --promote, actually perform the INSERT OR REPLACE.",
+    )
     args = parser.parse_args(argv)
 
     payload = load_json(args.simnow_json)
     bars = aggregate_ticks_to_1m(payload)
-    write_summary = upsert_bars_to_sqlite(args.db_path, bars)
-    summary = summarize_bars(args.db_path, bars, payload, min_bars_per_symbol=args.min_bars_per_symbol)
-    summary.update(write_summary)
-    summary["simnow_json"] = str(args.simnow_json)
+
+    if args.promote:
+        # Stage first so --promote operates on the current capture's staged bars.
+        stage_summary = upsert_bars_to_sqlite(args.db_path, bars, kline_write_mode="staging")
+        symbols = sorted({str(bar["symbol"]) for bar in bars})
+        start_dt, end_dt = _bars_date_range(bars)
+        summaries = []
+        for symbol in symbols:
+            summaries.append(promote_staged_bars(
+                args.db_path,
+                symbol,
+                (start_dt, end_dt),
+                dry_run=not args.no_dry_run,
+            ))
+        summary = {
+            "db_path": str(args.db_path),
+            "simnow_json": str(args.simnow_json),
+            "promote": True,
+            "dry_run": not args.no_dry_run,
+            "symbols": symbols,
+            "date_range": [start_dt, end_dt],
+            "stage_summary": stage_summary,
+            "promote_summaries": summaries,
+        }
+    else:
+        write_summary = upsert_bars_to_sqlite(
+            args.db_path,
+            bars,
+            kline_write_mode=args.kline_write_mode,
+            allow_direct_write=args.allow_direct_write,
+        )
+        summary = summarize_bars(args.db_path, bars, payload, min_bars_per_symbol=args.min_bars_per_symbol)
+        summary.update(write_summary)
+        summary["simnow_json"] = str(args.simnow_json)
     if args.summary_json:
         write_json(args.summary_json, summary)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
