@@ -1,7 +1,7 @@
 ---
 task: A41 SimNow Authenticity Fix
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a41-simnow-authenticity-fix.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -264,3 +264,4 @@ regression here is caught in the future.
 | 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: Finding #3 fix never wired into production pipeline: consistency check will always report unavailable, 20-day gate can never pass again |
 | 2026-07-12 | kimi-code → codex | dev → review | A41 SimNow authenticity fix implemented |
+| 2026-07-12 | codex → codex | review → done | A41 review (codex stand-in): verified enrich_capture_json's new surface_source_mode=auto default is genuinely wired into the production path (run_next_work.ps1 invokes simnow_strategy_surface.py with no --surface-source-mode override, confirmed by grep). CLI subprocess test test_cli_enrich_capture_json_uses_auto_default proves meta.strategy_surface.source becomes captured_session for real captured data via the actual entry point, not just direct function calls. Windowed-replay fallback preserved for no-captured-data days (test_enrich_capture_json_auto_falls_back_to_windowed_replay_when_no_captured_data). All commands pass: pytest test_simnow_strategy_surface.py + test_simnow_a41_before_after.py (10 passed), full unit suite -m 'not realdb' (437 passed, no WinError 5 sandbox issue), sync_check.py root and --root examples/czsc_strategy both PASS. Guardrail diff clean: only simnow_strategy_surface.py + its test file + HANDOFF.md changed, no send_order/cancel_order/buy/sell/short/cover additions. Dead-code wiring gap from prior reject is closed. |
