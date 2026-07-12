@@ -1,19 +1,19 @@
 ---
 task: A43 P4 - MACD-Area Divergence (Replace _bi_power Proxy)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -83,9 +83,37 @@ report only, not for in-task selection).
       applies if the codex-sandbox symlink limitation recurs — add a fresh block to this
       HANDOFF.md if needed).
 
+## Manual verification (symlink-privilege sandbox limitation)
+
+Run natively (outside the codex sandbox) by claude-code 2026-07-12, in response to codex's
+review-round finding that its own sandboxed run hit the documented `tmp_path`/
+`PermissionError [WinError 5]` symlink-privilege limitation (see the NOTE above the review
+command in `.synccheck.yml`):
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **452 passed, 4
+  deselected**, no WinError 5.
+- `run_next_work.ps1 -Preflight` -> **155 passed** (SimNow workflow unit tests), preflight
+  completed cleanly, no WinError 5.
+- `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
+  examples/czsc_strategy` -> PASS (child).
+
+Reviewer (codex, sandboxed) may trust these counts for the two sandbox-blocked acceptance items
+instead of re-running them; everything else should still be verified normally.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
+
+### Review Findings (codex, 2026-07-12)
+
+1. Remove unused imports in `examples/czsc_strategy/diagnostics/divergence_model_comparison_report.py`.
+   `deepcopy` and `BACKTEST_CONFIG` are imported but never used. The repository Ruff config enables
+   `F` rules across the tree, so these would be `F401` CI failures once Ruff is available.
+2. Add the documented manual verification block if relying on sandbox accommodation for unit/preflight
+   acceptance. Codex reproduced the documented `tmp_path`/`PermissionError [WinError 5]` failure for
+   both the full unit command and `run_next_work.ps1 -Preflight`; the current handoff records
+   "452 passed" and preflight green in the completion summary, but it does not contain the requested
+   "Manual verification (symlink-privilege sandbox limitation)" block with pass/fail counts.
 
 1. **Entry point:** `docs/design/a38-phase-contracts-p2-p8.md`, section "P4 (A41) - MACD-Area
    Divergence" — ignore the stale `(A41)` label in the header, this task's real ID is **A43**.
@@ -155,3 +183,4 @@ A43 (P4) MACD-area divergence implemented by kimi-code 2026-07-12:
 | 2026-07-12 | codex → claude-code | (new) → design | P4 promoted from phase-contracts draft, renumbered A41→A43 (A41/A42 consumed by SimNow/sync-guardian detour) |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A43 (P4 MACD-area divergence) started; re-verified no drift in signals.py since draft |
 | 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: CI lint blocker and missing manual verification block |
