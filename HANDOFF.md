@@ -1,201 +1,142 @@
 ---
-task: A53 - Config/Signal Single-Source-of-Truth Cleanup
+task: A54 - Report-Disclaimer Hygiene + sync_check Gate
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Fifth task of the 2026-07-12 audit remediation roadmap
-(`docs/design/a49-audit-remediation-roadmap.md` §"A53"), started after A52 (continuous-contract
-data-integrity) reached `done`. Independent of A49-A52/A54.
+**Final task** of the 2026-07-12 audit remediation roadmap
+(`docs/design/a49-audit-remediation-roadmap.md` §"A54"), started after A53 (config/signal
+single-source-of-truth cleanup) reached `done`. Once this task reaches `done`, all 13 findings
+from `docs/review/ai_trading_review_2026-07-12.md` (2 high / 7 medium formally scheduled; 3 low
+recorded as backlog per the roadmap's own §2) will have been addressed.
 
-Four related dead-config/dead-code findings, re-verified 2026-07-13, all unchanged since the
-audit:
+Two related reporting-integrity findings, re-verified 2026-07-13:
 
-1. **🟠#6 Orphan config keys** (`chan_strategy/positions.py:396,405,407,409`):
-   `_research_first_buy_allowed`/`_daily_trend_filter_signals`-area code reads
-   `enable_1buy_symbols`, `block_1buy_daily_down`, `block_1buy_daily_not_up`,
-   `block_1buy_daily_below_zs` via `STRATEGY_CONFIG.get(...)` — none of these keys exist in
-   `config.py`, so these gates are permanently no-op regardless of any config edit.
-2. **🟠#7 Duplicated `stop_loss_pct=0.05`**: hardcoded as a function-signature default in 4 places
-   (`signals.py:726,793`, `sell_signals.py:235,261`) for the *structural-invalidation* concept
-   (price breaking 5% past a center edge) — confusingly identically named to but distinct from the
-   *position stop-loss* concept (`config.py`'s `stop_loss_1buy`/`2buy`/`3buy`, in basis points).
-3. **🟠#8 Orphaned legacy signal implementation**: `signals.py:487`/`623`'s
-   `signal_second_buy`/`signal_third_buy` are superseded by `sell_signals.py:28`/`73`'s corrected
-   versions (per that module's own docstring: "安全二买实现：规避旧 signals.py 中 None 分支和
-   Direction 比较缺陷"). **Re-verified 2026-07-13: `sell_signals.py` fully reimplements both
-   functions from scratch — it does NOT call the `signals.py` originals.** It does import them
-   under aliases (`signal_second_buy as _base_signal_second_buy`,
-   `signal_third_buy as _base_signal_third_buy`, `sell_signals.py:21-22`) but **never uses either
-   alias anywhere in the file** — this is itself an additional, previously-unflagged dead
-   import, bundled into this task.
-4. **🟢#10 `equity_mode` dead config** (`config.py:79`): declared with `"fixed"`/`"compound"`
-   documented options, but no code anywhere branches on this key — re-verified 2026-07-13, zero
-   hits in `positions.py`/`backtest_engine.py`/`portfolio_engine.py`; it is read only by a
-   tautological test assertion.
+1. **🟠#3**: `sizing_model="research"`'s "not tradable PnL" caveat (`backtest_engine.py:782`,
+   confirmed still `print()`-only) is never written into the `diagnostics/*.md`/`*.json` report
+   body — a reader opening only the report file has no way to know the numbers aren't real
+   tradable PnL.
+2. **🟠#9**: re-verified 2026-07-13 — **98 of 131** `diagnostics/*.md` reports (worse than the
+   audit's original ~90/130 estimate) lack the RESEARCH-ONLY banner, despite
+   `diagnostics/declassify_historical_reports.py` already existing specifically to backfill this
+   — it has evidently never been run against the full current report set.
 
-Full contract: `docs/design/a49-audit-remediation-roadmap.md` §"A53 — Config/Signal
-Single-Source-of-Truth Cleanup" (the authoritative design — this HANDOFF summarizes it).
+Full contract: `docs/design/a49-audit-remediation-roadmap.md` §"A54 — Report-Disclaimer Hygiene +
+`sync_check` Gate" (the authoritative design — this HANDOFF summarizes it).
 
 ## Goal
 
-Fill in the four orphan config keys with defaults matching today's de-facto no-op behavior, prove
-equivalence, then unit-test each gate's actual on-behavior (the underlying conditional logic in
-`positions.py` was presumably written correctly at the time but has never actually been exercised
-since it's been unreachable — verify it, don't just assume it's right). Single-source
-`stop_loss_pct` as `structural_invalidation_pct` in `STRATEGY_CONFIG` across all 4 call sites, with
-a comment distinguishing it from the position stop-loss tiers. Delete or deprecate-mark
-`signals.py`'s superseded `signal_second_buy`/`signal_third_buy` (verify the import graph first —
-confirmed clean above, but re-verify at dev time in case anything changed). Remove the newly-found
-dead `_base_signal_second_buy`/`_base_signal_third_buy` import aliases in `sell_signals.py`.
-Resolve `equity_mode`: either delete the key, or make `"compound"` raise `NotImplementedError` at
-a real call site.
+**Part A:** every report-writing function in `chan_strategy/backtest_engine.py`/
+`chan_strategy/portfolio_engine.py` that currently only `print()`s the `sizing_model="research"`
+caveat must also write it into the returned report `dict` under a stable key (`sizing_caveat`),
+and at least one `diagnostics/*.py` script that serializes a `BacktestEngine`/`PortfolioEngine`
+report to JSON/MD must surface that field in the file body when present (not just console).
+
+**Part B:** run `declassify_historical_reports.py` against the full current `diagnostics/*.md`
+set (currently 98 of 131 missing the banner) and commit the results (force-add, since
+`diagnostics/` is git-ignored). Extend `tools/sync_guardian/sync_check.py` (the vendored copy from
+A42 — reuse it, do not fork a second copy) with a new check: fail when a **newly added**
+`diagnostics/*.md` file lacks the RESEARCH-ONLY banner string, so this gap cannot silently reopen.
 
 ## Acceptance Criteria
 
-- [x] All four orphan keys exist in `config.py` with defaults matching today's de-facto behavior;
-      a full-`BacktestEngine` equivalence test proves default output is byte-identical to before
-      this task (per the A44-A52 house pattern — do not ship with only a unit-level check).
-- [x] Each orphan key's actual on-behavior (`True`/non-`None` value) is unit-tested and confirmed
-      to behave as its variable name implies (e.g. `block_1buy_daily_down=True` genuinely blocks a
-      一买 open when daily direction is 向下) — this is real verification of previously-untested
-      logic, not just a smoke test.
-- [x] `structural_invalidation_pct` is read from `STRATEGY_CONFIG` at all 4 former hardcode sites
-      (`signals.py:726,793`, `sell_signals.py:235,261`); changing the config value changes all 4
-      call sites' behavior identically (unit-tested); a comment at the config key distinguishes it
-      from `stop_loss_1buy`/`2buy`/`3buy`.
-- [x] `signals.py`'s superseded `signal_second_buy`/`signal_third_buy` are either deleted (with an
-      import-graph check proving nothing outside `sell_signals.py`'s own now-confirmed-unused
-      aliases referenced them) or carry an explicit deprecation comment pointing to the
-      authoritative version.
-- [x] `sell_signals.py:21-22`'s dead `_base_signal_second_buy`/`_base_signal_third_buy` import
-      aliases are removed (they are never used — confirmed 2026-07-13 by grep).
-- [x] `equity_mode` either no longer exists, or `"compound"` raises `NotImplementedError` at a
-      real call site (unit-tested) — not a decorative unread key either way.
-- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
-      order/cancel/send path changed; no `GOAL PASSED`; does not touch `structural_atr`/P8a exit
-      logic (A47, done) or the P8b portfolio coordinator (A48, done).
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] `sizing_caveat` field present in every report `dict` returned by `BacktestEngine.run()`/
+      `PortfolioEngine.run()` when `sizing_model="research"`; absent (or `null`) under
+      `sizing_model="risk"`.
+- [ ] At least one diagnostics report script demonstrably surfaces `sizing_caveat` in its output
+      MD/JSON when present (unit-tested).
+- [ ] `declassify_historical_reports.py` run against the full current `diagnostics/*.md` set
+      (98 currently missing, re-verified 2026-07-13); before/after counts of "reports missing
+      RESEARCH-ONLY" reported and committed as evidence (e.g. a
+      `declassify_run_2026-07-13.json` or equivalent); the after-count is `0` for every
+      currently-tracked report file.
+- [ ] A new `sync_check.py` check fails (non-zero exit, named file in the error) for a fixture new
+      `diagnostics/*.md` file lacking the banner string; passes once the banner is present
+      (unit-tested, mirroring A42's `_check_deliverables_are_tracked_and_fresh`
+      deliverables-freshness test pattern in `tests/unit/test_sync_guardian.py`).
+- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+      order/cancel/send path changed; no `GOAL PASSED`; does not retroactively re-score or
+      re-evaluate any historical report's trading conclusions (purely a disclaimer/labeling pass);
+      does not change any report's numeric content beyond adding metadata fields and banner text;
+      does not create a second, forked copy of `sync_check.py`'s logic.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
 ## Notes for the Next Agent
 
-### Codex Review Rejection (2026-07-13)
-
-1. **Remove the remaining hardcoded `0.05` structural-invalidation fallbacks.**
-   A53's review checklist says to reject if `structural_invalidation_pct` still has any
-   hardcoded duplicate. The implementation moved the function defaults to `None`, but each former
-   hardcode site still has a local fallback:
-   - `examples/czsc_strategy/chan_strategy/signals.py:787`
-   - `examples/czsc_strategy/chan_strategy/signals.py:842`
-   - `examples/czsc_strategy/chan_strategy/sell_signals.py:252`
-   - `examples/czsc_strategy/chan_strategy/sell_signals.py:285`
-
-   Those should read the already-required `STRATEGY_CONFIG["structural_invalidation_pct"]`
-   single source directly, or through one shared helper that itself reads the config, while
-   preserving the explicit `stop_loss_pct` override behavior tested in A53.
-
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A53". Fifth task of the
-   6-task remediation roadmap (A49-A54) triaging `docs/review/ai_trading_review_2026-07-12.md` —
-   read that audit report's Findings #6, #7, #8, #10 for full context.
-2. **Scope:** `chan_strategy/config.py` (new keys, `equity_mode` resolution),
-   `chan_strategy/positions.py` (now-reachable orphan-key gates — verify correctness, since this
-   logic has never actually run against real data before),
-   `chan_strategy/signals.py`/`sell_signals.py` (`structural_invalidation_pct` call-site updates;
-   legacy-signal deprecation/deletion; dead alias-import removal). Do not touch
-   `structural_atr`/P8a exit logic (A47), the P8b portfolio coordinator (A48), or anything from
-   A49-A52 (already done, independent of this task).
-3. **The orphan-key gates enable previously-unreachable code — treat it with the same scrutiny as
-   new code, not as "already correct because it's already written."** Since `.get()` always
-   returned `None`/falsy before this task, the conditional branches in `positions.py` around lines
-   396-409 have never actually executed against real signals. Read them carefully; if the logic
-   turns out to be subtly wrong once reachable, that is a legitimate finding to fix in this same
-   task (it's still in scope — you're the one making it reachable).
-4. **`structural_invalidation_pct` is a NEW name for an OLD concept** — do not confuse it with
-   `stop_loss_1buy`/`stop_loss_2buy`/`stop_loss_3buy` (position stop-loss, basis points, used by
-   `positions.py`'s exit logic). `structural_invalidation_pct` is `signal_risk_control`'s
-   "结构失效" threshold (a fraction like 0.05, used to compute whether price breaking 5% past a
-   center edge counts as structural failure). Keep the config comment explicit about this
-   distinction — this exact confusion is what caused the original finding.
-5. **Re-verify the `signals.py` deletion is safe before deleting** — re-run the import-graph check
-   (`grep -rn "from chan_strategy.signals import" examples/czsc_strategy/ | grep
-   "signal_second_buy\|signal_third_buy"` and similarly for any direct `chan_strategy.signals.
-   signal_second_buy`/`signal_third_buy` module-attribute access) at dev time, since code may have
-   changed since this HANDOFF was written. If genuinely unreferenced outside `sell_signals.py`'s
-   now-dead aliases, delete; otherwise, deprecation-comment instead.
+1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A54". **This is the final
+   task in the entire 2026-07-12 audit remediation roadmap (A49-A54)** — no further phase depends
+   on this one. Read `docs/review/ai_trading_review_2026-07-12.md` Findings #3 and #9 (🟠 medium)
+   for full context.
+2. **Scope:** `chan_strategy/backtest_engine.py`/`chan_strategy/portfolio_engine.py`
+   (`sizing_caveat` field), at least one `diagnostics/*.py` report script (grep for
+   `sizing_model.*research` consumers to find the full list — do not guess which ones exist),
+   `diagnostics/declassify_historical_reports.py` (run it, don't reimplement it),
+   `tools/sync_guardian/sync_check.py` (new banner-presence check, extending the vendored copy
+   from A42 — reuse it, do not fork). Do not touch trading logic, exit models, sizing formulas, or
+   any P1-P8/A49-A53 already-done scope.
+3. **`declassify_historical_reports.py` already exists and does the backfill — run it, verify its
+   own behavior first** (read what it actually does before assuming it's correct; A45/A46's
+   experience this cycle shows scripts can have real bugs even when they exist). If it has its own
+   defects preventing a clean 98→0 result, fixing those defects is in scope for this task (it's
+   the one tool responsible for closing this exact gap).
+4. **The new `sync_check` check needs real teeth** — per A42's own hard-won lesson ("CI-gate-has-
+   teeth evidence is required, not just 'the steps exist'"), write a test that constructs a
+   fixture `diagnostics/*.md` file without the banner and proves the check fails non-zero with the
+   file named in the error, then add the banner and prove it passes.
+5. **This is purely reporting/metadata — no trading logic changes anywhere.** If you find yourself
+   editing anything in `positions.py`'s exit/sizing logic or any P1-P8 config gate's default
+   behavior, stop; that is out of scope.
 6. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection;
    no pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched; no
-   `GOAL PASSED`; any orphan-key on-behavior test must genuinely verify the variable name matches
-   real behavior, not just "the key is now settable."
+   `GOAL PASSED`; no retroactive re-scoring of historical report conclusions; no forked
+   `sync_check.py` copy.
 7. **Before claiming any script "doesn't exist," verify the path carefully** —
    `run_next_work.ps1` lives at `examples/czsc_strategy/diagnostics/run_next_work.ps1`.
-8. **Include a Manual-verification block with natively-run counts proactively** — A52's dev round
-   did this and passed review on the first attempt; A49 and A51 both needed a second round solely
-   because this block was missing. Follow A52's precedent.
+8. **Include a Manual-verification block with natively-run counts, and run `ruff check` proactively
+   before finishing** — A52 and A53's second rounds both did this and passed review cleanly;
+   follow that precedent (A49/A50/A51 each needed an extra round for omitting one or the other).
 9. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A53 config/signal single-source-of-truth cleanup implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
-
-## Manual Verification (natively run)
-
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **559 passed, 4 deselected** (30.29s)
-- `python -m pytest examples/czsc_strategy/tests/unit/test_a53_config_signal_cleanup.py examples/czsc_strategy/tests/unit/test_a53_orphan_keys_equivalence.py -q` → **12 passed**
-- `python tools/sync_check.py` → **PASS**
-- `python tools/sync_check.py --root examples/czsc_strategy` → **PASS**
-- `ruff check examples/czsc_strategy/chan_strategy/config.py examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py examples/czsc_strategy/tests/unit/test_a53_config_signal_cleanup.py examples/czsc_strategy/tests/unit/test_a53_orphan_keys_equivalence.py` → **All checks passed** (pre-existing `positions.py` UP035/B905/UP006/UP045 warnings are untouched as out-of-scope).
-- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → **Preflight complete; live SimNow capture was not requested** (155 workflow unit tests passed).
+   `python tools/handoff.py next --actor kimi-code --summary "A54 report-disclaimer hygiene + sync_check gate implemented"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`. **When this task reaches
+   `done`, the entire 2026-07-12 audit remediation roadmap (A49-A54) will be complete.**
 
 ## Decision Log
 
-- 2026-07-13 - A53 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
-  active HANDOFF task, started immediately after A52 reached `done`. Independent of A49-A52/A54.
-- 2026-07-13 - Re-verified all four cited targets (orphan keys, duplicated `stop_loss_pct`,
-  superseded `signals.py` functions, dead `equity_mode`) are unchanged since the audit.
-- 2026-07-13 - Found an additional, previously-unflagged issue while re-verifying finding #8:
-  `sell_signals.py:21-22` imports `signal_second_buy`/`signal_third_buy` from `signals.py` under
-  `_base_*` aliases but never uses either — confirming `sell_signals.py`'s versions are genuine
-  independent reimplementations (not wrappers calling the base), and adding a small bonus
-  dead-import cleanup to this task's scope.
-- 2026-07-13 - Dev implementation completed by kimi-code:
-  - Added four orphan first-buy keys to `STRATEGY_CONFIG` with no-op defaults.
-  - Single-sourced `structural_invalidation_pct` in `STRATEGY_CONFIG`; all four risk-control
-    functions read from config while preserving backward-compatible explicit argument override.
-  - Added explicit deprecation comments to `signals.py`'s superseded `signal_second_buy`/
-    `signal_third_buy` after re-verifying they are still imported by existing unit tests.
-  - Removed dead `_base_signal_second_buy`/`_base_signal_third_buy` aliases from `sell_signals.py`.
-  - Made `equity_mode="compound"` raise `NotImplementedError` in `Position._size_open`.
-- 2026-07-13 - Review rejection fix by kimi-code:
-  - Replaced the remaining `STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)` hardcoded
-    fallbacks in `signals.py` (2 sites) and `sell_signals.py` (2 sites) with direct config access
-    `STRATEGY_CONFIG["structural_invalidation_pct"]`; verified no duplicate 0.05 fallback remains.
+- 2026-07-13 - A54 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
+  active HANDOFF task, started immediately after A53 reached `done`. This is the final task in
+  the remediation roadmap — no further phase follows.
+- 2026-07-13 - Re-verified the `sizing_model="research"` caveat is still print-only
+  (`backtest_engine.py:782`) and re-counted the RESEARCH-ONLY banner gap: 98 of 131
+  `diagnostics/*.md` files currently missing it (worse than the audit's original ~90/130
+  estimate — no drift, if anything slightly more reports have accumulated since).
+- 2026-07-13 - Noted precedent from A49-A53's review rounds: proactive Manual-verification blocks
+  and `ruff check` runs correlate strongly with one-round acceptance (A52, A53's second round);
+  omitting either correlates with a wasted round (A49, A50, A51, A53's first round).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-13 | codex → claude-code | done → design | A53 promoted from the audit remediation roadmap draft after A52 reached done |
-| 2026-07-13 | claude-code → kimi-code | design → dev | A53 (config/signal single-source-of-truth cleanup) started |
-| 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
-| 2026-07-13 | codex → kimi-code | review → dev | 打回: structural_invalidation_pct still has hardcoded 0.05 fallbacks |
-| 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
-| 2026-07-13 | codex → codex | review → done | A53 review accepted |
+| 2026-07-13 | codex → claude-code | done → design | A54 promoted from the audit remediation roadmap draft after A53 reached done -- final task in the roadmap |
+| 2026-07-13 | claude-code → kimi-code | design → dev | A54 (report-disclaimer hygiene + sync_check gate) started |
