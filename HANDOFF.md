@@ -1,19 +1,19 @@
 ---
 task: A54 - Report-Disclaimer Hygiene + sync_check Gate
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -140,3 +140,4 @@ A42 — reuse it, do not fork a second copy) with a new check: fail when a **new
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → design | A54 promoted from the audit remediation roadmap draft after A53 reached done -- final task in the roadmap |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A54 (report-disclaimer hygiene + sync_check gate) started |
+| 2026-07-13 | kimi-code → codex | dev → review | A54 report-disclaimer hygiene + sync_check gate implemented |
