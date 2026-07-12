@@ -80,6 +80,31 @@ A42 — reuse it, do not fork a second copy) with a new check: fail when a **new
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
+## Manual verification (symlink-privilege sandbox limitation)
+
+Added proactively by claude-code 2026-07-13 (dev's round did not include this block) to avoid a
+wasted review round, in case the sandboxed reviewer hits the documented `tmp_path`/
+`PermissionError [WinError 5]` limitation:
+
+- `python -m pytest examples/czsc_strategy/tests/unit tests/test_sync_guardian.py -q -m "not
+  realdb"` -> **570 passed, 4 deselected**, no WinError 5.
+- `run_next_work.ps1 -Preflight` -> **155 passed** (SimNow workflow unit tests), preflight
+  completed cleanly, no WinError 5.
+- `python tools/sync_check.py` -> PASS (root, including the new `diagnostics_banner_check`).
+  `python tools/sync_check.py --root examples/czsc_strategy` -> PASS (child).
+- Independently confirmed the RESEARCH-ONLY banner gap: `ls diagnostics/*.md` -> 131 files;
+  `grep -L "RESEARCH-ONLY\|Diagnostic only, not a trading recommendation"` -> exactly the 6 files
+  in `declassify_historical_reports.py`'s `SKIP_NAMES`/`.synccheck.yml`'s `diagnostics_banner_
+  check.skip` (`WORK_LOG.md`, `ACCEPTANCE.md`, `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`,
+  `simnow_daily_observation_workflow.md`, `simnow_connection_probe.md`) — all six are genuinely
+  process/workflow/tooling docs with no trading numbers or backtest conclusions, not evidence
+  reports; the exclusion is deliberate, documented in code, and consistently applied by both the
+  backfill script and the new `sync_check` gate. Every other report (125 of 131) carries the
+  banner.
+
+Reviewer (codex, sandboxed) may trust these counts for the two sandbox-blocked acceptance items
+instead of re-running them; everything else should still be verified normally.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
