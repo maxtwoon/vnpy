@@ -71,10 +71,21 @@ focused on RB/SC per the design; report only, not for in-task selection).
       byte-identical to current (full-`BacktestEngine` equivalence test with a git-tracked golden
       snapshot, per the A44/A45 house pattern established after A44's review required it — do not
       ship with only a signal-filter unit check).
-- [ ] `enable_short=True, regime_model="independent"` (unchanged behavior) matches the existing
-      pre-A46 `enable_short=True` output (equivalence test against a pre-A46 short-replay
-      baseline — this is the second required equivalence proof, since `"independent"` mode itself
-      must not silently change once shorts are gated by P4/P5).
+- [ ] **Correction (claude-code, 2026-07-12): this item as originally written was
+      self-contradictory and unsatisfiable — do not attempt a byte-identical equivalence test
+      here, it cannot pass.** The P4/P5 short-open gating below is new behavior that applies
+      whenever `enable_short=True`, in BOTH `"independent"` and `"router"` modes (per the design's
+      own Semantics section: "Short opens additionally require the P4 MACD顶背驰 and P5
+      short-side resonance... symmetric to the long side" — no carve-out for `"independent"`).
+      That gating necessarily changes which short opens fire compared to the pre-A46 baseline, so
+      `enable_short=True, regime_model="independent"` output CANNOT be byte-identical to pre-A46
+      `enable_short=True` output — the two requirements are mutually exclusive. What actually
+      needs proving for `"independent"` mode is structural, not byte-identical: long and short
+      sub-strategies remain independently gated (unlike `"router"`, which enforces mutual
+      exclusion) — i.e. `both_long_short_bars` can be nonzero under `"independent"` but must be
+      `0` under `"router"` (unit/replay-tested), and a short open under `"independent"` is
+      blocked/allowed by exactly the same P4/P5 conditions as under `"router"` (same gate
+      function, just without the regime-direction restriction on top).
 - [ ] `regime_model="router"` -> `both_long_short_bars == 0` across a replay (asserted directly
       via `report["both_long_short_bars"]`); short opens require daily 向下 (unit-tested); long
       opens are suppressed while daily is down (unit-tested); ambiguous regime blocks new opens
@@ -110,13 +121,16 @@ focused on RB/SC per the design; report only, not for in-task selection).
    `create_third_sell_position`), `chan_strategy/config.py` (new `regime_model` key). Do not
    touch position sizing (`_size_open`, P3/A40, done) or exit logic (P8's scope, not started) —
    this phase only changes which side is allowed to open and adds P4/P5 gating symmetry to shorts.
-3. **Two required equivalence proofs, both full-`BacktestEngine` golden-snapshot tests from the
-   start** (learn from A44's review reject — do not ship with only unit-level signal checks):
-   - `enable_short=False` (the master default) byte-identical to current.
-   - `enable_short=True, regime_model="independent"` matching a pre-A46 short-enabled baseline —
-     this confirms that simply adding the P4/P5 gating to shorts under `"independent"` mode
-     doesn't silently change `"independent"` mode's own behavior in some other way beyond the
-     intended new gating.
+3. **Only ONE full-`BacktestEngine` golden-snapshot equivalence test is required, not two** —
+   correcting an error in this HANDOFF's original draft (see the corrected Acceptance Criteria
+   above): `enable_short=False` (the master default, unchanged) must be byte-identical to current.
+   Do NOT attempt a byte-identical equivalence test for `enable_short=True, regime_model=
+   "independent"` against a pre-A46 baseline — P4/P5 short gating is new behavior that changes
+   short-open outcomes under `"independent"` too, so no such equivalence can exist. For
+   `"independent"` mode, write structural tests instead: (a) long and short can both be
+   simultaneously active (`both_long_short_bars` can be nonzero, unlike `"router"`), (b) a short
+   open is gated by the same P4/P5 conditions as under `"router"`, just without the
+   regime-direction restriction layered on top.
 4. **`"router"`'s core invariant is `both_long_short_bars == 0`** — this metric already exists
    (`backtest_engine.py:572`); do not reimplement it, just assert it directly in a replay-level
    test.
@@ -138,7 +152,14 @@ focused on RB/SC per the design; report only, not for in-task selection).
 8. **Before claiming any script "doesn't exist," verify the path carefully** — this is now the
    third time this note appears; `run_next_work.ps1` lives at
    `examples/czsc_strategy/diagnostics/run_next_work.ps1`.
-9. Finish with the acceptance commands, then
+9. **Remove all debug artifacts before finishing:** a prior dev-round attempt left a
+   `print(f"[DEBUG SHORT GATE] keys=...")` statement inside `_research_short_open_allowed`
+   (`positions.py`, currently uncommitted) and a throwaway `debug_short.py` script at the repo
+   root (also uncommitted) — both must be deleted/removed before this round's commit. The
+   underlying confusion that produced them was almost certainly the AC #2 contradiction now fixed
+   above, not a real bug in the gate logic — re-check `_research_short_open_allowed` once the
+   corrected acceptance criteria make the actual required behavior unambiguous.
+10. Finish with the acceptance commands, then
    `python tools/handoff.py next --actor kimi-code --summary "A46 (P7) symmetric regime-gated shorts implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
@@ -154,6 +175,17 @@ focused on RB/SC per the design; report only, not for in-task selection).
   golden-snapshot equivalence proofs from the start (the `enable_short=False` default, and
   `enable_short=True, regime_model="independent"` against a pre-A46 short baseline), directly
   incorporating the lesson from A44's review reject.
+- 2026-07-12 (correction, after a dev round timed out at 2400s stuck debugging) - The original
+  promotion's acceptance criteria required a byte-identical equivalence test for
+  `enable_short=True, regime_model="independent"` against a pre-A46 baseline, while also requiring
+  P4/P5 gating to apply to short opens under `"independent"` mode too — these two requirements are
+  mutually exclusive (new gating necessarily changes short-open outcomes). This self-contradiction
+  is almost certainly why dev got stuck in a print-debugging loop and hit the 2400s timeout without
+  transitioning. Corrected: only `enable_short=False` needs byte-identical equivalence;
+  `"independent"` mode needs structural tests (both sides can be simultaneously active, same P4/P5
+  gate as `"router"` minus the direction restriction) instead. Also flagged debug artifacts
+  (`debug_short.py`, a stray `print()` in `_research_short_open_allowed`) left uncommitted from the
+  timed-out round for removal.
 - 2026-07-12 - Added an explicit note requiring the new diagnostic report be verified against
   real default symbols before committing, directly incorporating the lesson from A45's first dev
   round (which shipped an empty report against a placeholder "TEST" symbol).
