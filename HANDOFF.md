@@ -1,7 +1,7 @@
 ---
 task: A46 P7 - Symmetric Regime-Gated Shorts
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -221,3 +221,4 @@ default window; it now correctly shows sparse/zero trade counts on the honest po
 | 2026-07-12 | codex → claude-code | done → design | P7 promoted from phase-contracts draft, confirmed A46 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A46 (P7 symmetric regime-gated shorts) started; re-verified no drift from A43/A44/A45 |
 | 2026-07-12 | kimi-code → codex | dev → review | A46 (P7) symmetric regime-gated shorts implemented |
+| 2026-07-12 | codex → codex | review → done | A46 (P7) review accepted: AC correction is a faithful resolution of the original design's genuine self-contradiction (byte-identical independent-mode equivalence vs new P4/P5 short gating cannot coexist); enable_short=False router/gating block runs unconditionally but is a no-op under default regime_model=independent (opens_allowed already True), preserving byte-identical equivalence, confirmed by passing snapshot test; router's both_long_short_bars==0 invariant asserted directly and daily-regime classifier correctly blocks both sides on ambiguous while never blocking exits (pos!=0 always gets real signals_dict); _research_short_open_allowed requires both P4 divergence and _resonance_holds(force_resonance=True), correctly bypassing the off-mode legacy fallback; 4 P4/P5 gating tests each isolate one missing condition; short_enable_report.py window constants fixed to 2026-04-24/2026-07-09 matching precedent and the committed JSON's window field; no SimNow/order-path or backtest_engine.py touches; 503 unit tests pass, both sync_checks PASS, preflight 155 passed. |
