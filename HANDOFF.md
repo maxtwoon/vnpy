@@ -1,7 +1,7 @@
 ---
 task: A48 P8b - Portfolio Risk (Cross-Symbol Coordinator)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -288,3 +288,4 @@ Required fixes:
 | 2026-07-12 | kimi-code → codex | dev → review | A48 (P8b) portfolio risk coordinator implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: A48 portfolio replay does not apply daily-loss flatten and mis-signs short PnL/exposure |
 | 2026-07-12 | kimi-code → codex | dev → review | A48 (P8b) portfolio risk coordinator implemented |
+| 2026-07-12 | codex → codex | review → done | A48 review accepted after portfolio replay risk accounting fixes |
