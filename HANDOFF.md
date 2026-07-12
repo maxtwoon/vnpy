@@ -1,19 +1,19 @@
 ---
 task: A50 - Limit-Up/Down/Halt Impact Diagnostic (Read-Only)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -53,34 +53,56 @@ measurement only — it must not change any existing report's numbers, must not 
 
 ## Acceptance Criteria
 
-- [ ] Report generated for all 5 default symbols on the post-2026-04-24 window
+- [x] Report generated for all 5 default symbols on the post-2026-04-24 window
       (`WINDOW_START="2026-04-24"`, `WINDOW_END="2026-07-09"`, matching every A43-A48 report
       script's precedent) — or an explicit `unavailable`/error reason per symbol where data is
       insufficient (matching the `交易周期数据不足` pattern already established for RB888/A888 in
       prior reports on this same window).
-- [ ] Each symbol's daily limit percentage carries an inline, cited exchange-rule source comment
+- [x] Each symbol's daily limit percentage carries an inline, cited exchange-rule source comment
       (real exchange-published daily price-limit percentage — CZCE/SHFE/INE/DCE as applicable per
       symbol; do NOT fabricate or guess a number; if the real percentage cannot be sourced and
       cited, the report must say `unavailable` for that symbol rather than silently using a
       placeholder value — same citation discipline as A40's `contract_specs`).
-- [ ] Report distinguishes entry-fill-at-limit vs. exit-fill-at-limit counts per symbol; the sum
+- [x] Report distinguishes entry-fill-at-limit vs. exit-fill-at-limit counts per symbol; the sum
       of "at limit" + "not at limit" trades reconciles exactly with that symbol's total trade
       count from the same baseline replay (unit-tested arithmetic check).
-- [ ] If the raw K-line table exposes any volume/turnover column, the report additionally flags
+- [x] If the raw K-line table exposes any volume/turnover column, the report additionally flags
       zero-volume bars near each trade's fill bar as a secondary halted/no-liquidity proxy signal
       (best-effort; report `unavailable` for this secondary signal if no such column exists rather
       than fabricating one).
-- [ ] RESEARCH-ONLY banner (`Diagnostic only, not a trading recommendation.`) present; report is
+- [x] RESEARCH-ONLY banner (`Diagnostic only, not a trading recommendation.`) present; report is
       evidence only — verify via grep that no changes were made to `BacktestEngine`/
       `PortfolioEngine`'s actual fill logic in this task's diff.
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
+
+## Manual Verification / Note for A51 (claude-code, 2026-07-13)
+
+Ran the full suite natively: `python -m pytest examples/czsc_strategy/tests/unit -q -m "not
+realdb"` -> **536 passed, 4 deselected**. Both `sync_check` gates PASS. `run_next_work.ps1
+-Preflight` -> **155 passed**. Confirmed via `git diff --stat` that `data_adapter.py`/
+`backtest_engine.py`/`positions.py` are untouched — pure read-only diagnostic as required.
+
+Spot-verified the cited limit percentages against live web search (not just trusting the citation
+text): AP888 5% and RB888 3% both confirmed as the exchanges' published steady-state figures.
+**Note for A51's design refinement**, not a defect in this task: the search also surfaced that
+both symbols had their limit bands *temporarily widened* by exchange notice **within this report's
+own 2026-04-24~2026-07-09 window** — RB888 to 5% effective 2026-05-19, AP888 to 8% effective
+2026-05-06 (both presumably following limit-hit days, per the standard CZCE/SHFE escalation
+mechanism). The report's code comment already generically acknowledges "exchanges reserve the
+right to widen limits... this diagnostic uses the standard contract percentage as a first-cut
+measurement," satisfying this task's acceptance bar, but does not specifically flag that these
+exact widening events occurred inside the measured window. Given the report currently measures
+only 2 total trades (AP888; RB888/A888 report `交易周期数据不足`), the practical impact on this
+round's numbers is negligible — but if A51 (or any future re-run of this diagnostic on a longer
+window with more trades) needs tighter accuracy, sourcing the actual date-varying limit percentage
+per trading day (not just the steady-state default) would be a worthwhile refinement.
 
 ## Notes for the Next Agent
 
@@ -139,3 +161,4 @@ measurement only — it must not change any existing report's numbers, must not 
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → design | A50 promoted from the audit remediation roadmap draft after A49 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A50 (limit-up/down/halt exposure diagnostic) started |
+| 2026-07-13 | kimi-code → codex | dev → review | A50 limit-up/down/halt exposure diagnostic implemented |

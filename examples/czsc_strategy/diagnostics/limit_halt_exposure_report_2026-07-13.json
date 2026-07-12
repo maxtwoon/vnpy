@@ -1,0 +1,172 @@
+{
+  "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
+  "generated_at": "2026-07-13T00:24:08.276970",
+  "window": {
+    "start_date": "2026-04-24",
+    "end_date": "2026-07-09"
+  },
+  "total_symbols": 5,
+  "symbols_attempted": [
+    "AP888",
+    "RB888",
+    "SC888",
+    "A888",
+    "ZN888"
+  ],
+  "note": "This report is read-only evidence.  It uses the exchange-published steady-state daily price-limit percentage per symbol and the previous trading day's last close observed in the loaded window.  It does not change BacktestEngine/PortfolioEngine fill logic, does not enforce any limit/halt constraint, and is not used to tune parameters.",
+  "totals": {
+    "trade_count": 2,
+    "entry_at_limit_count": 0,
+    "entry_not_at_limit_count": 2,
+    "exit_at_limit_count": 0,
+    "exit_not_at_limit_count": 2,
+    "trades_with_zero_volume_near_entry": 0,
+    "trades_with_zero_volume_near_exit": 0
+  },
+  "per_symbol": [
+    {
+      "symbol": "AP888",
+      "limit_pct": 0.05,
+      "limit_source": "CZCE 鲜苹果期货合约：每日涨跌停板幅度为前一交易日结算价的±5% (郑州商品交易所〔2017〕17号公告，《郑州商品交易所鲜苹果期货业务细则》)",
+      "limit_note": "First-cut steady-state contract percentage. Exchange notices may temporarily widen limits for specific contracts or after limit-hit days; those exceptions are not applied here.",
+      "error": null,
+      "metrics": {
+        "trade_count": 2,
+        "entry_at_limit_count": 0,
+        "entry_not_at_limit_count": 2,
+        "exit_at_limit_count": 0,
+        "exit_not_at_limit_count": 2,
+        "entry_at_limit_pct": 0.0,
+        "exit_at_limit_pct": 0.0,
+        "limit_band_unavailable_count": 0,
+        "zero_volume_proxy_available": true,
+        "trades_with_zero_volume_near_entry": 0,
+        "trades_with_zero_volume_near_exit": 0,
+        "trades": [
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-10T09:29:00",
+            "direction": "long",
+            "entry_date": "2026-06-02",
+            "exit_date": "2026-06-10",
+            "entry_at_limit": false,
+            "exit_at_limit": false,
+            "entry_band_available": true,
+            "exit_band_available": true,
+            "entry_upper_limit": 7851.900000000001,
+            "entry_lower_limit": 7104.099999999999,
+            "exit_upper_limit": 7757.400000000001,
+            "exit_lower_limit": 7018.599999999999,
+            "entry_prev_close": 7478.0,
+            "exit_prev_close": 7388.0,
+            "zero_volume_near_entry": false,
+            "zero_volume_near_exit": false
+          },
+          {
+            "open_dt": "2026-06-04T13:59:00",
+            "close_dt": "2026-06-09T14:59:00",
+            "direction": "long",
+            "entry_date": "2026-06-04",
+            "exit_date": "2026-06-09",
+            "entry_at_limit": false,
+            "exit_at_limit": false,
+            "entry_band_available": true,
+            "exit_band_available": true,
+            "entry_upper_limit": 8086.05,
+            "entry_lower_limit": 7315.95,
+            "exit_upper_limit": 7828.8,
+            "exit_lower_limit": 7083.2,
+            "entry_prev_close": 7701.0,
+            "exit_prev_close": 7456.0,
+            "zero_volume_near_entry": false,
+            "zero_volume_near_exit": false
+          }
+        ]
+      }
+    },
+    {
+      "symbol": "RB888",
+      "limit_pct": 0.03,
+      "limit_source": "SHFE 螺纹钢期货合约：涨跌停板幅度为上一交易日结算价±3% (shfe.com.cn/products/futures/metal/ferrousandpreciousmetal/rb_f/, 2024-09-24修订)",
+      "limit_note": "First-cut steady-state contract percentage. Exchange notices may temporarily widen limits for specific contracts or after limit-hit days; those exceptions are not applied here.",
+      "error": "交易周期数据不足: 需要至少110根30分钟K线，实际95根",
+      "metrics": {
+        "trade_count": 0,
+        "entry_at_limit_count": 0,
+        "entry_not_at_limit_count": 0,
+        "exit_at_limit_count": 0,
+        "exit_not_at_limit_count": 0,
+        "entry_at_limit_pct": 0.0,
+        "exit_at_limit_pct": 0.0,
+        "limit_band_unavailable_count": 0,
+        "zero_volume_proxy_available": false,
+        "trades_with_zero_volume_near_entry": 0,
+        "trades_with_zero_volume_near_exit": 0,
+        "trades": []
+      }
+    },
+    {
+      "symbol": "SC888",
+      "limit_pct": 0.04,
+      "limit_source": "INE 原油期货标准合约：Daily Price Limits ±4% from the settlement price of the previous trading day (ine.cn/eng/market/futures/energy/sc/contract/)",
+      "limit_note": "First-cut steady-state contract percentage. Exchange notices may temporarily widen limits for specific contracts or after limit-hit days; those exceptions are not applied here.",
+      "error": null,
+      "metrics": {
+        "trade_count": 0,
+        "entry_at_limit_count": 0,
+        "entry_not_at_limit_count": 0,
+        "exit_at_limit_count": 0,
+        "exit_not_at_limit_count": 0,
+        "entry_at_limit_pct": 0.0,
+        "exit_at_limit_pct": 0.0,
+        "limit_band_unavailable_count": 0,
+        "zero_volume_proxy_available": false,
+        "trades_with_zero_volume_near_entry": 0,
+        "trades_with_zero_volume_near_exit": 0,
+        "trades": []
+      }
+    },
+    {
+      "symbol": "A888",
+      "limit_pct": 0.04,
+      "limit_source": "DCE 黄大豆1号期货合约：涨跌停板幅度为上一交易日结算价的±4% (大连商品交易所黄大豆1号期货合约文本 / 《大连商品交易所风险管理办法》)",
+      "limit_note": "First-cut steady-state contract percentage. Exchange notices may temporarily widen limits for specific contracts or after limit-hit days; those exceptions are not applied here.",
+      "error": "交易周期数据不足: 需要至少110根30分钟K线，实际86根",
+      "metrics": {
+        "trade_count": 0,
+        "entry_at_limit_count": 0,
+        "entry_not_at_limit_count": 0,
+        "exit_at_limit_count": 0,
+        "exit_not_at_limit_count": 0,
+        "entry_at_limit_pct": 0.0,
+        "exit_at_limit_pct": 0.0,
+        "limit_band_unavailable_count": 0,
+        "zero_volume_proxy_available": false,
+        "trades_with_zero_volume_near_entry": 0,
+        "trades_with_zero_volume_near_exit": 0,
+        "trades": []
+      }
+    },
+    {
+      "symbol": "ZN888",
+      "limit_pct": 0.04,
+      "limit_source": "SHFE 锌期货合约：涨跌停板幅度为上一交易日结算价±4% (shfe.com.cn/publicnotice/notice/202408/W020240823636323134983.docx 修订稿)",
+      "limit_note": "First-cut steady-state contract percentage. Exchange notices may temporarily widen limits for specific contracts or after limit-hit days; those exceptions are not applied here.",
+      "error": null,
+      "metrics": {
+        "trade_count": 0,
+        "entry_at_limit_count": 0,
+        "entry_not_at_limit_count": 0,
+        "exit_at_limit_count": 0,
+        "exit_not_at_limit_count": 0,
+        "entry_at_limit_pct": 0.0,
+        "exit_at_limit_pct": 0.0,
+        "limit_band_unavailable_count": 0,
+        "zero_volume_proxy_available": false,
+        "trades_with_zero_volume_near_entry": 0,
+        "trades_with_zero_volume_near_exit": 0,
+        "trades": []
+      }
+    }
+  ]
+}
