@@ -1,7 +1,7 @@
 ---
 task: A49 - ATR Trailing-Stop Reachability Fix
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -173,3 +173,4 @@ back to review.
 | 2026-07-12 | kimi-code → codex | dev → review | A49 ATR trailing-stop reachability fix implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: Review cannot accept broad-gate evidence: unit/preflight reruns hit documented WinError 5 tmp_path sandbox limitation, but HANDOFF lacks the required Manual verification block with pass/fail counts. |
 | 2026-07-13 | kimi-code → codex | dev → review | A49 ATR trailing-stop reachability fix implemented |
+| 2026-07-13 | codex → codex | review → done | A49 review passed: focused regression/equivalence tests and sync gates passed; broad unit/preflight accepted via documented manual verification block |
