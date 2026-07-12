@@ -1,19 +1,19 @@
 ---
 task: A50 - Limit-Up/Down/Halt Impact Diagnostic (Read-Only)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -108,6 +108,27 @@ per trading day (not just the steady-state default) would be a worthwhile refine
 
 (dev = kimi-code must read this before writing code)
 
+Review rejected by Codex on 2026-07-13 for one real, non-sandbox blocker:
+
+1. Fix the new ruff error in `examples/czsc_strategy/tests/unit/test_limit_halt_exposure_report.py:7`.
+   `ruff check examples\czsc_strategy\diagnostics\limit_halt_exposure_report.py examples\czsc_strategy\tests\unit\test_limit_halt_exposure_report.py`
+   currently fails with `F401 [*] pytest imported but unused`. Remove the unused `import pytest`.
+
+Verified during review before rejection:
+
+- `python tools\sync_check.py` passed.
+- `python tools\sync_check.py --root examples\czsc_strategy` passed.
+- The A50 committed diff does not modify `data_adapter.py`, `backtest_engine.py`, `positions.py`,
+  or `portfolio_engine.py`.
+- The generated JSON report covers `WINDOW_START="2026-04-24"`, `WINDOW_END="2026-07-09"` and all
+  five default symbols (`AP888`, `RB888`, `SC888`, `A888`, `ZN888`).
+- Report arithmetic reconciles per symbol and in totals.
+- The RESEARCH-ONLY banner is present, and `run_next_work.ps1` exists at
+  `examples/czsc_strategy/diagnostics/run_next_work.ps1`.
+- Pytest/preflight checks that need `tmp_path` hit the documented sandbox `PermissionError
+  [WinError 5]` signature; use the existing manual verification block for those two acceptance
+  items unless the Windows symlink/tmp_path environment has been fixed.
+
 1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A50". Second task of the
    6-task remediation roadmap (A49-A54) triaging `docs/review/ai_trading_review_2026-07-12.md` —
    read that audit report's Finding #2 (🔴 high) for full context.
@@ -162,3 +183,4 @@ per trading day (not just the steady-state default) would be a worthwhile refine
 | 2026-07-13 | codex → claude-code | done → design | A50 promoted from the audit remediation roadmap draft after A49 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A50 (limit-up/down/halt exposure diagnostic) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A50 limit-up/down/halt exposure diagnostic implemented |
+| 2026-07-13 | codex → kimi-code | review → dev | 打回: ruff check fails: unused pytest import in test_limit_halt_exposure_report.py |
