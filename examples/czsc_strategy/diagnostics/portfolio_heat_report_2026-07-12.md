@@ -2,7 +2,7 @@
 
 **RESEARCH-ONLY — Diagnostic only, not a trading recommendation.**
 
-- Generated at: 2026-07-12T13:01:00.487634+00:00
+- Generated at: 2026-07-12T13:33:32.330972+00:00
 - Window: `2026-04-24` ~ `2026-07-09`
 - Symbols: `AP888 / RB888 / SC888 / A888 / ZN888`
 - Cluster cap: `1.0`

@@ -195,7 +195,7 @@ class BacktestEngine:
         # 清空 bars 强制重新加载，避免日期/参数修改后仍使用旧数据
         self.bars = []
 
-    def run(self, warmup_bars: int = 100, coordinator=None) -> dict:
+    def run(self, warmup_bars: int = 100) -> dict:
         """
         执行回测 - 多级别协同分析
 
@@ -204,8 +204,6 @@ class BacktestEngine:
         分别创建CZSC对象进行缠论分析，综合多周期信号。
 
         :param warmup_bars: 预热K线数量（以交易周期计）
-        :param coordinator: optional ``PortfolioCoordinator`` for cross-symbol risk
-            management (used only when ``portfolio_risk="on"``).
         :return: 回测结果字典
         """
         # 重置状态，保证 run() 幂等
@@ -297,10 +295,6 @@ class BacktestEngine:
         sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
         risk_mode = sizing_model == "risk"
 
-        # A48: attach coordinator for portfolio mode if configured.
-        portfolio_risk_on = STRATEGY_CONFIG.get("portfolio_risk", "off") == "on"
-        self._coordinator = coordinator if portfolio_risk_on else None
-
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]
 
@@ -313,14 +307,8 @@ class BacktestEngine:
 
             # 1. 先执行上一根bar产生的待执行信号（用当根开盘价成交）
             if pending_signals is not None:
-                exec_signals = pending_signals
-                # A48: portfolio coordinator may block individual opens.
-                if self._coordinator is not None:
-                    exec_signals = self._filter_signals_for_coordinator(
-                        exec_signals, bar, open_only=True
-                    )
                 self.strategy.update(
-                    exec_signals, bar.close, bar.dt,
+                    pending_signals, bar.close, bar.dt,
                     execution_price=bar.open, czsc_obj=czsc_trade,
                     bar_high=bar.high, bar_low=bar.low,
                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin,
@@ -430,9 +418,6 @@ class BacktestEngine:
                     "二卖空头": STRATEGY_CONFIG.get("pos_2sell", 0.20),
                     "三卖空头": STRATEGY_CONFIG.get("pos_3sell", 0.30),
                 }
-                # A48: portfolio coordinator may override per-symbol weights.
-                if self._coordinator is not None:
-                    pos_weights = self._coordinator.get_weights(self.symbol)
                 weight_symbol = self.table_name.split("_")[0] if self.table_name else self.symbol
                 pos_weights = _apply_symbol_position_overrides(pos_weights, weight_symbol)
                 total_pnl = 0
@@ -479,10 +464,6 @@ class BacktestEngine:
                     "sizing_model": sizing_model,
                 })
 
-            # A48: update shared coordinator state after this bar.
-            if self._coordinator is not None:
-                self._update_coordinator_after_bar(bar, equity)
-
             # 进度提示
             if (i - warmup_bars) % 500 == 0 and i > warmup_bars:
                 pct = (i - warmup_bars) / (len(trade_bars) - warmup_bars) * 100
@@ -491,66 +472,8 @@ class BacktestEngine:
         # 保存CZSC对象供外部使用
         self.czsc_obj = czsc_trade
 
-        # A48: clean up the coordinator reference so the engine stays serializable.
-        self._coordinator = None
-
         # 生成报告
         return self.generate_report()
-
-    def _filter_signals_for_coordinator(
-        self,
-        signals: dict,
-        bar,
-        open_only: bool = True,
-    ) -> dict:
-        """Remove open-triggering signal keys that the coordinator blocks.
-
-        The coordinator is consulted for each sub-strategy that would otherwise
-        open at this bar.  Blocked open signal keys are cleared so the matching
-        Event no longer fires; all other signals (including exits) pass through.
-        """
-        if self._coordinator is None:
-            return signals
-
-        trade_freq_name = STRATEGY_CONFIG.get("trade_freq", "30分钟")
-        filtered = dict(signals)
-
-        # Map sub-strategy names to the signal key patterns that trigger an open.
-        open_keys = {
-            "一买多头": f"{trade_freq_name}_D1BSP_一买V260615",
-            "二买多头": f"{trade_freq_name}_D1BSP_二买V260615",
-            "三买多头": f"{trade_freq_name}_D1BSP_三买阶段V260615",
-            "一卖空头": f"{trade_freq_name}_D1BSP_一卖V260615",
-            "二卖空头": f"{trade_freq_name}_D1BSP_二卖V260615",
-            "三卖空头": f"{trade_freq_name}_D1BSP_三卖阶段V260615",
-        }
-
-        for pos_name, key_prefix in open_keys.items():
-            direction = 1 if "多头" in pos_name else -1
-            if not self._coordinator.can_open(
-                self.symbol, pos_name, direction, bar.dt, bar.open
-            ):
-                # Remove any signal key that starts with the open prefix.
-                for k in list(filtered.keys()):
-                    if k.startswith(key_prefix):
-                        del filtered[k]
-        return filtered
-
-    def _update_coordinator_after_bar(self, bar, equity: float) -> None:
-        """Report post-bar state to the portfolio coordinator."""
-        if self._coordinator is None:
-            return
-
-        flattened = self._coordinator.update_after_bar(
-            self.symbol, bar.dt, bar.close, self.strategy.positions, equity
-        )
-        if flattened:
-            # Daily loss limit hit: flatten all open positions immediately.
-            self.strategy.flatten_all_positions(bar.close, bar.dt, reason="portfolio_daily_loss_limit")
-            # Re-report state now that positions are flat.
-            self._coordinator.update_after_bar(
-                self.symbol, bar.dt, bar.close, self.strategy.positions, equity
-            )
 
     def _compute_equity_and_margin(self, price: float) -> tuple[float, float]:
         """Compute running equity and total open initial margin in currency terms.

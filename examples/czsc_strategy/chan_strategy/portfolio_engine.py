@@ -76,6 +76,11 @@ def _strategy_weight_fixed(strategy: str, symbol: str | None = None) -> float:
     return float(STRATEGY_CONFIG.get(config_key, 0.10))
 
 
+def _position_sign(strategy: str) -> int:
+    """Return +1 for long sub-strategies and -1 for short sub-strategies."""
+    return -1 if "空头" in strategy else 1
+
+
 class PortfolioCoordinator:
     """Stateful cross-symbol coordinator used during a portfolio replay.
 
@@ -127,11 +132,16 @@ class PortfolioCoordinator:
         return [name for name, members in self.corr_clusters.items() if key in {str(m).upper() for m in members}]
 
     def _position_weight(self, symbol: str, strategy: str) -> float:
-        """Weight assigned to a new position in (symbol, strategy)."""
+        """Signed weight assigned to a new position in (symbol, strategy).
+
+        Long sub-strategies return positive weights, short sub-strategies
+        return negative weights.  Cluster exposure and PnL accounting use
+        ``abs(weight)`` for gross magnitude while net exposure preserves sign.
+        """
         if self.cfg.get("weighting") == "risk_parity":
             rel = _sub_strategy_relative_weights().get(strategy, 1.0 / 6.0)
-            return self.symbol_weights.get(symbol, 0.0) * rel
-        return _strategy_weight_fixed(strategy, symbol)
+            return self.symbol_weights.get(symbol, 0.0) * rel * _position_sign(strategy)
+        return _strategy_weight_fixed(strategy, symbol) * _position_sign(strategy)
 
     # ------------------------------------------------------------------ updates
     def _update_volatility(self, dt: datetime, prices: dict[str, float]) -> None:
@@ -176,13 +186,18 @@ class PortfolioCoordinator:
         self,
         dt: datetime,
         prices: dict[str, float],
-        per_symbol_equity: dict[str, float],
+        per_symbol_equity: dict[str, float] | None = None,
+        portfolio_equity: float | None = None,
     ) -> None:
         """Advance the coordinator by one bar.
 
         :param dt: current bar timestamp.
         :param prices: symbol -> current price (close) for symbols that have a bar.
-        :param per_symbol_equity: symbol -> standalone BacktestEngine equity for the bar.
+        :param per_symbol_equity: symbol -> standalone BacktestEngine equity for
+            the bar.  Used only when ``portfolio_equity`` is not supplied.
+        :param portfolio_equity: optional coordinated portfolio equity computed by
+            the caller.  When supplied it overrides the per-symbol estimate so
+            daily-loss decisions are based on the coordinated replay ledger.
         """
         trading_day = self._trading_day(dt)
         if trading_day != self.current_trading_day:
@@ -190,21 +205,24 @@ class PortfolioCoordinator:
 
         self._update_volatility(dt, prices)
 
-        # Portfolio equity: weighted average of normalized per-symbol equities.
-        weighted = 0.0
-        weight_sum = 0.0
-        for symbol in self.symbols:
-            eq = per_symbol_equity.get(symbol)
-            if eq is None:
-                continue
-            norm = eq / self.initial_capital
-            w = self.symbol_weights.get(symbol, 0.0)
-            weighted += norm * w
-            weight_sum += w
-        if weight_sum > 0:
-            self.current_equity = self.initial_capital * (weighted / weight_sum)
-        else:
-            self.current_equity = self.prev_day_close_equity
+        if portfolio_equity is not None:
+            self.current_equity = float(portfolio_equity)
+        elif per_symbol_equity:
+            # Portfolio equity: weighted average of normalized per-symbol equities.
+            weighted = 0.0
+            weight_sum = 0.0
+            for symbol in self.symbols:
+                eq = per_symbol_equity.get(symbol)
+                if eq is None:
+                    continue
+                norm = eq / self.initial_capital
+                w = self.symbol_weights.get(symbol, 0.0)
+                weighted += norm * w
+                weight_sum += w
+            if weight_sum > 0:
+                self.current_equity = self.initial_capital * (weighted / weight_sum)
+            else:
+                self.current_equity = self.prev_day_close_equity
 
         # Daily loss limit trigger check.
         if self.prev_day_close_equity > 0 and not self.daily_loss_limit_active:
@@ -311,8 +329,8 @@ class PortfolioEngine:
         self.start_date = start_date or BACKTEST_CONFIG["start_date"]
         self.end_date = end_date or BACKTEST_CONFIG["end_date"]
         self.initial_capital = initial_capital if initial_capital is not None else BACKTEST_CONFIG["initial_capital"]
-        self.commission_rate = commission_rate
-        self.slippage = slippage
+        self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
+        self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]
         self.db_path = db_path
         self.table_names = table_names or {}
         self.enable_short = enable_short
@@ -439,6 +457,7 @@ class PortfolioEngine:
         all_dts = sorted({dt for s in successful_symbols for dt in price_by_symbol[s]})
         open_idx = 0
         close_idx = 0
+        flat_events_seen = 0
 
         open_positions: dict[tuple[str, str], dict[str, Any]] = {}
         coordinated_pairs: list[dict[str, Any]] = []
@@ -447,18 +466,20 @@ class PortfolioEngine:
         for dt in all_dts:
             prices = {s: price_by_symbol[s].get(dt) for s in successful_symbols}
             per_symbol_equity = {s: equity_by_symbol[s].get(dt) for s in successful_symbols}
-            coordinator.on_bar(dt, prices, per_symbol_equity)
 
             # Process opens at this dt.
             while open_idx < len(open_events) and open_events[open_idx][0] == dt:
                 _, symbol, strategy, pair = open_events[open_idx]
                 open_idx += 1
                 if coordinator.allow_open(symbol, strategy, dt, pair["open_price"]):
+                    signed_weight = coordinator._position_weight(symbol, strategy)
                     coordinator.record_open(symbol, strategy, dt, pair["open_price"])
                     open_positions[(symbol, strategy)] = {
+                        "symbol": symbol,
                         "open_dt": dt,
                         "open_price": pair["open_price"],
-                        "weight": coordinator._position_weight(symbol, strategy),
+                        "weight": signed_weight,
+                        "sign": _position_sign(strategy),
                     }
 
             # Process closes at this dt.
@@ -485,22 +506,64 @@ class PortfolioEngine:
 
             # Recompute portfolio equity from filtered trades.
             realized = sum(
-                p["pnl_pct"] * p["weight"] * self.initial_capital for p in coordinated_pairs
+                p["pnl_pct"] * abs(p["weight"]) * self.initial_capital for p in coordinated_pairs
             )
             unrealized = 0.0
-            for (symbol, _strategy), pos in open_positions.items():
-                price = prices.get(symbol)
+            for pos in open_positions.values():
+                price = prices.get(pos["symbol"])
                 if price is None or pos["open_price"] <= 0:
                     continue
-                upnl_pct = (price - pos["open_price"]) / pos["open_price"]
-                unrealized += upnl_pct * pos["weight"] * self.initial_capital
+                market_return = (price - pos["open_price"]) / pos["open_price"]
+                upnl_pct = pos["sign"] * market_return
+                unrealized += upnl_pct * abs(pos["weight"]) * self.initial_capital
             portfolio_equity = self.initial_capital + realized + unrealized
+
+            # Update coordinator state using the coordinated portfolio equity so the
+            # daily-loss-limit decision is based on the replay ledger, not the
+            # standalone per-symbol equity curves.
+            coordinator.on_bar(dt, prices, per_symbol_equity, portfolio_equity)
+
+            # Apply coordinator flat events so the reported portfolio state reflects
+            # the daily-loss-limit close.
+            flattened_this_bar = False
+            while flat_events_seen < len(coordinator.flat_events):
+                ev = coordinator.flat_events[flat_events_seen]
+                flat_events_seen += 1
+                symbol = ev["symbol"]
+                strategy = ev["strategy"]
+                pos = open_positions.pop((symbol, strategy), None)
+                if pos is None:
+                    continue
+                flat_price = ev["flat_price"]
+                sign = pos["sign"]
+                gross_pnl = sign * (flat_price - pos["open_price"]) / pos["open_price"]
+                coordinated_pairs.append({
+                    "symbol": symbol,
+                    "strategy": strategy,
+                    "open_dt": pos["open_dt"],
+                    "close_dt": dt,
+                    "open_price": pos["open_price"],
+                    "close_price": flat_price,
+                    "pnl_pct": gross_pnl,
+                    "weight": pos["weight"],
+                    "bars_held": None,
+                    "reason": "portfolio_daily_loss_limit",
+                    "reason_code": "portfolio_daily_loss_limit",
+                })
+                flattened_this_bar = True
+
+            if flattened_this_bar:
+                # Recompute equity with no unrealized PnL since all positions are flat.
+                realized = sum(
+                    p["pnl_pct"] * abs(p["weight"]) * self.initial_capital for p in coordinated_pairs
+                )
+                portfolio_equity = self.initial_capital + realized
 
             coordinated_equity_curve.append({
                 "dt": dt,
                 "equity": portfolio_equity,
                 "gross_exposure": sum(abs(p["weight"]) for p in open_positions.values()),
-                "net_exposure": sum(p["weight"] for p in open_positions.values()),
+                "net_exposure": sum(pos["sign"] * abs(pos["weight"]) for pos in open_positions.values()),
                 "cluster_exposure": dict(coordinator.cluster_exposure),
                 "loss_limit_active": coordinator.daily_loss_limit_active,
                 "symbol_weights": dict(coordinator.symbol_weights),
@@ -539,7 +602,7 @@ def run_portfolio_backtest(
     slippage: float | None = None,
     db_path: str | None = None,
     enable_short: bool | None = None,
-    table_name: str | None = None,
+    table_names: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Convenience entry point matching ``run_batch_backtest`` style."""
     engine = PortfolioEngine(
@@ -552,6 +615,6 @@ def run_portfolio_backtest(
         slippage=slippage,
         db_path=db_path,
         enable_short=enable_short,
-        table_name=table_name,
+        table_names=table_names,
     )
     return engine.run()
