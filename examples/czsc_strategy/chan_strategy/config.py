@@ -86,6 +86,12 @@ STRATEGY_CONFIG = {
     "macd_slow": 26,                      # MACD slow EMA period (standard, NOT tuned)
     "macd_signal": 9,                     # MACD signal EMA period (standard, NOT tuned)
 
+    # A44 multi-level resonance entry filter (P5). "off" is the legacy byte-identical default;
+    # "daily" requires strictly-positive daily structure (direction + position);
+    # "daily_4h" additionally requires the 4H level to be constructive.
+    "resonance_filter": "off",            # "off" (legacy, default) | "daily" | "daily_4h"
+    "resonance_freq_4h": "240分钟",        # 4H CZSC level frequency label
+
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
         # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.

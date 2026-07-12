@@ -240,6 +240,17 @@ class BacktestEngine:
         )
         print(f"K线合成: {len(self.bars)}根1分钟 → {len(daily_bars)}根日线")
 
+        # 从1分钟K线合成4H K线（仅用于 A44 daily_4h 共振模式）
+        resonance_filter = STRATEGY_CONFIG.get("resonance_filter", "off")
+        freq_4h_name = STRATEGY_CONFIG.get("resonance_freq_4h", "240分钟")
+        h4_bars: list[RawBar] = []
+        czsc_4h = None
+        if resonance_filter == "daily_4h":
+            h4_minutes = self._freq_to_minutes(freq_4h_name)
+            h4_freq_obj = self._freq_name_to_czsc_freq(freq_4h_name)
+            h4_bars = resample_bars(self.bars, h4_freq_obj, h4_minutes)
+            print(f"K线合成: {len(self.bars)}根1分钟 → {len(h4_bars)}根{freq_4h_name}")
+
         if len(trade_bars) < warmup_bars + 10:
             return {"error": f"交易周期数据不足: 需要至少{warmup_bars+10}根{trade_freq_name}K线，"
                     f"实际{len(trade_bars)}根"}
@@ -255,6 +266,15 @@ class BacktestEngine:
         enable_daily_filter = STRATEGY_CONFIG.get("filter_freq") == "日线" and czsc_daily is not None
         if STRATEGY_CONFIG.get("filter_freq") == "日线" and czsc_daily is None:
             print("日线趋势过滤不可用: 日线预热数据不足，已自动禁用日线过滤")
+
+        # 4H CZSC（A44 daily_4h 共振）- 找到warmup对应的4H范围
+        h4_bar_idx = 0
+        if resonance_filter == "daily_4h" and h4_bars:
+            h4_warmup_bars = [b for b in h4_bars if b.dt <= warmup_dt]
+            czsc_4h = CZSC(h4_warmup_bars) if len(h4_warmup_bars) >= 3 else None
+            h4_bar_idx = len(h4_warmup_bars)
+            if czsc_4h is None:
+                print("4H共振过滤不可用: 4H预热数据不足，已自动禁用4H过滤")
 
         # 初始化策略（使用交易周期频率名）
         self.strategy = ChanTimingStrategy(
@@ -313,7 +333,13 @@ class BacktestEngine:
                     czsc_daily.update(daily_bars[daily_bar_idx])
                     daily_bar_idx += 1
 
-            # 4. 生成当根信号（但不立即成交，存储到pending_signals）
+            # 4. 增量更新4H CZSC（当有新的4H bar时，dt <= 当前bar，无未来函数）
+            if czsc_4h is not None:
+                while h4_bar_idx < len(h4_bars) and h4_bars[h4_bar_idx].dt <= bar.dt:
+                    czsc_4h.update(h4_bars[h4_bar_idx])
+                    h4_bar_idx += 1
+
+            # 5. 生成当根信号（但不立即成交，存储到pending_signals）
             # 传递一买/一卖锚点信息，使二买/二卖信号能严格绑定上下文
             buy1_anchor = self.strategy.get_last_buy1_anchor() if self.strategy else None
             sell1_anchor = self.strategy.get_last_sell1_anchor() if self.strategy else None
@@ -327,6 +353,11 @@ class BacktestEngine:
             if czsc_daily is not None and czsc_daily.bi_list:
                 daily_signals = get_all_signals(czsc_daily, filter_freq_name)
                 signals.update(daily_signals)
+
+            # 添加4H共振过滤信号（A44 daily_4h 模式消费）
+            if czsc_4h is not None and czsc_4h.bi_list:
+                h4_signals = get_all_signals(czsc_4h, freq_4h_name)
+                signals.update(h4_signals)
 
             # 记录信号历史（每100根记录一次，避免内存过大）
             if i % 100 == 0 or i == len(trade_bars) - 1:
@@ -498,6 +529,7 @@ class BacktestEngine:
         freq_minutes_map = {
             "1分钟": 1, "5分钟": 5, "15分钟": 15,
             "30分钟": 30, "60分钟": 60, "120分钟": 120,
+            "240分钟": 240,
         }
         return freq_minutes_map.get(freq_name, 30)
 
@@ -507,6 +539,7 @@ class BacktestEngine:
         name_to_freq = {
             "1分钟": Freq.F1, "5分钟": Freq.F5, "15分钟": Freq.F15,
             "30分钟": Freq.F30, "60分钟": Freq.F60, "120分钟": Freq.F120,
+            "240分钟": Freq.F120,  # czsc 没有 F240；仅作为元数据，不影响信号生成
             "日线": Freq.D, "周线": Freq.W, "月线": Freq.M,
         }
         return name_to_freq.get(freq_name, Freq.F30)
@@ -524,6 +557,7 @@ class BacktestEngine:
             "exit_event_semantics": STRATEGY_CONFIG.get("exit_event_semantics", "legacy"),
             "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model", "close"),
             "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
+            "resonance_filter": STRATEGY_CONFIG.get("resonance_filter", "off"),
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
             "traded_bars": len(self.equity_curve),

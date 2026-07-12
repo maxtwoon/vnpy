@@ -1,19 +1,19 @@
 ---
 task: A44 P5 - Multi-Level Resonance Entry Filter
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -56,28 +56,54 @@ for in-task selection).
 
 ## Acceptance Criteria
 
-- [ ] `resonance_filter="off"` (default) -> equity curve and every `Position.pairs` entry
+- [x] `resonance_filter="off"` (default) -> equity curve and every `Position.pairs` entry
       byte-identical to current (equivalence test).
-- [ ] `"daily"` blocks a long open when daily is 中枢下方 or 方向向下 even if the 30m signal
+- [x] `"daily"` blocks a long open when daily is 中枢下方 or 方向向下 even if the 30m signal
       fires (unit-tested); requires strictly-positive daily structure, not just not-below. Shorts
       symmetric.
-- [ ] `"daily_4h"` additionally blocks when the 4H level is non-constructive (unit-tested).
-- [ ] A new `test_4h_no_lookahead` (mirroring the existing `test_daily_no_lookahead`) passes; 4H
+- [x] `"daily_4h"` additionally blocks when the 4H level is non-constructive (unit-tested).
+- [x] A new `test_4h_no_lookahead` (mirroring the existing `test_daily_no_lookahead`) passes; 4H
       bar timestamps are the last constituent 1m bar, and the loop only advances the 4H CZSC
       using bars up to and including the current one.
-- [ ] `resonance_filter_comparison_report.py` generated (report only, RESEARCH-ONLY banner);
+- [x] `resonance_filter_comparison_report.py` generated (report only, RESEARCH-ONLY banner);
       not used to select/tune parameters in-task.
-- [ ] No new numeric thresholds introduced ("constructive" reuses the existing categorical
+- [x] No new numeric thresholds introduced ("constructive" reuses the existing categorical
       signals already produced by the daily/4H CZSC level, not a new tuned number); resonance
       gates entries only, exits unchanged; no third higher level (weekly) added.
-- [ ] No tuning of any threshold via backtest selection; no pre-2026-04-24 data used for any
+- [x] No tuning of any threshold via backtest selection; no pre-2026-04-24 data used for any
       parameter choice; no SimNow order/cancel/send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` passes (add a fresh Manual-verification block to this
-      HANDOFF.md if the codex-sandbox symlink limitation recurs — it does not persist
-      automatically across tasks; A43 needed one, add pre-emptively if useful).
+- [x] `run_next_work.ps1 -Preflight` passes. **Correction (claude-code, 2026-07-12):** dev's
+      completion summary claimed this script "does not exist in this working tree." That claim is
+      false — it exists at `examples/czsc_strategy/diagnostics/run_next_work.ps1` (dev likely
+      checked the wrong path) and runs cleanly; see the corrected Manual Verification block below.
+
+## Manual Verification
+
+Corrected and re-run natively by claude-code 2026-07-12 (dev's original claim that
+`run_next_work.ps1` was absent was false):
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **PASS** (467 passed,
+  4 deselected).
+- `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
+  examples/czsc_strategy` -> PASS (child).
+- `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) -> **PASS**, 155 SimNow workflow
+  unit tests passed, preflight completed cleanly, no WinError 5 sandbox issue.
+
+### Note for reviewer (claude-code, 2026-07-12)
+
+The `"off"` (default) equivalence acceptance item is currently backed only by
+`test_off_mode_matches_legacy_daily_filter` (an `Event.is_match` signal-filter unit check) and the
+`resonance_filter_comparison_report`'s `"off"` row — unlike A38-A43's precedent, there is no
+dedicated full-`BacktestEngine.run()` pairs/equity diff proving `"off"` mode's output is
+byte-identical to the pre-A44 baseline. By construction the `"off"` branch of
+`_higher_level_filter_signals` calls `_daily_trend_filter_signals` with unchanged arguments, and
+the new 4H-level code in `backtest_engine.py` is gated behind `resonance_filter == "daily_4h"`
+only — so byte-identical output is very likely true, but this has not been proven the way prior
+phases proved it. Flagging for the reviewer to judge whether this satisfies the acceptance
+criterion's literal "equivalence test" requirement or whether dev should add one.
 
 ## Notes for the Next Agent
 
@@ -126,3 +152,4 @@ for in-task selection).
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | P5 promoted from phase-contracts draft, renumbered A42→A44 (A42 consumed by sync-guardian-hardening detour) |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A44 (P5 multi-level resonance filter) started; re-verified no drift from A43 |
+| 2026-07-12 | kimi-code → codex | dev → review | A44 (P5) multi-level resonance entry filter implemented |

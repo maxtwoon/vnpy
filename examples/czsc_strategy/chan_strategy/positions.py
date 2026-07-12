@@ -39,6 +39,58 @@ def _daily_trend_filter_signals(direction: str = "long", strict: bool = True) ->
     }
 
 
+def _resonance_filter_signals(direction: str = "long", level: str = "日线") -> dict:
+    """多级共振过滤信号
+
+    :param direction: long 使用向上趋势过滤；short 使用向下趋势过滤。
+    :param level: 高级别频率标签，如 "日线" 或 "240分钟"。
+    :return: 包含 signals_all 与 signals_not 的字典，用于开仓 Event。
+
+    "constructive" 复用现有 categorical 信号：
+    - 多：方向=向上 且 位置 in {中枢上方, 中枢内}
+    - 空：方向=向下 且 位置 in {中枢下方, 中枢内}
+    不引入新的数值阈值。
+    """
+    if direction not in {"long", "short"}:
+        raise ValueError(f"不支持的共振过滤方向: {direction}")
+    trend = "向上" if direction == "long" else "向下"
+    blocked_position = "中枢下方" if direction == "long" else "中枢上方"
+    return {
+        "signals_all": [
+            f"{level}_D1BI_方向V260615_{trend}_任意_任意_0",
+        ],
+        "signals_not": [
+            f"{level}_D1ZS_位置V260615_{blocked_position}_任意_任意_0",
+            f"{level}_D1ZS_位置V260615_无中枢_任意_任意_0",
+        ],
+    }
+
+
+def _higher_level_filter_signals(direction: str = "long", strict: bool = True) -> dict:
+    """Combine daily trend filter with the optional A44 resonance filter.
+
+    When ``resonance_filter`` is ``"off"`` this returns exactly the legacy daily
+    filter (byte-identical), preserving the original ``strict`` semantics used by
+    each sub-strategy.  ``"daily"`` requires strictly-positive daily structure.
+    ``"daily_4h"`` additionally requires constructive 4H structure.
+    """
+    resonance_filter = STRATEGY_CONFIG.get("resonance_filter", "off")
+    if resonance_filter == "off":
+        return _daily_trend_filter_signals(direction=direction, strict=strict)
+
+    daily = _resonance_filter_signals(direction=direction, level="日线")
+    if resonance_filter == "daily":
+        return daily
+
+    # "daily_4h"
+    freq_4h = STRATEGY_CONFIG.get("resonance_freq_4h", "240分钟")
+    h4 = _resonance_filter_signals(direction=direction, level=freq_4h)
+    return {
+        "signals_all": daily["signals_all"] + h4["signals_all"],
+        "signals_not": daily["signals_not"] + h4["signals_not"],
+    }
+
+
 # ========== 轻量级自定义实现 ==========
 
 class Operate(Enum):
@@ -738,7 +790,7 @@ def create_first_buy_position(symbol: str, freq: str = "30分钟",
     :param enable_daily_filter: 是否启用日线趋势过滤（默认 True）
     """
     daily_filter = (
-        _daily_trend_filter_signals(strict=False)
+        _higher_level_filter_signals(direction="long", strict=False)
         if enable_daily_filter else {"signals_all": [], "signals_not": []}
     )
     opens = [
@@ -829,7 +881,7 @@ def create_second_buy_position(symbol: str, freq: str = "30分钟",
     :param enable_daily_filter: 是否启用日线趋势过滤（默认 True）
     """
     daily_filter = (
-        _daily_trend_filter_signals(strict=True)
+        _higher_level_filter_signals(direction="long", strict=True)
         if enable_daily_filter else {"signals_all": [], "signals_not": []}
     )
     opens = [
@@ -921,7 +973,7 @@ def create_third_buy_position(symbol: str, freq: str = "30分钟",
     :param enable_daily_filter: 是否启用日线趋势过滤（默认 True）
     """
     daily_filter = (
-        _daily_trend_filter_signals(strict=True)
+        _higher_level_filter_signals(direction="long", strict=True)
         if enable_daily_filter else {"signals_all": [], "signals_not": []}
     )
     opens = [
@@ -1000,7 +1052,7 @@ def create_first_sell_position(symbol: str, freq: str = "30分钟",
                                enable_daily_filter: bool = True) -> Position:
     """一卖空头持仓子策略；一卖为顶部左侧试仓，只排除日线明确强势。"""
     daily_filter = (
-        _daily_trend_filter_signals(direction="short", strict=False)
+        _higher_level_filter_signals(direction="short", strict=False)
         if enable_daily_filter else {"signals_all": [], "signals_not": []}
     )
     opens = [
@@ -1076,7 +1128,7 @@ def create_second_sell_position(symbol: str, freq: str = "30分钟",
                                 enable_daily_filter: bool = True) -> Position:
     """二卖空头持仓子策略；必须有一卖锚点上下文支撑。"""
     daily_filter = (
-        _daily_trend_filter_signals(direction="short", strict=True)
+        _higher_level_filter_signals(direction="short", strict=True)
         if enable_daily_filter else {"signals_all": [], "signals_not": []}
     )
     opens = [
@@ -1152,7 +1204,7 @@ def create_third_sell_position(symbol: str, freq: str = "30分钟",
                                enable_daily_filter: bool = True) -> Position:
     """三卖空头持仓子策略；趋势跟随型向下离开后反抽确认。"""
     daily_filter = (
-        _daily_trend_filter_signals(direction="short", strict=True)
+        _higher_level_filter_signals(direction="short", strict=True)
         if enable_daily_filter else {"signals_all": [], "signals_not": []}
     )
     opens = [
