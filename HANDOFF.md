@@ -1,7 +1,7 @@
 ---
 task: A52 - Continuous-Contract Data-Integrity (Adjustment Method + Rollover Stat Field)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -164,3 +164,4 @@ symlink WinError 5 limitation, rely on these recorded counts instead.
 | 2026-07-13 | codex → claude-code | done → design | A52 promoted from the audit remediation roadmap draft after A51 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A52 (continuous-contract data-integrity) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A52 continuous-contract data-integrity implemented |
+| 2026-07-13 | codex → codex | review → done | A52 review accepted: acceptance criteria verified; pytest/preflight sandbox WinError 5 covered by recorded manual counts |
