@@ -1,7 +1,7 @@
 ---
 task: A47 P8a - Exit Overhaul (structural_atr)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -166,3 +166,4 @@ baseline (report only, not for in-task selection).
 | 2026-07-12 | codex → claude-code | done → design | P8a promoted from phase-contracts draft, confirmed A47 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A47 (P8a exit overhaul) started; re-verified no drift from A43-A46 |
 | 2026-07-12 | kimi-code → codex | dev → review | A47 (P8a) exit overhaul (structural_atr) implemented |
+| 2026-07-12 | codex → codex | review → done | A47 (P8a structural_atr exit overhaul) reviewed and accepted: legacy branch verified byte-identical to pre-A47 code (atr kwarg inert), structural stop/fixed stop/timeout confirmed unaffected by exit_model (self.exits excludes partial_tp events, checked in _get_operate before the priority chain), partial-TP _scale_out and ATR trailing _check_atr_trailing_stop verified correct for both directions/sizing modes; 512 unit tests pass, both sync_check roots PASS, preflight 155 passed, report window/symbols correct (2026-04-24/2026-07-09, 5 default symbols) with real non-empty data; no SimNow/portfolio/sizing scope creep (zero send_order/buy/sell/short/cover hits in diff). |
