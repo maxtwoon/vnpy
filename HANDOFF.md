@@ -1,7 +1,7 @@
 ---
 task: A45 P6 - 二买 Removal / Hard-Gate + ATR Chop Filter
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -188,3 +188,4 @@ table. Replaced the placeholder report files with this real-data version before 
 | 2026-07-12 | kimi-code → codex | dev → review | A45 (P6) second-buy removal/hard-gate + ATR chop filter implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: gated second-buy opens without required P5 resonance |
 | 2026-07-12 | kimi-code → codex | dev → review | A45 (P6) second-buy removal/hard-gate + ATR chop filter implemented; gated mode now requires actual P5 resonance regardless of resonance_filter setting |
+| 2026-07-12 | codex → codex | review → done | A45 (P6) review passed: second-buy hard-gate, ATR chop filter, reports, guardrails, sync checks, and documented manual unit/preflight verification accepted |
