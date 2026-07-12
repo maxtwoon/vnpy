@@ -1,19 +1,19 @@
 ---
 task: A51 - Limit-Up/Down/Halt Fill-Constraint Tagging (Gated)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -89,9 +89,46 @@ and must not alter `Position.pairs`' existing numeric fields (`pnl_pct`, `open_p
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
+## Manual verification (symlink-privilege sandbox limitation)
+
+Run natively (outside the codex sandbox) by claude-code 2026-07-13, in response to codex's
+review-round finding that its own sandboxed run hit the documented `tmp_path`/
+`PermissionError [WinError 5]` symlink-privilege limitation (see the NOTE above the review
+command in `.synccheck.yml`):
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **542 passed, 4
+  deselected**, no WinError 5.
+- `run_next_work.ps1 -Preflight` -> **155 passed** (SimNow workflow unit tests), preflight
+  completed cleanly, no WinError 5.
+- `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
+  examples/czsc_strategy` -> PASS (child).
+
+Reviewer (codex, sandboxed) may trust these counts for the two sandbox-blocked acceptance items
+instead of re-running them; everything else should still be verified normally. codex's own review
+found no implementation defect: both sync_check gates passed and the A51-specific tests passed
+under an alternate writable basetemp (6 passed) in its sandboxed run.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
+
+### Review Reject Notes - 2026-07-13
+
+1. Missing required sandbox-exception evidence for the two gated acceptance commands. In this review
+   environment, both `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` and
+   `powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Preflight` fail with
+   the documented Windows pytest temp/symlink `PermissionError [WinError 5]` signature while scanning
+   `C:\Users\Admin\AppData\Local\Temp\pytest-of-Admin`. Per `.synccheck.yml`, review may rely on a
+   "Manual verification (symlink-privilege sandbox limitation)" block in the current task file for
+   these two items, but no such block is present in `HANDOFF.md` or nearby task-state files. Record
+   the unsandboxed/manual pass-fail counts for the unit suite and preflight command, or otherwise
+   provide verifiable evidence for those two acceptance items, then hand off to review again.
+
+Evidence already checked in this review: root `python tools/sync_check.py` passed; child
+`python tools/sync_check.py --root examples/czsc_strategy` passed; A51-specific tests
+`test_limit_halt_aware.py` and `test_limit_halt_off_equivalence.py` passed when pytest was pointed at
+a writable alternate basetemp (`6 passed`); the committed diff is tagging-only and reuses the shared
+`chan_strategy.limit_config.SYMBOL_LIMIT_CONFIG`.
 
 1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A51" for the original
    two-option design shape; this HANDOFF's Background section explains why only the tagging
@@ -141,3 +178,4 @@ and must not alter `Position.pairs`' existing numeric fields (`pnl_pct`, `open_p
 | 2026-07-13 | codex → claude-code | done → design | A51 promoted from the audit remediation roadmap draft after A50 reached done; scope narrowed to tagging-only per A50's thin evidence |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A51 (limit/halt fill tagging) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A51 limit-halt fill tagging implemented |
+| 2026-07-13 | codex → kimi-code | review → dev | 打回: Missing manual verification evidence for sandbox-blocked unit/preflight gates |
