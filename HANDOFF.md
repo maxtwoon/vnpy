@@ -1,19 +1,19 @@
 ---
 task: A49 - ATR Trailing-Stop Reachability Fix
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -60,28 +60,28 @@ switch, not a new behavior needing its own gate.
 
 ## Acceptance Criteria
 
-- [ ] A fixture with `sizing_model="risk"`, a position sized to exactly 1 lot, and
+- [x] A fixture with `sizing_model="risk"`, a position sized to exactly 1 lot, and
       `exit_model="structural_atr"` proves the bug existed before the fix: `_check_atr_trailing_stop`
       is never called after the skipped-partial-TP bar (e.g. via a call-count spy asserted against
       the pre-fix code path, or by asserting the position never exits via ATR trailing even when
       price crosses the trail level) — and is reachable/callable after the fix.
-- [ ] `_partial_tp_done` is `True` immediately after a skipped-partial-TP bar in this scenario
+- [x] `_partial_tp_done` is `True` immediately after a skipped-partial-TP bar in this scenario
       (unit-tested directly on the `Position` object's state).
-- [ ] No `pairs` entry is fabricated for the skipped partial TP — `len(self.pairs)` unchanged by
+- [x] No `pairs` entry is fabricated for the skipped partial TP — `len(self.pairs)` unchanged by
       the skip itself (unit-tested).
-- [ ] `sizing_model="research"` (fractional volume, no lot flooring — the bug cannot occur here
+- [x] `sizing_model="research"` (fractional volume, no lot flooring — the bug cannot occur here
       since `scale_volume` is never floored to an integer) is completely unaffected: existing
       `test_structural_atr_partial_tp_long`/`_short` in `test_exit_model.py` still pass unchanged,
       byte-for-byte.
-- [ ] `exit_model="legacy"` is completely unaffected (the bug only exists inside the
+- [x] `exit_model="legacy"` is completely unaffected (the bug only exists inside the
       `structural_atr` branch) — `test_exit_model_legacy_full_engine_equivalence`'s existing golden
       snapshot still passes unchanged.
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
@@ -139,3 +139,4 @@ switch, not a new behavior needing its own gate.
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | A49 promoted from the audit remediation roadmap draft after A48 reached done |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A49 (ATR trailing-stop reachability fix) started |
+| 2026-07-12 | kimi-code → codex | dev → review | A49 ATR trailing-stop reachability fix implemented |

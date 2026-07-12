@@ -249,3 +249,78 @@ def test_timeout_fires_under_both_exit_models():
         assert p.pos == 0
         assert p.pairs[-1]["reason"] == "超时"
         assert p.pairs[-1]["reason_code"] == "timeout"
+
+
+@pytest.mark.parametrize(
+    "direction,open_op,close_op,open_price,partial_price,trail_exit_price",
+    [
+        ("long", "开多", "平多", 100, 110, 105),
+        ("short", "开空", "平空", 100, 90, 95),
+    ],
+)
+def test_risk_mode_skipped_partial_tp_makes_atr_trailing_reachable(
+    direction, open_op, close_op, open_price, partial_price, trail_exit_price,
+    monkeypatch,
+):
+    """A49 regression: risk-mode 1-lot position skips partial TP, ATR trailing
+    must still be reachable on the very next bar.
+
+    Before the fix, ``_partial_tp_done`` stayed False after the skip, so the
+    ``elif self._check_atr_trailing_stop(...)`` branch in ``Position.update``
+    was never entered again.  After the fix, the flag is set and the trailing
+    check fires on the next bar.
+    """
+    STRATEGY_CONFIG["exit_model"] = "structural_atr"
+    STRATEGY_CONFIG["sizing_model"] = "risk"
+    STRATEGY_CONFIG["partial_tp_frac"] = 0.5
+    STRATEGY_CONFIG["atr_trail_mult"] = 2.0
+
+    # Force a 1-lot risk-mode position so floor(1 * 0.5) == 0 and the partial
+    # TP scale-out is skipped (no actual volume changes hands).
+    monkeypatch.setattr(
+        Position, "_size_open",
+        lambda self, price, equity_at_entry, total_open_margin: (1, 1),
+    )
+
+    sig_open = "A_B_C_x_任意_任意_0"
+    sig_target = "A_B_D_y_任意_任意_0"
+    partial_event = _directional_target_event("partial-tp", close_op, sig_target)
+    partial_event.operate = Operate.LC if direction == "long" else Operate.SC
+
+    p = Position(
+        "p", "T",
+        [_event("open", open_op, [sig_open])],
+        exits=[partial_event],
+        timeout=99, stop_loss=1000,
+    )
+
+    calls: list[tuple[float, float | None]] = []
+    original_check = Position._check_atr_trailing_stop
+
+    def counting_check(self, price, atr):
+        calls.append((price, atr))
+        return original_check(self, price, atr)
+
+    monkeypatch.setattr(
+        Position, "_check_atr_trailing_stop", counting_check
+    )
+
+    now = datetime(2024, 1, 1)
+    p.update(_signal_match(sig_open), open_price, now, equity_at_entry=10000)
+    assert p.pos == (1 if direction == "long" else -1)
+    assert p.volume == 1
+
+    # Bar with the partial-TP signal: scale-out is skipped due to lot flooring.
+    p.update(_signal_match(sig_target), partial_price, now + timedelta(minutes=1))
+    assert p._partial_tp_done is True
+    assert len(p.pairs) == 0
+    assert p.volume == 1
+    # The trailing-stop branch is unreachable on the skipped-partial bar itself.
+    assert len(calls) == 0
+
+    # Next bar: ATR trailing must be reachable and, with price beyond the trail,
+    # close the remaining position.
+    p.update({}, trail_exit_price, now + timedelta(minutes=2), atr=2.0)
+    assert len(calls) == 1
+    assert p.pos == 0
+    assert p.pairs[-1]["reason_code"] == "atr_trailing_stop"

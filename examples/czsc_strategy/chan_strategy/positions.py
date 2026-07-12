@@ -839,9 +839,11 @@ class Position:
         scale_volume = self.volume * partial_tp_frac
         if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
             scale_volume = int(floor(scale_volume))
-            if scale_volume < 1:
-                return
-            if scale_volume >= self.volume:
+            if scale_volume < 1 or scale_volume >= self.volume:
+                # Lot flooring made a real partial scale-out impossible this
+                # lifecycle.  Treat it as "already resolved" so the subsequent
+                # ATR trailing-stop branch in Position.update remains reachable.
+                self._partial_tp_done = True
                 return
 
         if self.pos > 0:
