@@ -1,19 +1,19 @@
 ---
 task: A45 P6 - 二买 Removal / Hard-Gate + ATR Chop Filter
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -109,6 +109,17 @@ table. Replaced the placeholder report files with this real-data version before 
 
 ## Notes for the Next Agent
 
+(review reject - codex, 2026-07-12)
+
+1. Fix `second_buy_mode="gated"` resonance semantics. The P6 contract says gated 二买 requires
+   P4 MACD divergence + P5 resonance + ATR expansion. Current code routes the resonance check
+   through `_higher_level_filter_signals()`; when `resonance_filter="off"` this falls back to the
+   legacy daily trend filter, so `_research_second_buy_allowed()` can return true without any P5
+   resonance filter being enabled. The test suite currently codifies that bad case in
+   `test_second_buy_mode.py::test_gated_opens_when_all_conditions_hold`, which sets
+   `resonance_filter="off"` and still expects a gated open. Add/adjust tests so gated mode rejects
+   missing P5 resonance, and make the open gate require the actual P5 resonance condition.
+
 (dev = kimi-code must read this before writing code)
 
 1. **Entry point:** `docs/design/a38-phase-contracts-p2-p8.md`, section "P6 (A43) - 二买 Removal
@@ -175,3 +186,4 @@ table. Replaced the placeholder report files with this real-data version before 
 | 2026-07-12 | codex → claude-code | done → design | P6 promoted from phase-contracts draft, confirmed A45 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A45 (P6 二买 hard-gate + ATR chop filter) started; re-verified no drift from A43/A44 |
 | 2026-07-12 | kimi-code → codex | dev → review | A45 (P6) second-buy removal/hard-gate + ATR chop filter implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: gated second-buy opens without required P5 resonance |
