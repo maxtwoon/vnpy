@@ -1,19 +1,19 @@
 ---
 task: A53 - Config/Signal Single-Source-of-Truth Cleanup
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -98,6 +98,21 @@ a real call site.
 
 ## Notes for the Next Agent
 
+### Codex Review Rejection (2026-07-13)
+
+1. **Remove the remaining hardcoded `0.05` structural-invalidation fallbacks.**
+   A53's review checklist says to reject if `structural_invalidation_pct` still has any
+   hardcoded duplicate. The implementation moved the function defaults to `None`, but each former
+   hardcode site still has a local fallback:
+   - `examples/czsc_strategy/chan_strategy/signals.py:787`
+   - `examples/czsc_strategy/chan_strategy/signals.py:842`
+   - `examples/czsc_strategy/chan_strategy/sell_signals.py:252`
+   - `examples/czsc_strategy/chan_strategy/sell_signals.py:285`
+
+   Those should read the already-required `STRATEGY_CONFIG["structural_invalidation_pct"]`
+   single source directly, or through one shared helper that itself reads the config, while
+   preserving the explicit `stop_loss_pct` override behavior tested in A53.
+
 (dev = kimi-code must read this before writing code)
 
 1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A53". Fifth task of the
@@ -177,3 +192,4 @@ a real call site.
 | 2026-07-13 | codex → claude-code | done → design | A53 promoted from the audit remediation roadmap draft after A52 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A53 (config/signal single-source-of-truth cleanup) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
+| 2026-07-13 | codex → kimi-code | review → dev | 打回: structural_invalidation_pct still has hardcoded 0.05 fallbacks |
