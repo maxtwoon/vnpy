@@ -92,6 +92,15 @@ STRATEGY_CONFIG = {
     "resonance_filter": "off",            # "off" (legacy, default) | "daily" | "daily_4h"
     "resonance_freq_4h": "240分钟",        # 4H CZSC level frequency label
 
+    # A45 second-buy hard-gate + ATR chop filter (P6). "baseline" keeps the legacy behavior;
+    # "gated" requires P4 MACD divergence, P5 resonance and ATR expansion;
+    # "off" blocks all NEW second-buy opens while still allowing exits/risk-control.
+    "second_buy_mode": "baseline",        # "baseline" (legacy, default) | "gated" | "off"
+    "atr_chop_filter": "off",             # "off" (legacy, default) | "on"
+    "atr_period": 14,                     # ATR lookback period for chop detection
+    "atr_lookback": 100,                  # number of past ATR values used for percentile
+    "atr_percentile_floor": 0.30,         # block opens when current ATR percentile is below this
+
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
         # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.

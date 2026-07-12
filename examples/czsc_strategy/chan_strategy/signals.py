@@ -856,3 +856,86 @@ def get_all_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -
     if STRATEGY_CONFIG.get("exit_event_semantics") == "restructured":
         signals.update(signal_risk_control_recent(c, freq))
     return signals
+
+
+# ============================================================
+# A45 ATR chop-filter helper
+# ============================================================
+
+class AtrStateTracker:
+    """Incremental ATR(period) tracker with percentile-vs-lookback state.
+
+    Uses Wilder smoothing.  Bars are supplied as ``{"high": ..., "low": ...,
+    "close": ...}`` dicts.  The state is ``扩张`` when the current ATR is at
+    or above the configured percentile floor of the last ``lookback`` ATR
+    values, otherwise ``压缩``.  Insufficient history defaults to ``扩张`` so
+    the filter does not block opens during warmup.
+    """
+
+    def __init__(self, period: int = 14, lookback: int = 100, floor: float = 0.30):
+        self.period: int = period
+        self.lookback: int = lookback
+        self.floor: float = floor
+        self.bars: list[dict] = []
+        self.atr_history: list[float] = []
+
+    def update(self, high: float, low: float, close: float) -> dict:
+        """Append a bar and return the current ATR state description."""
+        self.bars.append({"high": high, "low": low, "close": close})
+        atr = self._compute_current_atr()
+        if atr is not None:
+            self.atr_history.append(atr)
+        state = self._current_state()
+        return {
+            "state": state,
+            "atr": atr,
+            "percentile": self._current_percentile(),
+        }
+
+    def _compute_current_atr(self) -> float | None:
+        n = len(self.bars)
+        p = self.period
+        if n < p + 1:
+            return None
+        if len(self.atr_history) == 0:
+            trs = []
+            for i in range(1, p + 1):
+                prev_close = self.bars[i - 1]["close"]
+                high = self.bars[i]["high"]
+                low = self.bars[i]["low"]
+                tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+                trs.append(tr)
+            return sum(trs) / p
+        prev_close = self.bars[-2]["close"]
+        high = self.bars[-1]["high"]
+        low = self.bars[-1]["low"]
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        prev_atr = self.atr_history[-1]
+        return (prev_atr * (p - 1) + tr) / p
+
+    def _current_percentile(self) -> float | None:
+        if not self.atr_history:
+            return None
+        # Percentile is computed against the previous lookback ATR values,
+        # excluding the current bar, to avoid lookahead.
+        history = self.atr_history[:-1]
+        if len(history) < self.lookback:
+            return None
+        window = history[-self.lookback:]
+        current = self.atr_history[-1]
+        count_le = sum(1 for v in window if v <= current)
+        return count_le / len(window)
+
+    def _current_state(self) -> str:
+        percentile = self._current_percentile()
+        if percentile is None:
+            return "扩张"
+        return "扩张" if percentile >= self.floor else "压缩"
+
+    def signal(self, freq: str) -> dict:
+        """Return a czsc signal dict entry for the current ATR state."""
+        state = self._current_state()
+        score = 100 if state == "扩张" else 0
+        key = f"{freq}_ATR_波动V260615"
+        value = f"{state}_任意_任意_{score}"
+        return {key: value}

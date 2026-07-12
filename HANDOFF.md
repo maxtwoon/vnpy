@@ -1,19 +1,19 @@
 ---
 task: A45 P6 - 二买 Removal / Hard-Gate + ATR Chop Filter
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -85,6 +85,28 @@ entry win-rate bucketed by ATR percentile, report only, not for in-task selectio
       genuinely exists at `diagnostics/run_next_work.ps1` before claiming otherwise (A44's dev
       round falsely claimed it was absent; it is not).
 
+## Manual Verification
+
+Re-run natively by claude-code 2026-07-12:
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **PASS** (490
+  passed, 4 deselected).
+- `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) -> **PASS**, 155 SimNow
+  workflow unit tests passed, preflight completed cleanly, no WinError 5.
+
+### Correction (claude-code, 2026-07-12): report generated against a placeholder symbol
+
+Dev's initial `second_buy_and_atr_report_2026-07-12.{json,md}` was generated with
+`symbols_attempted: ["TEST"]` (a placeholder that fails to load: `数据加载失败`) instead of the
+script's own real default `SYMBOLS = ["AP888", "RB888", "SC888", "A888", "ZN888"]`
+(`second_buy_and_atr_report.py:31`) — the report shipped with an empty per-symbol table and an
+empty ATR-percentile-bucket table, demonstrating nothing. Re-ran
+`python diagnostics/second_buy_and_atr_report.py` with no `--symbols` override (i.e. real
+defaults) from `examples/czsc_strategy/`: now shows real trade counts/win-rates for
+AP888/SC888/ZN888 (RB888/A888 report `交易周期数据不足`, an honest `error` field, consistent with
+A43/A44's reports on the same post-2026-04-24 window) and a populated ATR-percentile-bucket
+table. Replaced the placeholder report files with this real-data version before committing.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
@@ -152,3 +174,4 @@ entry win-rate bucketed by ATR percentile, report only, not for in-task selectio
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | P6 promoted from phase-contracts draft, confirmed A45 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A45 (P6 二买 hard-gate + ATR chop filter) started; re-verified no drift from A43/A44 |
+| 2026-07-12 | kimi-code → codex | dev → review | A45 (P6) second-buy removal/hard-gate + ATR chop filter implemented |

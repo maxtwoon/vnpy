@@ -91,6 +91,36 @@ def _higher_level_filter_signals(direction: str = "long", strict: bool = True) -
     }
 
 
+def _resonance_holds(signals_dict: dict, direction: str = "long") -> bool:
+    """Check whether the configured higher-level resonance filter is satisfied.
+
+    Reuses the same signal strings produced by ``_higher_level_filter_signals``
+    so P5/A44 logic is not duplicated.
+    """
+    filters = _higher_level_filter_signals(direction=direction, strict=True)
+    for s in filters.get("signals_all", []):
+        if not Signal(s).is_match(signals_dict):
+            return False
+    for s in filters.get("signals_not", []):
+        if Signal(s).is_match(signals_dict):
+            return False
+    return True
+
+
+def _atr_filter_signals(freq: str) -> dict:
+    """Universal ATR chop filter signals added to every open Event.
+
+    When ``atr_chop_filter`` is ``"off"`` (default) this returns empty lists,
+    keeping the legacy behavior byte-identical.
+    """
+    if STRATEGY_CONFIG.get("atr_chop_filter") != "on":
+        return {"signals_all": [], "signals_not": []}
+    return {
+        "signals_all": [f"{freq}_ATR_波动V260615_扩张_任意_任意_100"],
+        "signals_not": [],
+    }
+
+
 # ========== 轻量级自定义实现 ==========
 
 class Operate(Enum):
@@ -279,8 +309,46 @@ def _research_trailing_params(symbol: str) -> tuple[int, float]:
     )
 
 
-def _research_second_buy_allowed(symbol: str, buy1_anchor: Optional[dict], execution_price: Optional[float]) -> bool:
-    """Research-only gate for second-buy opens; defaults to allowing all symbols."""
+def _research_second_buy_allowed(
+    symbol: str,
+    buy1_anchor: dict | None,
+    execution_price: float | None,
+    signals_dict: dict | None = None,
+    freq: str | None = None,
+) -> bool:
+    """Research-only gate for second-buy opens; defaults to allowing all symbols.
+
+    A45 P6 adds ``second_buy_mode``:
+    - ``"off"`` blocks all new second-buy opens (existing positions still exit).
+    - ``"gated"`` requires P4 MACD divergence, P5 resonance and ATR expansion.
+    - ``"baseline"`` keeps the legacy behavior.
+    """
+    mode = STRATEGY_CONFIG.get("second_buy_mode", "baseline")
+
+    if mode == "off":
+        return False
+
+    if mode == "gated":
+        if signals_dict is None or freq is None:
+            return False
+
+        # P4 MACD divergence signal (amplitude or macd model depending on config).
+        div_key = f"{freq}_D1BI_背驰V260615"
+        div_val = signals_dict.get(div_key, "")
+        if not (div_val.startswith("疑似") or div_val.startswith("确认")):
+            return False
+
+        # P5 resonance filter.
+        if not _resonance_holds(signals_dict, direction="long"):
+            return False
+
+        # ATR expansion (not in chop).
+        atr_key = f"{freq}_ATR_波动V260615"
+        atr_val = signals_dict.get(atr_key, "")
+        if not atr_val.startswith("扩张"):
+            return False
+
+    # Legacy baseline checks.
     enabled = STRATEGY_CONFIG.get("enable_2buy_symbols")
     if enabled is not None:
         enabled_keys = {_research_symbol_key(x) for x in enabled}
@@ -801,6 +869,7 @@ def create_first_buy_position(symbol: str, freq: str = "30分钟",
                 f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
                 f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
                 *daily_filter.get("signals_all", []),
+                *_atr_filter_signals(freq)["signals_all"],
             ],
             "signals_any": [],
             "signals_not": [
@@ -892,6 +961,7 @@ def create_second_buy_position(symbol: str, freq: str = "30分钟",
                 f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
                 f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
                 *daily_filter.get("signals_all", []),
+                *_atr_filter_signals(freq)["signals_all"],
             ],
             "signals_any": [
                 # 必须在中枢上方或中枢内（趋势配合方向）
@@ -984,6 +1054,7 @@ def create_third_buy_position(symbol: str, freq: str = "30分钟",
                 f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
                 f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
                 *daily_filter.get("signals_all", []),
+                *_atr_filter_signals(freq)["signals_all"],
             ],
             "signals_any": [],
             "signals_not": [
@@ -1063,6 +1134,7 @@ def create_first_sell_position(symbol: str, freq: str = "30分钟",
                 f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
                 f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
                 *daily_filter.get("signals_all", []),
+                *_atr_filter_signals(freq)["signals_all"],
             ],
             "signals_any": [],
             "signals_not": [
@@ -1139,6 +1211,7 @@ def create_second_sell_position(symbol: str, freq: str = "30分钟",
                 f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
                 f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
                 *daily_filter.get("signals_all", []),
+                *_atr_filter_signals(freq)["signals_all"],
             ],
             "signals_any": [
                 f"{freq}_D1ZS_位置V260615_中枢下方_任意_任意_0",
@@ -1215,6 +1288,7 @@ def create_third_sell_position(symbol: str, freq: str = "30分钟",
                 f"{freq}_D1ZS_数据状态V260615_充分_任意_任意_0",
                 f"{freq}_D1ZS_结构状态V260615_已确认_任意_任意_0",
                 *daily_filter.get("signals_all", []),
+                *_atr_filter_signals(freq)["signals_all"],
             ],
             "signals_any": [],
             "signals_not": [
@@ -1336,6 +1410,14 @@ class ChanTimingStrategy:
         # 记录完整锚点信息: dt, price, zs_zd, zs_zg
         self.sell1_history: List[dict] = []
         self._last_sell1_anchor: Optional[dict] = None
+
+        # A45 ATR chop-filter state tracker (updated every trade-frequency bar).
+        from chan_strategy.signals import AtrStateTracker
+        self._atr_tracker = AtrStateTracker(
+            period=STRATEGY_CONFIG.get("atr_period", 14),
+            lookback=STRATEGY_CONFIG.get("atr_lookback", 100),
+            floor=STRATEGY_CONFIG.get("atr_percentile_floor", 0.30),
+        )
 
     def get_last_buy1_anchor(self) -> Optional[dict]:
         """获取最近的一买锚点信息（供二买信号绑定使用）"""
@@ -1526,6 +1608,23 @@ class ChanTimingStrategy:
                     self._last_sell1_anchor["zs_zd"] = matched_zs["zd"]
                     self._last_sell1_anchor["zs_zg"] = matched_zs["zg"]
 
+        # A45: update incremental ATR state every trade-frequency bar.
+        # The ATR signal is injected only when it is actually needed:
+        #   - atr_chop_filter="on" gates all new opens, or
+        #   - second_buy_mode="gated" needs the ATR expansion check.
+        self._atr_tracker.update(
+            high=bar_high if bar_high is not None else price,
+            low=bar_low if bar_low is not None else price,
+            close=price,
+        )
+        inject_atr = (
+            STRATEGY_CONFIG.get("atr_chop_filter") == "on"
+            or STRATEGY_CONFIG.get("second_buy_mode") == "gated"
+        )
+        if inject_atr:
+            signals_dict = dict(signals_dict)
+            signals_dict.update(self._atr_tracker.signal(self.freq))
+
         # 更新各子策略
         buy1_pos = self.positions[0]  # 一买子策略
         buy2_pos = self.positions[1]  # 二买子策略
@@ -1546,7 +1645,9 @@ class ChanTimingStrategy:
             # 有一买交易记录或一买信号历史，二买可以正常运行；
             # 研究参数只拦截新开仓，已有二买持仓仍接收退出/风控信号。
             trade_price = execution_price if execution_price is not None else price
-            if buy2_pos.pos != 0 or _research_second_buy_allowed(self.symbol, self._last_buy1_anchor, trade_price):
+            if buy2_pos.pos != 0 or _research_second_buy_allowed(
+                self.symbol, self._last_buy1_anchor, trade_price, signals_dict, self.freq
+            ):
                 buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
             else:
