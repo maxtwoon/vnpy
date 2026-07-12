@@ -4,7 +4,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
 from conftest import make_raw_bar
 
 import diagnostics.limit_halt_exposure_report as report

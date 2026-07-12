@@ -1,19 +1,19 @@
 ---
 task: A50 - Limit-Up/Down/Halt Impact Diagnostic (Read-Only)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -184,3 +184,4 @@ Verified during review before rejection:
 | 2026-07-13 | claude-code → kimi-code | design → dev | A50 (limit-up/down/halt exposure diagnostic) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A50 limit-up/down/halt exposure diagnostic implemented |
 | 2026-07-13 | codex → kimi-code | review → dev | 打回: ruff check fails: unused pytest import in test_limit_halt_exposure_report.py |
+| 2026-07-13 | kimi-code → codex | dev → review | A50 limit-up/down/halt exposure diagnostic implemented |
