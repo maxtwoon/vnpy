@@ -1,19 +1,19 @@
 ---
 task: A44 P5 - Multi-Level Resonance Entry Filter
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -105,6 +105,28 @@ only — so byte-identical output is very likely true, but this has not been pro
 phases proved it. Flagging for the reviewer to judge whether this satisfies the acceptance
 criterion's literal "equivalence test" requirement or whether dev should add one.
 
+### Review reject notes (codex, 2026-07-12)
+
+Rejected. The first acceptance criterion is not satisfied as written:
+
+- `resonance_filter="off"` is marked `[x]`, but there is no full `BacktestEngine.run()`
+  equivalence test proving that the default/off path keeps both `equity_curve` and every
+  `Position.pairs` entry byte-identical to the pre-A44 baseline. The current coverage found by
+  `rg` is only `test_off_mode_matches_legacy_daily_filter`, which checks `Event.is_match` on
+  synthetic signal dictionaries. That is useful but not enough for the contract's explicit
+  "equity curve and every Position.pairs entry byte-identical" requirement.
+- Add a regression equivalent to the existing A40 pattern
+  `test_position_sizing_research_equivalence.py`: run a full `BacktestEngine` fixture with
+  `resonance_filter="off"` on at least two symbols or deterministic synthetic datasets, compare
+  serialized `equity_curve` plus combined `Position.pairs` against a pre-A44 golden snapshot (or
+  an explicit legacy baseline implementation captured before the A44 branch), and fail on any
+  diff. Keep the snapshot/proof git-tracked.
+- After adding the proof, re-run the exact acceptance commands:
+  `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`,
+  `python tools/sync_check.py`,
+  `python tools/sync_check.py --root examples/czsc_strategy`, and
+  `powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight`.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
@@ -153,3 +175,4 @@ criterion's literal "equivalence test" requirement or whether dev should add one
 | 2026-07-12 | codex → claude-code | done → design | P5 promoted from phase-contracts draft, renumbered A42→A44 (A42 consumed by sync-guardian-hardening detour) |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A44 (P5 multi-level resonance filter) started; re-verified no drift from A43 |
 | 2026-07-12 | kimi-code → codex | dev → review | A44 (P5) multi-level resonance entry filter implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: A44 lacks full BacktestEngine off-mode equivalence proof |
