@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,7 +20,7 @@ if str(_CZSC_STRATEGY_ROOT) not in sys.path:
     sys.path.insert(0, str(_CZSC_STRATEGY_ROOT))
 
 from chan_strategy.backtest_engine import BacktestEngine
-from chan_strategy.config import BACKTEST_CONFIG, SQLITE_DB_PATH, STRATEGY_CONFIG
+from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG
 
 
 HERE = Path(__file__).resolve().parent

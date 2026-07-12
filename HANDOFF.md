@@ -1,19 +1,19 @@
 ---
 task: A43 P4 - MACD-Area Divergence (Replace _bi_power Proxy)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -184,3 +184,4 @@ A43 (P4) MACD-area divergence implemented by kimi-code 2026-07-12:
 | 2026-07-12 | claude-code → kimi-code | design → dev | A43 (P4 MACD-area divergence) started; re-verified no drift in signals.py since draft |
 | 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: CI lint blocker and missing manual verification block |
+| 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
