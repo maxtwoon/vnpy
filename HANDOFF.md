@@ -1,7 +1,7 @@
 ---
 task: A42 sync-guardian Hardening
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -20,10 +20,10 @@ deliverables:
   - tests/test_sync_guardian.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -167,3 +167,4 @@ strategy/backtest/SimNow code touched — scope is strictly `tools/`, `.syncchec
 | 2026-07-12 | codex → claude-code | done → design | A42 promoted from draft to active task after A41 reached done |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A42 promoted from draft to active task; re-verified no drift from A40/A41 |
 | 2026-07-12 | kimi-code → codex | dev → review | A42 sync-guardian hardening implemented |
+| 2026-07-12 | codex → codex | review → done | A42 verified: vendoring reproducible (no D:\repo\ashare refs remain, status/sync_check run standalone), no_auto_advance:[review] in both .synccheck.yml, 6 real pytest fixtures pass proving no_auto_advance halts run loop (non-zero exit, stage stays review) and deliverables-freshness/git-add-f checks fail loudly with named deliverable; czsc HANDOFF.md truthfully rewritten (stage:done/superseded) with A32 content archived+git-tracked via add -f; sync_check passes root+czsc_strategy; CI workflow adds the 3 required steps and AGENTS.md updated; independently re-verified CI-gate-has-teeth by injecting a malformed HANDOFF.md locally (exit 1, both checks fail) since dev did not record this evidence itself - noted as a minor gap, not blocking; zero touches to chan_strategy/ or diagnostics/simnow_*.py; 437 czsc unit tests pass |
