@@ -16,7 +16,6 @@ from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.sell_signals import signal_first_sell
 from chan_strategy.signals import (
     _macd,
-    _macd_divergence_power,
     _divergence_power,
     signal_divergence_status,
     signal_first_buy,
@@ -38,7 +37,7 @@ def _trend_bars(start_dt, n, start_close, end_close):
     """Return n bars whose closes trend linearly from start_close to end_close."""
     dts = [start_dt + timedelta(minutes=i) for i in range(n)]
     closes = np.linspace(start_close, end_close, n)
-    return [_raw_bar(dt, float(c)) for dt, c in zip(dts, closes)]
+    return [_raw_bar(dt, float(c)) for dt, c in zip(dts, closes, strict=False)]
 
 
 def _flat_bars(start_dt, n, close):
@@ -279,3 +278,51 @@ def test_macd_params_are_standard_and_not_tuned():
     assert STRATEGY_CONFIG.get("macd_fast") == 12
     assert STRATEGY_CONFIG.get("macd_slow") == 26
     assert STRATEGY_CONFIG.get("macd_signal") == 9
+
+
+def test_macd_mode_does_not_fallback_to_close_difference_on_short_history():
+    """MACD mode must never fall back to an amplitude/close-difference proxy.
+
+    With fewer confirmed bars than the conventional MACD warm-up length, the
+    old fallback returned ``abs(last.close - first.close)``.  This test uses a
+    short history (10 bars < 26) where both segments have the same first/last
+    close, so a close-difference proxy would assign both segments zero power.
+    The MACD-based result must instead reflect the intra-segment price action
+    and therefore differ between the flat and trending segments.
+    """
+    base = datetime(2024, 1, 1)
+
+    # Enter segment: flat closes -> MACD area near zero.
+    enter_bars = _flat_bars(base, 5, 100.0)
+    enter_bi = _bi_with_bars(
+        Direction.Down, 95, 105, base, base + timedelta(minutes=4), enter_bars
+    )
+
+    # Leave segment: V-shaped trend that starts and ends at 100.
+    leave_start = base + timedelta(minutes=5)
+    leave_closes = [100.0, 104.0, 102.0, 104.0, 100.0]
+    leave_bars = [
+        _raw_bar(leave_start + timedelta(minutes=i), close=c)
+        for i, c in enumerate(leave_closes)
+    ]
+    leave_bi = _bi_with_bars(
+        Direction.Down, 96, 104, leave_start, leave_start + timedelta(minutes=4), leave_bars
+    )
+
+    c = _czsc_from_bis([enter_bi, leave_bi])
+
+    # Amplitude mode is unaffected and uses the configured BI high/low.
+    STRATEGY_CONFIG["divergence_model"] = "amplitude"
+    try:
+        amp_enter, amp_leave = _divergence_power(enter_bi, leave_bi, c)
+        assert amp_enter == pytest.approx(10.0)
+        assert amp_leave == pytest.approx(8.0)
+
+        # MACD mode computes |hist| area even on short confirmed-bar history.
+        STRATEGY_CONFIG["divergence_model"] = "macd"
+        macd_enter, macd_leave = _divergence_power(enter_bi, leave_bi, c)
+        # A close-difference fallback would have assigned zero to both segments.
+        assert macd_leave > 0.0
+        assert macd_enter < macd_leave
+    finally:
+        STRATEGY_CONFIG["divergence_model"] = "amplitude"

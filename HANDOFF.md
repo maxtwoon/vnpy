@@ -90,7 +90,7 @@ review-round finding that its own sandboxed run hit the documented `tmp_path`/
 `PermissionError [WinError 5]` symlink-privilege limitation (see the NOTE above the review
 command in `.synccheck.yml`):
 
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **452 passed, 4
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **453 passed, 4
   deselected**, no WinError 5.
 - `run_next_work.ps1 -Preflight` -> **155 passed** (SimNow workflow unit tests), preflight
   completed cleanly, no WinError 5.
@@ -106,14 +106,16 @@ instead of re-running them; everything else should still be verified normally.
 
 ### Review Findings (codex, 2026-07-12)
 
-1. Remove unused imports in `examples/czsc_strategy/diagnostics/divergence_model_comparison_report.py`.
-   `deepcopy` and `BACKTEST_CONFIG` are imported but never used. The repository Ruff config enables
-   `F` rules across the tree, so these would be `F401` CI failures once Ruff is available.
-2. Add the documented manual verification block if relying on sandbox accommodation for unit/preflight
-   acceptance. Codex reproduced the documented `tmp_path`/`PermissionError [WinError 5]` failure for
-   both the full unit command and `run_next_work.ps1 -Preflight`; the current handoff records
-   "452 passed" and preflight green in the completion summary, but it does not contain the requested
-   "Manual verification (symlink-privilege sandbox limitation)" block with pass/fail counts.
+1. ~~Remove the MACD-mode warmup fallback in
+   `examples/czsc_strategy/chan_strategy/signals.py:95-100`.~~ **Resolved in this round:**
+   the amplitude/close-difference fallback was removed from `_macd_power_for_segment`, and
+   `test_macd_mode_does_not_fallback_to_close_difference_on_short_history` was added to
+   `tests/unit/test_divergence_macd.py` to prove MACD mode stays MACD-based even when the
+   confirmed-bar history is shorter than the conventional MACD warm-up length.
+
+Previously rejected items now appear resolved: the unused `deepcopy`/`BACKTEST_CONFIG` imports were
+removed, and the required Manual verification block is present with native pass counts for the
+sandbox-blocked unit/preflight commands.
 
 1. **Entry point:** `docs/design/a38-phase-contracts-p2-p8.md`, section "P4 (A41) - MACD-Area
    Divergence" — ignore the stale `(A41)` label in the header, this task's real ID is **A43**.
@@ -184,4 +186,6 @@ A43 (P4) MACD-area divergence implemented by kimi-code 2026-07-12:
 | 2026-07-12 | claude-code → kimi-code | design → dev | A43 (P4 MACD-area divergence) started; re-verified no drift in signals.py since draft |
 | 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: CI lint blocker and missing manual verification block |
+| 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: MACD mode has undocumented amplitude fallback |
 | 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |

@@ -14,7 +14,7 @@
 - 单级别背驰只能输出"疑似"
 - 完全分类信号必须穷尽、互斥
 """
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -86,18 +86,14 @@ def _macd_power_for_segment(segment_bars: list, all_bars: list,
     MACD is computed over ``all_bars`` (up to the current bar) so the EMA
     state is consistent; the segment magnitude is the sum of |hist| over the
     bars whose dt belongs to ``segment_bars``.  If the segment has no bars or
-    MACD cannot be computed, falls back to the amplitude proxy so the gate
-    still produces a deterministic value.
+    no bars are available, returns 0.0.
+
+    There is no amplitude fallback: under ``divergence_model="macd"`` the
+    comparison is always MACD-based, even when the available confirmed-bar
+    history is shorter than the conventional MACD warm-up period.
     """
     if not segment_bars or not all_bars:
         return 0.0
-
-    # Need at least slow + signal bars for a stable MACD reading.
-    if len(all_bars) < max(slow, signal) + 1:
-        # Fall back to amplitude when the EMA is not yet warm.
-        first = segment_bars[0]
-        last = segment_bars[-1]
-        return abs(last.close - first.close)
 
     closes = np.array([b.close for b in all_bars], dtype=float)
     _, _, hist = _macd(closes, fast, slow, signal)
@@ -137,7 +133,7 @@ def _divergence_power(enter_bi, leave_bi, czsc_obj) -> tuple[float, float]:
     return _bi_power(enter_bi), _bi_power(leave_bi)
 
 
-def _get_confirming_bi(bi_list: list, base_idx: int, direction: Direction) -> Optional[Any]:
+def _get_confirming_bi(bi_list: list, base_idx: int, direction: Direction) -> Any | None:
     """获取 base_idx 之后紧跟着的确认笔。
 
     约束：
@@ -434,7 +430,6 @@ def signal_first_buy(c: CZSC, freq: str = "30分钟") -> dict:
     # 与一卖/三买/三卖保持同一口径，避免选到尾部无后续笔的展示中枢。
     last_zs = next((zs for zs in reversed(zhongshu_list) if bi_list[zs["end_idx"] + 1:]), zhongshu_list[-1])
     zd = last_zs["zd"]
-    zg = last_zs["zg"]
     zs_end_idx = last_zs["end_idx"]
     zs_start_idx = last_zs["start_idx"]
 
@@ -541,7 +536,6 @@ def signal_second_buy(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None)
         return {key: value}
 
     anchor_low = buy1_anchor["price"]
-    anchor_zs_zg = buy1_anchor["zs_zg"]
     anchor_dt = buy1_anchor.get("dt")
 
     # 在已确认笔列表中找到与一买锚点对应的向下笔
@@ -660,7 +654,6 @@ def signal_third_buy(c: CZSC, freq: str = "30分钟") -> dict:
 
     last_zs = zhongshu_list[-1]
     zg = last_zs["zg"]
-    zd = last_zs["zd"]
     zs_end_idx = last_zs["end_idx"]
 
     # 中枢之后的笔
@@ -770,7 +763,6 @@ def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 
 
     last_zs = zhongshu_list[-1]
     zd = last_zs["zd"]
-    zg = last_zs["zg"]
 
     # 获取当前价格（必须使用已确认结构的终点价格）
     last_bi = bi_list[-1]
