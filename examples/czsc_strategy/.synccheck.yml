@@ -17,6 +17,17 @@ deliverables_policy:
   # dev -> review 转换时，要求 HANDOFF.md deliverables 中至少有一项在 design->dev 之后被 git 跟踪更新；
   # 若 deliverable 位于 git-ignored 目录，必须出现在 dev-stage commit 的 git show --stat 中（即 git add -f）。
 
+diagnostics_banner_check:
+  dir: diagnostics
+  banner: "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->"
+  skip:
+    - WORK_LOG.md
+    - ACCEPTANCE.md
+    - AUTOMATION_PROMPT.md
+    - NEXT_WORK.md
+    - simnow_daily_observation_workflow.md
+    - simnow_connection_probe.md
+
 handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]

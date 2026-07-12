@@ -276,6 +276,13 @@ def main() -> dict[str, Any]:
         + summary["close_based_stop_exits"]
     )
 
+    sizing_caveat = None
+    for symbol_data in per_symbol.values():
+        caveat = symbol_data.get("report", {}).get("sizing_caveat")
+        if caveat:
+            sizing_caveat = caveat
+            break
+
     report_payload = {
         "disclaimer": BANNER,
         "scope": (
@@ -291,6 +298,7 @@ def main() -> dict[str, Any]:
         "per_symbol": per_symbol,
         "trades": all_trades,
         "summary": summary,
+        "sizing_caveat": sizing_caveat,
         "contract_spec_crosscheck": _contract_spec_crosscheck(),
         "simnow_risk_caliber": _simnow_risk_caliber(),
         "errors": errors,

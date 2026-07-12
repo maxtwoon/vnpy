@@ -580,12 +580,57 @@ def run_checks(root: Path, cfg: Dict[str, Any]) -> List[str]:
     if cfg.get("handoff"):
         _check_handoff(root, cfg, errors)
 
-    # 6. archive_dir 存在性（仅提示，不阻塞）
+    # 6. diagnostics banner check (A54)
+    _check_diagnostics_banner(root, cfg, errors)
+
+    # 7. archive_dir 存在性（仅提示，不阻塞）
     ad = cfg.get("archive_dir")
     if ad and not (root / ad).exists():
         print(f"[SYNC-CHECK][WARN] archive_dir 不存在: {ad}（仅提示，不 FAIL）")
 
     return errors
+
+
+def _check_diagnostics_banner(root: Path, cfg: dict[str, Any], errors: list[str]) -> None:
+    """A54 gate: every diagnostics/*.md report must carry the RESEARCH-ONLY banner.
+
+    Configured under ``diagnostics_banner_check``:
+      dirs: [examples/czsc_strategy/diagnostics]
+      banner: "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->"
+      skip: [WORK_LOG.md, ACCEPTANCE.md, ...]
+    """
+    check = cfg.get("diagnostics_banner_check")
+    if not isinstance(check, dict):
+        return
+
+    banner = check.get("banner")
+    if not banner:
+        return
+
+    dirs = check.get("dirs") or []
+    if check.get("dir"):
+        dirs = [check["dir"]]
+    if not dirs:
+        return
+
+    skip_names: set[str] = set(check.get("skip") or [])
+
+    for rel in dirs:
+        d = root / rel
+        if not d.exists():
+            errors.append(f"diagnostics_banner_check: directory not found {rel}")
+            continue
+        for path in sorted(d.glob("*.md")):
+            if path.name in skip_names:
+                continue
+            if path.name.startswith("audit_issue_diagnostics_"):
+                continue
+            text = path.read_text(encoding="utf-8")
+            if banner not in text:
+                rel_path = path.relative_to(root).as_posix()
+                errors.append(
+                    f"diagnostics_banner_check: {rel_path} lacks RESEARCH-ONLY banner"
+                )
 
 
 def main() -> None:

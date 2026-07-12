@@ -1,14 +1,18 @@
-"""Declassify historical final-candidate reports in the diagnostics folder.
+"""Declassify historical reports in the diagnostics folder.
 
 The audit remediation (A34 Phase 2) requires that every historical report that
 still shows ``GOAL PASSED`` or a ``0.847`` pass row is explicitly marked as
-research-only / not promotion evidence.  This script is idempotent: reports
-already carrying the declassification marker are skipped.
+research-only / not promotion evidence.  A54 extends the backfill to the full
+set of diagnostics reports: any ``*.md`` file that lacks the RESEARCH-ONLY
+banner gets the banner prepended.  This script is idempotent: reports already
+carrying the declassification marker are skipped.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 HISTORICAL_DATA_WINDOW: str = "2022-01-01~2026-04-24"
@@ -68,6 +72,19 @@ def is_candidate_report(path: Path) -> bool:
 
 def find_candidate_reports(directory: Path) -> list[Path]:
     return [p for p in sorted(directory.glob("*.md")) if is_candidate_report(p)]
+
+
+def is_eligible_report(path: Path) -> bool:
+    """Return True for report-like .md files that should carry the banner."""
+    if path.name in SKIP_NAMES:
+        return False
+    if path.name.startswith("audit_issue_diagnostics_"):
+        return False
+    return path.suffix.lower() == ".md"
+
+
+def find_reports(directory: Path) -> list[Path]:
+    return [p for p in sorted(directory.glob("*.md")) if is_eligible_report(p)]
 
 
 def sanitize_goal_passed_lines(path: Path) -> bool:
@@ -143,7 +160,7 @@ def declassify_file(path: Path, marker: str | None = None, banner: str | None = 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Mark historical final-candidate reports as research-only."
+        description="Mark historical diagnostics reports as research-only."
     )
     parser.add_argument(
         "--dir",
@@ -156,13 +173,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the files that would be changed without modifying them",
     )
+    parser.add_argument(
+        "--evidence",
+        type=Path,
+        default=None,
+        help="Path to write the before/after counts JSON",
+    )
     args = parser.parse_args(argv)
 
     banner = build_banner()
+    reports = find_reports(args.dir)
+    before_missing = sum(1 for p in reports if needs_declassification(p))
+
     changed = 0
     already_marked = 0
 
-    for path in find_candidate_reports(args.dir):
+    for path in reports:
         if args.dry_run:
             if needs_declassification(path):
                 print(f"would declassify/sanitize: {path.name}")
@@ -177,6 +203,28 @@ def main(argv: list[str] | None = None) -> int:
             changed += 1
         else:
             already_marked += 1
+
+    after_missing = sum(1 for p in reports if needs_declassification(p))
+
+    evidence = {
+        "run_date": datetime.now().strftime("%Y-%m-%d"),
+        "directory": str(args.dir.resolve()),
+        "total_reports": len(reports),
+        "before_missing": before_missing,
+        "after_missing": after_missing,
+        "changed": changed,
+        "already_marked": already_marked,
+        "files": sorted(p.name for p in reports),
+    }
+
+    if not args.dry_run:
+        evidence_path = args.evidence
+        if evidence_path is None:
+            evidence_path = args.dir / f"declassify_run_{evidence['run_date']}.json"
+        evidence_path.write_text(
+            json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"evidence: {evidence_path}")
 
     print(f"changed={changed} already_marked={already_marked}")
     return 0

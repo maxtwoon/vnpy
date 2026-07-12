@@ -621,3 +621,11 @@ lesson from A42's own "prove the gate has teeth" acceptance criterion); a duplic
 - **Recommended order**: A49 (quick, high-value bug fix) → A50 → A51 (diagnostic-then-enforcement
   pair) → A52 → A53 → A54, but A52/A53/A54 have no hard dependency on each other or on A50/A51 and
   may be resequenced if priorities change.
+
+## 4. A54 Dev Completion Note
+
+2026-07-13: A54 dev completed — `sizing_caveat` added to `BacktestEngine`/`PortfolioEngine`
+report dicts, surfaced in `run_position_sizing_report.py`,
+`declassify_historical_reports.py` run against all eligible diagnostics reports
+(103 missing banners → 0 missing), and `tools/sync_guardian/sync_check.py`
+extended with a `diagnostics_banner_check` gate.

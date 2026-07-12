@@ -24,6 +24,18 @@ deliverables_policy:
   # directory must appear in `git show --stat` for a dev-stage commit (i.e. was
   # `git add -f`'d), not merely exist on disk untracked.
 
+diagnostics_banner_check:
+  dirs:
+    - examples/czsc_strategy/diagnostics
+  banner: "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->"
+  skip:
+    - WORK_LOG.md
+    - ACCEPTANCE.md
+    - AUTOMATION_PROMPT.md
+    - NEXT_WORK.md
+    - simnow_daily_observation_workflow.md
+    - simnow_connection_probe.md
+
 handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]

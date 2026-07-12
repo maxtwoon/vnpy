@@ -58,7 +58,10 @@ def _handoff(repo: Path, args: str = "") -> subprocess.CompletedProcess[str]:
 
 
 def _write_synccheck_yml(
-    repo: Path, deliverables_policy: bool = True, commands: dict[str, str] | None = None
+    repo: Path,
+    deliverables_policy: bool = True,
+    commands: dict[str, str] | None = None,
+    diagnostics_banner_check: dict[str, Any] | None = None,
 ) -> None:
     policy_block = ""
     if deliverables_policy:
@@ -72,13 +75,27 @@ deliverables_policy:
         for stage, cmd in commands.items():
             lines.append(f"    {stage}: {cmd}")
         commands_block = "\n" + "\n".join(lines) + "\n"
+    banner_block = ""
+    if diagnostics_banner_check:
+        lines = ["diagnostics_banner_check:"]
+        if "dir" in diagnostics_banner_check:
+            lines.append(f"  dir: {diagnostics_banner_check['dir']}")
+        if "dirs" in diagnostics_banner_check:
+            lines.append("  dirs:")
+            for d in diagnostics_banner_check["dirs"]:
+                lines.append(f"    - {d}")
+        lines.append(f"  banner: {diagnostics_banner_check['banner']!r}")
+        if "skip" in diagnostics_banner_check:
+            lines.append("  skip:")
+            for s in diagnostics_banner_check["skip"]:
+                lines.append(f"    - {s}")
+        banner_block = "\n" + "\n".join(lines) + "\n"
     content = f"""version_source: "VERSION::"
 must_match: []
 changelog:
   file: CHANGELOG.md
 allow_history_notes: true
-{policy_block}
-handoff:
+{policy_block}{banner_block}handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]
   owners:
@@ -322,6 +339,54 @@ def test_wrappers_use_internal_script_dir(fresh_repo: Path) -> None:
     result = _handoff(repo, "status")
     assert result.returncode == 0, result.stderr
     assert "design" in result.stdout
+
+    result = _sync_check(repo)
+    assert result.returncode == 0, result.stderr
+
+
+def test_diagnostics_banner_check_fails_without_banner(fresh_repo: Path) -> None:
+    """A diagnostics/*.md file lacking the RESEARCH-ONLY banner must fail
+    sync_check with the file named in the error."""
+    repo = fresh_repo
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        diagnostics_banner_check={
+            "dir": "diagnostics",
+            "banner": "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->",
+        },
+    )
+    _write_handoff(repo, "design", "designer")
+    (repo / "diagnostics").mkdir()
+    bad_report = repo / "diagnostics" / "new_report.md"
+    bad_report.write_text("# New report\n\nSome findings.\n", encoding="utf-8")
+    _commit_all(repo, "add banner check config and new report")
+
+    result = _sync_check(repo)
+    assert result.returncode != 0, result.stdout
+    assert "diagnostics/new_report.md" in result.stderr
+    assert "RESEARCH-ONLY banner" in result.stderr
+
+
+def test_diagnostics_banner_check_passes_with_banner(fresh_repo: Path) -> None:
+    """The same file passes once the banner is added."""
+    repo = fresh_repo
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        diagnostics_banner_check={
+            "dir": "diagnostics",
+            "banner": "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->",
+        },
+    )
+    _write_handoff(repo, "design", "designer")
+    (repo / "diagnostics").mkdir()
+    report = repo / "diagnostics" / "new_report.md"
+    report.write_text(
+        "# New report\n\n<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->\n\nSome findings.\n",
+        encoding="utf-8",
+    )
+    _commit_all(repo, "add banner check config and bannered report")
 
     result = _sync_check(repo)
     assert result.returncode == 0, result.stderr

@@ -488,3 +488,7 @@ This repository uses a root-level `HANDOFF.md` and `.synccheck.yml` to track mul
 * Run `python tools/sync_check.py` before handing work off so version, docs, and handoff state stay aligned
 * Treat `HANDOFF.md` as the single source of truth for cross-agent state
 * Use `tools/handoff.py` for routine stage transitions instead of editing `HANDOFF.md` by hand
+* `diagnostics_banner_check` in `.synccheck.yml` (A54) enforces that every
+  `diagnostics/*.md` report carries the `RESEARCH-ONLY / NOT PROMOTION EVIDENCE`
+  banner. Use `examples/czsc_strategy/diagnostics/declassify_historical_reports.py`
+  to backfill missing banners.

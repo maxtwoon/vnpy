@@ -50,3 +50,43 @@ def test_generate_report_empty_and_unexecuted():
     report = engine.generate_report()
     assert report["total_trades"] == 0
     assert report["final_equity"] == 1000
+
+
+def test_generate_report_includes_sizing_caveat_for_research():
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.equity_curve = [{"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0}]
+    engine.strategy = FakeStrategy([])
+    report = engine.generate_report()
+    assert report["sizing_model"] == "research"
+    assert report["sizing_caveat"] == (
+        "当前为信号研究模式（方向型仓位+事后加权），"
+        "未建模合约乘数/资金上限/复利，仅评估信号有效性。"
+    )
+
+
+def test_generate_report_sizing_caveat_is_none_for_risk():
+    from chan_strategy.config import STRATEGY_CONFIG
+
+    saved = STRATEGY_CONFIG.get("sizing_model")
+    STRATEGY_CONFIG["sizing_model"] = "risk"
+    try:
+        engine = BacktestEngine("T", initial_capital=1000)
+        engine.equity_curve = [
+            {
+                "dt": datetime(2024, 1, 1),
+                "equity": 1000,
+                "price": 1,
+                "positions": 0,
+                "total_open_margin": 0.0,
+                "margin_utilization_pct": 0.0,
+            }
+        ]
+        engine.strategy = FakeStrategy([])
+        report = engine.generate_report()
+        assert report["sizing_model"] == "risk"
+        assert report["sizing_caveat"] is None
+    finally:
+        if saved is None:
+            STRATEGY_CONFIG.pop("sizing_model", None)
+        else:
+            STRATEGY_CONFIG["sizing_model"] = saved

@@ -643,6 +643,16 @@ class BacktestEngine:
                 self.equity_curve[-1].get("total_open_margin", 0.0) if self.equity_curve else 0.0
             )
 
+        # sizing_model caveat: surfaced in report body so readers of the file see it
+        sizing_model = report["sizing_model"]
+        if sizing_model == "research":
+            report["sizing_caveat"] = (
+                "当前为信号研究模式（方向型仓位+事后加权），"
+                "未建模合约乘数/资金上限/复利，仅评估信号有效性。"
+            )
+        else:
+            report["sizing_caveat"] = None
+
         # 总体绩效
         all_pairs = self.strategy.get_combined_trades()
         report["total_trades"] = len(all_pairs)

@@ -410,6 +410,13 @@ class PortfolioEngine:
             for dt, value in portfolio_curve.items()
         ]
 
+        sizing_caveat = None
+        for sr in symbol_results.values():
+            report = sr.get("report", {})
+            if "error" not in report and report.get("sizing_caveat"):
+                sizing_caveat = report["sizing_caveat"]
+                break
+
         return {
             "portfolio_risk": "off",
             "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
@@ -420,6 +427,7 @@ class PortfolioEngine:
             "symbol_errors": errors,
             "equity_curve": equity_curve,
             "pairs": all_pairs,
+            "sizing_caveat": sizing_caveat,
         }
 
     def _build_on_report(self, symbol_results: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -569,6 +577,13 @@ class PortfolioEngine:
                 "symbol_weights": dict(coordinator.symbol_weights),
             })
 
+        sizing_caveat = None
+        for s in successful_symbols:
+            report = symbol_results[s]["report"]
+            if report.get("sizing_caveat"):
+                sizing_caveat = report["sizing_caveat"]
+                break
+
         return {
             "portfolio_risk": "on",
             "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
@@ -582,6 +597,7 @@ class PortfolioEngine:
             "blocked_opens": coordinator.blocked_opens,
             "loss_limit_triggers": coordinator.loss_limit_triggers,
             "flat_events": coordinator.flat_events,
+            "sizing_caveat": sizing_caveat,
         }
 
     def run(self) -> dict[str, Any]:
