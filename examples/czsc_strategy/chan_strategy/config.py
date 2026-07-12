@@ -78,6 +78,14 @@ STRATEGY_CONFIG = {
     "max_margin_pct": 0.50,               # cap on total open initial margin vs equity
     "equity_mode": "fixed",               # "fixed" (running realized+unrealized off initial_capital)
                                           # | "compound" (documented, NOT implemented in A40)
+
+    # A43 MACD-area divergence (P4). "amplitude" is the legacy byte-identical default;
+    # "macd" compares leaving vs entering segment MACD magnitude (|hist| area).
+    "divergence_model": "amplitude",      # "amplitude" (legacy, default) | "macd"
+    "macd_fast": 12,                      # MACD fast EMA period (standard, NOT tuned)
+    "macd_slow": 26,                      # MACD slow EMA period (standard, NOT tuned)
+    "macd_signal": 9,                     # MACD signal EMA period (standard, NOT tuned)
+
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
         # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.

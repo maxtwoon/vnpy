@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+import pytest
 from czsc.objects import Direction
 
 from chan_strategy.signals import (
@@ -45,7 +46,7 @@ def test_complete_classification_values(czsc_factory, bi_factory):
         "方向V260615": {"向上", "向下", "无有效笔"},
         "位置V260615": {"中枢上方", "中枢内", "中枢下方", "无中枢"},
         "数据状态V260615": {"充分", "不足"},
-        "背驰V260615": {"无", "疑似", "确认", "失效"},
+        "背驰V260615": {"无", "疑似", "确认"},
         "结构状态V260615": {"已确认", "未确认", "无中枢"},
     }
     for c in cases:
@@ -108,3 +109,19 @@ def test_first_second_third_sell_paths(czsc_factory, bi_factory):
     ]
     tv = next(iter(signal_third_sell(czsc_factory(third_bis)).values()))
     assert tv.split("_")[0] == "三卖确认"
+
+
+def test_confirmed_bi_directions_alternate(strict_czsc_factory, bi_factory):
+    """Confirmed BIs must alternate directions; same-direction BIs are invalid fixtures."""
+    base = datetime(2024, 1, 1)
+    alternating = make_struct(base, bi_factory)
+    # Should construct without error.
+    c = strict_czsc_factory(alternating)
+    assert len(_get_confirmed_bi_list(c)) == len(alternating)
+
+    invalid = [
+        bi_factory(Direction.Up, 90, 110, base, base + timedelta(minutes=1)),
+        bi_factory(Direction.Up, 100, 120, base + timedelta(minutes=1), base + timedelta(minutes=2)),
+    ]
+    with pytest.raises(ValueError, match="alternate"):
+        strict_czsc_factory(invalid)

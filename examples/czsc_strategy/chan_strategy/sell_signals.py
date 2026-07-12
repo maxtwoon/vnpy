@@ -9,7 +9,7 @@ from czsc.objects import Direction
 from chan_strategy.zhongshu import build_zhongshu_from_bis
 from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.signals import (
-    _bi_power,
+    _divergence_power,
     _get_confirmed_bi_list,
     _get_confirming_bi,
     signal_bi_direction,
@@ -133,7 +133,9 @@ def signal_first_sell(c: CZSC, freq: str = "30分钟") -> dict:
         return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
     enter_idx = last_zs["start_idx"] - 1 if last_zs["start_idx"] > 0 else last_zs["start_idx"]
-    if _bi_power(leave_bi) < _bi_power(bi_list[enter_idx]):
+    enter_bi = bi_list[enter_idx]
+    enter_power, leave_power = _divergence_power(enter_bi, leave_bi, c)
+    if leave_power < enter_power:
         if _get_confirming_bi(bi_list, bi_list.index(leave_bi), Direction.Down) is not None:
             v1, score = "一卖确认", 80
         else:

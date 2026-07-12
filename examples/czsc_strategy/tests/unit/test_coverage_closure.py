@@ -286,9 +286,9 @@ def test_signal_branches_with_injected_zhongshu(monkeypatch, czsc_factory, bi_fa
         bi_factory(Direction.Up, 90, 100, base, base),
         bi_factory(Direction.Down, 80, 200, base, base),
     ]
-    # The "失效" branch requires two consecutive same-direction leaves after a
-    # center, which real alternating BIs cannot produce. Reach it by injecting a
-    # synthetic confirmed-BI list while keeping the CZSC object alternating.
+    # The orphaned amplitude "失效" branch was deleted in A43.  Even with a
+    # synthetic confirmed-BI list containing consecutive same-direction leaves,
+    # signal_divergence_status must no longer emit "失效".
     fake_bis = [
         bi_factory(Direction.Up, 1, 101, base, base),
         bi_factory(Direction.Up, 90, 120, base, base),
@@ -304,7 +304,9 @@ def test_signal_branches_with_injected_zhongshu(monkeypatch, czsc_factory, bi_fa
     )
     original_get_confirmed = signals_module._get_confirmed_bi_list
     monkeypatch.setattr(signals_module, "_get_confirmed_bi_list", lambda c: fake_bis)
-    assert "失效" in next(iter(signal_divergence_status(czsc_factory(div_bis)).values()))
+    value = next(iter(signal_divergence_status(czsc_factory(div_bis)).values()))
+    assert "失效" not in value
+    assert value.split("_")[0] in {"无", "疑似", "确认"}
     monkeypatch.setattr(signals_module, "_get_confirmed_bi_list", original_get_confirmed)
 
     up_div_bis = div_bis[:4] + [bi_factory(Direction.Up, 100, 130, base, base)]

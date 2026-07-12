@@ -1,0 +1,30 @@
+{
+  "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
+  "divergence_model": "amplitude",
+  "baseline": "default (amplitude)",
+  "window": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-12-31"
+  },
+  "symbols": [
+    "AP888",
+    "RB888"
+  ],
+  "equivalent": true,
+  "details": {
+    "AP888": {
+      "pairs_count": 14,
+      "pairs_equal": true,
+      "equity_equal": true,
+      "total_return_pct": 5.60824065379244,
+      "win_rate": 0.7857142857142857
+    },
+    "RB888": {
+      "pairs_count": 10,
+      "pairs_equal": true,
+      "equity_equal": true,
+      "total_return_pct": -0.7120202990900437,
+      "win_rate": 0.4
+    }
+  }
+}

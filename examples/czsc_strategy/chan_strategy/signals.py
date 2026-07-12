@@ -15,6 +15,10 @@
 - 完全分类信号必须穷尽、互斥
 """
 from typing import Dict, List, Any, Optional
+
+import numpy as np
+import pandas as pd
+
 from czsc import CZSC
 from czsc.objects import Direction
 from chan_strategy.config import STRATEGY_CONFIG
@@ -55,6 +59,82 @@ def _get_confirmed_bi_list(c: CZSC) -> list:
 def _bi_power(bi) -> float:
     """计算笔的力度 (价格幅度)"""
     return abs(bi.high - bi.low)
+
+
+def _macd(closes: np.ndarray, fast: int, slow: int, signal: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute MACD (DIF, DEA, hist) on a close-price series.
+
+    Uses the standard EMA definition: DIF = EMA(fast) - EMA(slow),
+    DEA = EMA(DIF, signal), hist = 2 * (DIF - DEA).  Only bars up to the
+    current one are consumed, preserving the no-lookahead discipline.
+    """
+    if len(closes) == 0:
+        return np.array([]), np.array([]), np.array([])
+    s = pd.Series(closes, dtype=float)
+    ema_fast = s.ewm(span=fast, adjust=False).mean().to_numpy()
+    ema_slow = s.ewm(span=slow, adjust=False).mean().to_numpy()
+    dif = ema_fast - ema_slow
+    dea = pd.Series(dif).ewm(span=signal, adjust=False).mean().to_numpy()
+    hist = 2.0 * (dif - dea)
+    return dif, dea, hist
+
+
+def _macd_power_for_segment(segment_bars: list, all_bars: list,
+                            fast: int, slow: int, signal: int) -> float:
+    """Return summed |hist| MACD area for ``segment_bars``.
+
+    MACD is computed over ``all_bars`` (up to the current bar) so the EMA
+    state is consistent; the segment magnitude is the sum of |hist| over the
+    bars whose dt belongs to ``segment_bars``.  If the segment has no bars or
+    MACD cannot be computed, falls back to the amplitude proxy so the gate
+    still produces a deterministic value.
+    """
+    if not segment_bars or not all_bars:
+        return 0.0
+
+    # Need at least slow + signal bars for a stable MACD reading.
+    if len(all_bars) < max(slow, signal) + 1:
+        # Fall back to amplitude when the EMA is not yet warm.
+        first = segment_bars[0]
+        last = segment_bars[-1]
+        return abs(last.close - first.close)
+
+    closes = np.array([b.close for b in all_bars], dtype=float)
+    _, _, hist = _macd(closes, fast, slow, signal)
+
+    segment_dts = {b.dt for b in segment_bars}
+    total = 0.0
+    for i, bar in enumerate(all_bars):
+        if bar.dt in segment_dts:
+            total += abs(float(hist[i]))
+    return total
+
+
+def _macd_divergence_power(enter_bi, leave_bi, czsc_obj) -> tuple[float, float]:
+    """Return (enter_power, leave_power) using MACD |hist| area.
+
+    Reads only confirmed bars available on ``czsc_obj.bars_raw``.
+    """
+    fast = STRATEGY_CONFIG.get("macd_fast", 12)
+    slow = STRATEGY_CONFIG.get("macd_slow", 26)
+    signal = STRATEGY_CONFIG.get("macd_signal", 9)
+    all_bars = list(getattr(czsc_obj, "bars_raw", []) or [])
+
+    enter_power = _macd_power_for_segment(
+        list(getattr(enter_bi, "raw_bars", []) or []), all_bars, fast, slow, signal
+    )
+    leave_power = _macd_power_for_segment(
+        list(getattr(leave_bi, "raw_bars", []) or []), all_bars, fast, slow, signal
+    )
+    return enter_power, leave_power
+
+
+def _divergence_power(enter_bi, leave_bi, czsc_obj) -> tuple[float, float]:
+    """Return (enter_power, leave_power) according to the active divergence_model."""
+    model = STRATEGY_CONFIG.get("divergence_model", "amplitude")
+    if model == "macd":
+        return _macd_divergence_power(enter_bi, leave_bi, czsc_obj)
+    return _bi_power(enter_bi), _bi_power(leave_bi)
 
 
 def _get_confirming_bi(bi_list: list, base_idx: int, direction: Direction) -> Optional[Any]:
@@ -203,15 +283,15 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
     背驰状态信号
 
     信号名: {freq}_D1BI_背驰V260615
-    完全分类: 无 / 疑似 / 确认 / 失效
+    完全分类: 无 / 疑似 / 确认
 
     判定逻辑:
     - 无中枢或笔不足: "无"
     - 最后一笔离开中枢且力度弱于进入: "疑似"（单级别只能疑似）
     - 需要次级别确认才能变为"确认"（在多级别协同中处理）
-    - 背驰后价格未配合: "失效"
 
-    力度计算: 使用笔的价格幅度 (power_price = abs(high - low))
+    力度计算: 由 ``divergence_model`` 配置决定（amplitude: abs(high-low);
+    macd: summed |hist| area on confirmed trade-frequency closes）。
 
     注意: 单级别信号中不会输出"确认"，确认需要次级别协同
     """
@@ -242,17 +322,16 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
         if len(after_zs_bis) >= 1:
             # 有离开段
             leave_bi = after_zs_bis[-1]  # 最后的离开笔
-            leave_power = _bi_power(leave_bi)
 
             # 寻找进入段: 中枢之前的最后一笔（或中枢第一笔之前的笔）
             zs_start_idx = last_zs["start_idx"]
             if zs_start_idx > 0:
                 enter_bi = bi_list[zs_start_idx - 1]
-                enter_power = _bi_power(enter_bi)
             else:
                 # 没有进入段，使用中枢第一笔
                 enter_bi = bi_list[zs_start_idx]
-                enter_power = _bi_power(enter_bi)
+
+            enter_power, leave_power = _divergence_power(enter_bi, leave_bi, c)
 
             # 判定背驰: 离开段力度弱于进入段
             if leave_power < enter_power:
@@ -265,24 +344,6 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
                     # 向上离开中枢且力度减弱 -> 顶背驰疑似
                     v1 = "疑似"
                     score = 60
-
-            # 检查背驰失效: 如果之前疑似背驰但后续价格继续创新高/低
-            # 向下背驰后如果继续新低 -> 失效
-            # NOTE(A37): This "失效" classification is currently unreachable on
-            # real data (confirmed BI directions alternate), and the exit-event
-            # consumers that referenced it were removed in A37. The decision to
-            # repair or delete this branch is explicitly deferred.
-            if v1 == "无" and len(after_zs_bis) >= 2:
-                prev_leave = after_zs_bis[-2]
-                curr_leave = after_zs_bis[-1]
-                if (prev_leave.direction == Direction.Down and  # pragma: no branch - failure branch only applies to consecutive down leaves
-                        curr_leave.direction == Direction.Down):
-                    # 同方向连续笔判定
-                    prev_power = _bi_power(prev_leave)
-                    if (prev_power < enter_power and  # pragma: no branch - compound guard for stale divergence failure
-                            curr_leave.low < prev_leave.low):
-                        v1 = "失效"
-                        score = 20
 
     key = f"{k1}_{k2}_{k3}"
     value = f"{v1}_任意_任意_{score}"
@@ -407,8 +468,7 @@ def signal_first_buy(c: CZSC, freq: str = "30分钟") -> dict:
         enter_bi = bi_list[zs_start_idx - 1]
     else:
         enter_bi = bi_list[zs_start_idx]
-    enter_power = _bi_power(enter_bi)
-    leave_power = _bi_power(leave_bi)
+    enter_power, leave_power = _divergence_power(enter_bi, leave_bi, c)
 
     # 判定背驰: 离开段力度弱于进入段
     if leave_power < enter_power:

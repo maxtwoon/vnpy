@@ -155,9 +155,9 @@ def test_baseline_factories_add_dead_factor_to_exits() -> None:
         # Access the factories through the module so the monkeypatch is visible.
         buy_pos = pos_mod.create_second_buy_position("TEST", enable_daily_filter=False)
         sell_pos = pos_mod.create_second_sell_position("TEST", enable_daily_filter=False)
-        assert any("背驰V260615_失效" in s.value for f in buy_pos.exits[0].factors for s in f.signals_all)
+        # The A37 baseline dead factor is still injected; the 背驰=失效 value it
+        # referenced was removed in A43, so we only check the factor name remains.
         assert any("方向反转且在中枢内" == f.name for f in buy_pos.exits[0].factors)
-        assert any("背驰V260615_失效" in s.value for f in sell_pos.exits[0].factors for s in f.signals_all)
         assert any("方向反转且在中枢内" == f.name for f in sell_pos.exits[0].factors)
 
     # Factories are restored after the context manager exits.

@@ -1,19 +1,19 @@
 ---
 task: A43 P4 - MACD-Area Divergence (Replace _bi_power Proxy)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -55,25 +55,31 @@ report only, not for in-task selection).
 
 ## Acceptance Criteria
 
-- [ ] `divergence_model="amplitude"` (default) → equity curve and every `Position.pairs` entry
+- [x] `divergence_model="amplitude"` (default) → equity curve and every `Position.pairs` entry
       byte-identical to current (equivalence test, ≥2 symbols × 1 year).
-- [ ] `"macd"`: a fixture where amplitude flags divergence but MACD does not (and the reverse)
+      *Evidence:* `diagnostics/divergence_amplitude_equivalence_check.py` on AP888/RB888
+      2025-01-01~2025-12-31: pairs_equal=True, equity_equal=True.
+- [x] `"macd"`: a fixture where amplitude flags divergence but MACD does not (and the reverse)
       yields the specified differing classifications; MACD params are exactly 12/26/9 and NOT
       tuned in-task.
-- [ ] Orphan `背驰=失效` branch removed; no code references it; `chan_strategy/validation.py`
+      *Evidence:* `tests/unit/test_divergence_macd.py` fixtures and param assertions.
+- [x] Orphan `背驰=失效` branch removed; no code references it; `chan_strategy/validation.py`
       exhaustiveness sets updated to match; a test enforces confirmed-BI direction alternation
       (no adjacent same-direction fake structure as coverage).
-- [ ] If a MACD `失效` class is added, real signal-history replay shows count > 0; else it is
-      absent (no unreachable class shipped).
-- [ ] `divergence_model_comparison_report.py` generated (report only, RESEARCH-ONLY banner
+      *Evidence:* branch deleted from `signals.py`; `validation.py` updated; `test_signals.py`
+      `test_confirmed_bi_directions_alternate`.
+- [x] If a MACD `失效` class is added, real signal-history replay shows count > 0; else it is
+      absent (no unreachable class shipped).  *Evidence:* no MACD `失效` class added.
+- [x] `divergence_model_comparison_report.py` generated (report only, RESEARCH-ONLY banner
       `Diagnostic only, not a trading recommendation.`); not used to select/tune parameters
       in-task.
-- [ ] No tuning of any threshold via backtest selection; no pre-2026-04-24 data used for any
+      *Evidence:* `diagnostics/divergence_model_comparison_report_2026-07-12.{json,md}`.
+- [x] No tuning of any threshold via backtest selection; no pre-2026-04-24 data used for any
       parameter choice; no SimNow order/cancel/send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` passes (or the documented Manual-verification accommodation
+- [x] `run_next_work.ps1 -Preflight` passes (or the documented Manual-verification accommodation
       applies if the codex-sandbox symlink limitation recurs — add a fresh block to this
       HANDOFF.md if needed).
 
@@ -109,6 +115,26 @@ report only, not for in-task selection).
    `python tools/handoff.py next --actor kimi-code --summary "A43 (P4) MACD-area divergence implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Completion Summary
+
+A43 (P4) MACD-area divergence implemented by kimi-code 2026-07-12:
+
+- Added `divergence_model` gate (`"amplitude"` default, `"macd"`) plus fixed MACD params
+  (`macd_fast=12`, `macd_slow=26`, `macd_signal=9`) to `chan_strategy/config.py`.
+- Implemented MACD |hist|-area divergence helper in `chan_strategy/signals.py` using only
+  confirmed trade-frequency closes (no lookahead).
+- Gated `signal_divergence_status`, `signal_first_buy` (signals.py) and `signal_first_sell`
+  (sell_signals.py) through `_divergence_power`.
+- Deleted the orphaned amplitude `背驰=失效` branch in `signal_divergence_status`; updated
+  `chan_strategy/validation.py` exhaustiveness set and all unit tests referencing it.
+- Added `tests/unit/test_divergence_macd.py` for amplitude/MACD fixture disagreement and
+  standard-param assertions; added `test_confirmed_bi_directions_alternate` to `test_signals.py`.
+- Added read-only `diagnostics/divergence_model_comparison_report.py` (RESEARCH-ONLY banner)
+  and ran it for the post-2026-04-24 window, producing the 2026-07-12 report artifacts.
+- Added `diagnostics/divergence_amplitude_equivalence_check.py` and verified amplitude-mode
+  byte-identical reproduction on AP888/RB888 2025 full-year.
+- All gates green: unit tests (452 passed), both sync checks, and `run_next_work.ps1 -Preflight`.
+
 ## Decision Log
 
 - 2026-07-12 - P4 promoted from the pre-authored phase-contracts draft to an active HANDOFF task
@@ -128,3 +154,4 @@ report only, not for in-task selection).
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | (new) → design | P4 promoted from phase-contracts draft, renumbered A41→A43 (A41/A42 consumed by SimNow/sync-guardian detour) |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A43 (P4 MACD-area divergence) started; re-verified no drift in signals.py since draft |
+| 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
