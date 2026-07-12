@@ -34,6 +34,11 @@ STRATEGY_CONFIG = {
     "stop_loss_1sell": 200,    # 一卖止损200BP (2%)
     "stop_loss_2sell": 300,    # 二卖止损300BP (3%)
     "stop_loss_3sell": 350,    # 三卖止损350BP (3.5%)
+
+    # A53 structural-invalidation threshold (NOT the position stop-loss tiers above).
+    # This is the "结构失效" margin past a center edge used by signal_risk_control
+    # and the short-side mirror.  It is a fraction (e.g. 0.05 = 5%), not basis points.
+    "structural_invalidation_pct": 0.05,
     # timeout 按交易周期 bar 计数；当前交易周期为 30 分钟
     "timeout_1buy": 600,       # 600根30分钟K线 = 300交易小时
     "timeout_2buy": 1000,      # 1000根30分钟K线 = 500交易小时
@@ -61,6 +66,11 @@ STRATEGY_CONFIG = {
     # Research-only execution switches. None / empty keeps baseline behavior.
     "max_2buy_entry_vs_anchor_pct": None,
     "enable_2buy_symbols": None,
+    # A53 first-buy research gates (None/False = legacy no-op behavior).
+    "enable_1buy_symbols": None,       # restrict first-buy opens to this symbol list
+    "block_1buy_daily_down": False,    # block first-buy open when daily direction is 向下
+    "block_1buy_daily_not_up": False,  # block first-buy open when daily direction is not 向上
+    "block_1buy_daily_below_zs": False,  # block first-buy open when daily position is 中枢下方
     "trailing_overrides": {},
 
     # A37 exit-event semantics switch (default legacy to keep baseline unchanged).
@@ -77,7 +87,7 @@ STRATEGY_CONFIG = {
     "risk_per_trade_pct": 0.005,          # fraction of equity risked per trade (0.5%)
     "max_margin_pct": 0.50,               # cap on total open initial margin vs equity
     "equity_mode": "fixed",               # "fixed" (running realized+unrealized off initial_capital)
-                                          # | "compound" (documented, NOT implemented in A40)
+                                          # | "compound" (documented, NOT implemented; raises NotImplementedError)
 
     # A43 MACD-area divergence (P4). "amplitude" is the legacy byte-identical default;
     # "macd" compares leaving vs entering segment MACD magnitude (|hist| area).

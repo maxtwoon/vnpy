@@ -486,7 +486,12 @@ def signal_first_buy(c: CZSC, freq: str = "30分钟") -> dict:
 
 def signal_second_buy(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -> dict:
     """
-    二买信号
+    二买信号（已废弃）
+
+    .. deprecated::
+        The authoritative implementation is now in ``chan_strategy.sell_signals``.
+        This version is kept only for backward compatibility with existing imports
+        and tests; do not use it in new code.
 
     信号名: {freq}_D1BSP_二买V260615
     分类: 非二买 / 二买候选 / 二买确认
@@ -622,7 +627,12 @@ def signal_second_buy(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None)
 
 def signal_third_buy(c: CZSC, freq: str = "30分钟") -> dict:
     """
-    三买信号
+    三买信号（已废弃）
+
+    .. deprecated::
+        The authoritative implementation is now in ``chan_strategy.sell_signals``.
+        This version is kept only for backward compatibility with existing imports
+        and tests; do not use it in new code.
 
     信号名: {freq}_D1BSP_三买阶段V260615
     分类: 非三买 / 离开中枢 / 回抽不入中枢 / 三买确认
@@ -723,7 +733,7 @@ def signal_third_buy(c: CZSC, freq: str = "30分钟") -> dict:
     return {key: value}
 
 
-def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 0.05) -> dict:
+def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float | None = None) -> dict:
     """
     结构失效信号（原名"风控信号"）
 
@@ -773,8 +783,9 @@ def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 
     else:
         current_price = last_bi.low
 
-    # 结构失效检测: 价格跌破中枢下沿的 (1 - stop_loss_pct) 位置
-    stop_level = zd * (1 - stop_loss_pct)
+    # 结构失效检测: 价格跌破中枢下沿的 (1 - structural_invalidation_pct) 位置
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    stop_level = zd * (1 - pct)
     if current_price < stop_level:
         v1 = "结构失效"
         score = 95
@@ -790,7 +801,7 @@ def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 
     return {key: value}
 
 
-def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 0.05) -> dict:
+def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: float | None = None) -> dict:
     """
     Recent-mode structural failure signal for restructured exit semantics.
 
@@ -798,8 +809,9 @@ def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: f
     分类: 结构完好 / 结构失效
 
     Uses the nearest local center (mode="recent") so that structural failure
-    refers to the same center as position/direction factors. The 0.05 threshold
-    is copied verbatim from ``signal_risk_control``; it is not tuned here.
+    refers to the same center as position/direction factors. The threshold is
+    read from ``STRATEGY_CONFIG["structural_invalidation_pct"]``; the explicit
+    ``stop_loss_pct`` argument is retained only for backward compatibility.
     """
     k1 = freq
     k2 = "D1BSP"
@@ -827,7 +839,8 @@ def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: f
     else:
         current_price = last_bi.low
 
-    stop_level = zd * (1 - stop_loss_pct)
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    stop_level = zd * (1 - pct)
     if current_price < stop_level:
         v1 = "结构失效"
         score = 95

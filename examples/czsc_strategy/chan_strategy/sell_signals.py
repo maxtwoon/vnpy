@@ -18,8 +18,6 @@ from chan_strategy.signals import (
     signal_first_buy,
     signal_risk_control,
     signal_risk_control_recent,
-    signal_second_buy as _base_signal_second_buy,
-    signal_third_buy as _base_signal_third_buy,
     signal_zs_confirmation,
     signal_zs_position,
 )
@@ -232,7 +230,7 @@ def signal_third_sell(c: CZSC, freq: str = "30分钟") -> dict:
     return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
 
-def signal_short_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 0.05) -> dict:
+def signal_short_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float | None = None) -> dict:
     """空头结构失效信号：价格向上突破最后一个中枢上沿。"""
     k1, k2, k3 = freq, "D1BSP", "空头风控V260615"
     bi_list = _get_confirmed_bi_list(c)
@@ -251,21 +249,23 @@ def signal_short_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: fl
         current_price = last_bi.high
     else:
         current_price = last_bi.low
-    if current_price > last_zs["zg"] * (1 + stop_loss_pct):
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    if current_price > last_zs["zg"] * (1 + pct):
         v1, score = "结构失效", 95
     elif last_zs["n_bis"] >= 9:
         v1, score = "震荡超限", 70
     return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
 
-def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: float = 0.05) -> dict:
+def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: float | None = None) -> dict:
     """Recent-mode short structural failure signal for restructured exits.
 
     信号名: {freq}_D1BSP_空头风控RV260615
     分类: 结构完好 / 结构失效
 
     Uses mode="recent" so the structural-exit center aligns with the center
-    used by position/direction factors. The 0.05 threshold is copied verbatim.
+    used by position/direction factors. The threshold is read from
+    ``STRATEGY_CONFIG["structural_invalidation_pct"]``.
     """
     k1, k2, k3 = freq, "D1BSP", "空头风控RV260615"
     bi_list = _get_confirmed_bi_list(c)
@@ -282,7 +282,8 @@ def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_
         current_price = last_bi.high
     else:
         current_price = last_bi.low
-    if current_price > last_zs["zg"] * (1 + stop_loss_pct):
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    if current_price > last_zs["zg"] * (1 + pct):
         v1, score = "结构失效", 95
     return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 

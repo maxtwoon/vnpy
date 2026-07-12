@@ -929,6 +929,12 @@ class Position:
         multiplier = int(spec.get("multiplier", 1))
         margin_rate = float(spec.get("margin_rate", 0.0))
 
+        equity_mode = STRATEGY_CONFIG.get("equity_mode", "fixed")
+        if equity_mode == "compound":
+            raise NotImplementedError(
+                'equity_mode="compound" is documented but not yet implemented'
+            )
+
         equity = equity_at_entry if equity_at_entry is not None else 0.0
         risk_pct = STRATEGY_CONFIG.get("risk_per_trade_pct", 0.005)
         max_margin_pct = STRATEGY_CONFIG.get("max_margin_pct", 0.50)

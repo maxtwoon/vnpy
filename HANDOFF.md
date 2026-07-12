@@ -1,19 +1,19 @@
 ---
 task: A53 - Config/Signal Single-Source-of-Truth Cleanup
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -67,32 +67,32 @@ a real call site.
 
 ## Acceptance Criteria
 
-- [ ] All four orphan keys exist in `config.py` with defaults matching today's de-facto behavior;
+- [x] All four orphan keys exist in `config.py` with defaults matching today's de-facto behavior;
       a full-`BacktestEngine` equivalence test proves default output is byte-identical to before
       this task (per the A44-A52 house pattern — do not ship with only a unit-level check).
-- [ ] Each orphan key's actual on-behavior (`True`/non-`None` value) is unit-tested and confirmed
+- [x] Each orphan key's actual on-behavior (`True`/non-`None` value) is unit-tested and confirmed
       to behave as its variable name implies (e.g. `block_1buy_daily_down=True` genuinely blocks a
       一买 open when daily direction is 向下) — this is real verification of previously-untested
       logic, not just a smoke test.
-- [ ] `structural_invalidation_pct` is read from `STRATEGY_CONFIG` at all 4 former hardcode sites
+- [x] `structural_invalidation_pct` is read from `STRATEGY_CONFIG` at all 4 former hardcode sites
       (`signals.py:726,793`, `sell_signals.py:235,261`); changing the config value changes all 4
       call sites' behavior identically (unit-tested); a comment at the config key distinguishes it
       from `stop_loss_1buy`/`2buy`/`3buy`.
-- [ ] `signals.py`'s superseded `signal_second_buy`/`signal_third_buy` are either deleted (with an
+- [x] `signals.py`'s superseded `signal_second_buy`/`signal_third_buy` are either deleted (with an
       import-graph check proving nothing outside `sell_signals.py`'s own now-confirmed-unused
       aliases referenced them) or carry an explicit deprecation comment pointing to the
       authoritative version.
-- [ ] `sell_signals.py:21-22`'s dead `_base_signal_second_buy`/`_base_signal_third_buy` import
+- [x] `sell_signals.py:21-22`'s dead `_base_signal_second_buy`/`_base_signal_third_buy` import
       aliases are removed (they are never used — confirmed 2026-07-13 by grep).
-- [ ] `equity_mode` either no longer exists, or `"compound"` raises `NotImplementedError` at a
+- [x] `equity_mode` either no longer exists, or `"compound"` raises `NotImplementedError` at a
       real call site (unit-tested) — not a decorative unread key either way.
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`; does not touch `structural_atr`/P8a exit
       logic (A47, done) or the P8b portfolio coordinator (A48, done).
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
@@ -141,6 +141,15 @@ a real call site.
    `python tools/handoff.py next --actor kimi-code --summary "A53 config/signal single-source-of-truth cleanup implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification (natively run)
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **559 passed, 4 deselected** (30.75s)
+- `python -m pytest examples/czsc_strategy/tests/unit/test_a53_config_signal_cleanup.py examples/czsc_strategy/tests/unit/test_a53_orphan_keys_equivalence.py -q` → **12 passed**
+- `python tools/sync_check.py` → **PASS**
+- `python tools/sync_check.py --root examples/czsc_strategy` → **PASS**
+- `ruff check examples/czsc_strategy/chan_strategy/config.py examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py examples/czsc_strategy/tests/unit/test_a53_config_signal_cleanup.py examples/czsc_strategy/tests/unit/test_a53_orphan_keys_equivalence.py` → **All checks passed** (pre-existing `positions.py` UP035/B905/UP006/UP045 warnings are untouched as out-of-scope).
+- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → **Preflight complete; live SimNow capture was not requested** (155 workflow unit tests passed).
+
 ## Decision Log
 
 - 2026-07-13 - A53 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
@@ -152,6 +161,14 @@ a real call site.
   `_base_*` aliases but never uses either — confirming `sell_signals.py`'s versions are genuine
   independent reimplementations (not wrappers calling the base), and adding a small bonus
   dead-import cleanup to this task's scope.
+- 2026-07-13 - Dev implementation completed by kimi-code:
+  - Added four orphan first-buy keys to `STRATEGY_CONFIG` with no-op defaults.
+  - Single-sourced `structural_invalidation_pct` in `STRATEGY_CONFIG`; all four risk-control
+    functions read from config while preserving backward-compatible explicit argument override.
+  - Added explicit deprecation comments to `signals.py`'s superseded `signal_second_buy`/
+    `signal_third_buy` after re-verifying they are still imported by existing unit tests.
+  - Removed dead `_base_signal_second_buy`/`_base_signal_third_buy` aliases from `sell_signals.py`.
+  - Made `equity_mode="compound"` raise `NotImplementedError` in `Position._size_open`.
 
 ## 交接历史
 
@@ -159,3 +176,4 @@ a real call site.
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → design | A53 promoted from the audit remediation roadmap draft after A52 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A53 (config/signal single-source-of-truth cleanup) started |
+| 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
