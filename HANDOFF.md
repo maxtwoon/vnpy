@@ -1,91 +1,98 @@
 ---
-task: A52 - Continuous-Contract Data-Integrity (Adjustment Method + Rollover Stat Field)
+task: A53 - Config/Signal Single-Source-of-Truth Cleanup
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Fourth task of the 2026-07-12 audit remediation roadmap
-(`docs/design/a49-audit-remediation-roadmap.md` §"A52"), started after A51 (limit-halt fill
-tagging) reached `done`. Independent of A49-A51 (no dependency either way).
+Fifth task of the 2026-07-12 audit remediation roadmap
+(`docs/design/a49-audit-remediation-roadmap.md` §"A53"), started after A52 (continuous-contract
+data-integrity) reached `done`. Independent of A49-A52/A54.
 
-`docs/review/ai_trading_review_2026-07-12.md` findings 🟠#4/🟠#5:
+Four related dead-config/dead-code findings, re-verified 2026-07-13, all unchanged since the
+audit:
 
-1. **Undeclared adjustment method**: `chan_strategy/data_adapter.py` (re-confirmed 2026-07-13, no
-   `is_rollover_window`/`adjustment` fields exist yet) treats every row as raw OHLCV with no
-   adjustment metadata. Whether AP888/RB888/SC888/A888/ZN888 are front-adjusted, back-adjusted, or
-   an unadjusted raw splice is currently undocumented in code — even though A34's H4 finding
-   already established `found_spliced` at the SQLite-metadata level, that fact was never made an
-   explicit, code-visible, re-verifiable assertion.
-2. **Rollover exclusion never reaches the default path**: A39's
-   `diagnostics/rollover_exclusion_report.py` (confirmed present, `_detect_transitions`/
-   `_exclusion_dates` functions re-verified 2026-07-13 unchanged) proved rollover contamination is
-   real and measurable, but the exclusion logic lives only in that standalone diagnostic —
-   `data_adapter.py`/`backtest_engine.py` never tag or optionally exclude rollover-window trades
-   by default.
+1. **🟠#6 Orphan config keys** (`chan_strategy/positions.py:396,405,407,409`):
+   `_research_first_buy_allowed`/`_daily_trend_filter_signals`-area code reads
+   `enable_1buy_symbols`, `block_1buy_daily_down`, `block_1buy_daily_not_up`,
+   `block_1buy_daily_below_zs` via `STRATEGY_CONFIG.get(...)` — none of these keys exist in
+   `config.py`, so these gates are permanently no-op regardless of any config edit.
+2. **🟠#7 Duplicated `stop_loss_pct=0.05`**: hardcoded as a function-signature default in 4 places
+   (`signals.py:726,793`, `sell_signals.py:235,261`) for the *structural-invalidation* concept
+   (price breaking 5% past a center edge) — confusingly identically named to but distinct from the
+   *position stop-loss* concept (`config.py`'s `stop_loss_1buy`/`2buy`/`3buy`, in basis points).
+3. **🟠#8 Orphaned legacy signal implementation**: `signals.py:487`/`623`'s
+   `signal_second_buy`/`signal_third_buy` are superseded by `sell_signals.py:28`/`73`'s corrected
+   versions (per that module's own docstring: "安全二买实现：规避旧 signals.py 中 None 分支和
+   Direction 比较缺陷"). **Re-verified 2026-07-13: `sell_signals.py` fully reimplements both
+   functions from scratch — it does NOT call the `signals.py` originals.** It does import them
+   under aliases (`signal_second_buy as _base_signal_second_buy`,
+   `signal_third_buy as _base_signal_third_buy`, `sell_signals.py:21-22`) but **never uses either
+   alias anywhere in the file** — this is itself an additional, previously-unflagged dead
+   import, bundled into this task.
+4. **🟢#10 `equity_mode` dead config** (`config.py:79`): declared with `"fixed"`/`"compound"`
+   documented options, but no code anywhere branches on this key — re-verified 2026-07-13, zero
+   hits in `positions.py`/`backtest_engine.py`/`portfolio_engine.py`; it is read only by a
+   tautological test assertion.
 
-Full contract: `docs/design/a49-audit-remediation-roadmap.md` §"A52 — Continuous-Contract
-Data-Integrity" (the authoritative design — this HANDOFF summarizes it).
+Full contract: `docs/design/a49-audit-remediation-roadmap.md` §"A53 — Config/Signal
+Single-Source-of-Truth Cleanup" (the authoritative design — this HANDOFF summarizes it).
 
 ## Goal
 
-**Part A (no gate, no behavior change):** ship `diagnostics/contract_adjustment_verification.py`
-(read-only) that inspects the raw SQLite table(s) for the 5 default symbols and
-determines/confirms the splicing method actually in use — e.g. by checking for price
-discontinuities at A39's own detected transition dates (a continuous/adjusted series shows smooth
-transitions; a raw splice shows gaps). Cross-reference against A34's H4 `found_spliced` finding to
-confirm it still holds. Add an explicit, prominent comment block in `data_adapter.py` (near the
-table-loading code) stating the confirmed method and citing this verification script's output.
-
-**Part B (gated, default off, byte-identical):** add `rollover_stat_tagging` config key
-(`"off"` default | `"on"`). Under `"on"`, `data_adapter.py`'s bar-loading path attaches an
-`is_rollover_window: bool` field to each loaded bar (or an equivalent per-trade tag applied in
-`backtest_engine.py`), reusing A39's `_detect_transitions`/`_exclusion_dates` logic (import/call
-it — do not reimplement transition detection). This does NOT filter/exclude trades from the actual
-backtest by default — it only makes the tag available for reporting.
+Fill in the four orphan config keys with defaults matching today's de-facto no-op behavior, prove
+equivalence, then unit-test each gate's actual on-behavior (the underlying conditional logic in
+`positions.py` was presumably written correctly at the time but has never actually been exercised
+since it's been unreachable — verify it, don't just assume it's right). Single-source
+`stop_loss_pct` as `structural_invalidation_pct` in `STRATEGY_CONFIG` across all 4 call sites, with
+a comment distinguishing it from the position stop-loss tiers. Delete or deprecate-mark
+`signals.py`'s superseded `signal_second_buy`/`signal_third_buy` (verify the import graph first —
+confirmed clean above, but re-verify at dev time in case anything changed). Remove the newly-found
+dead `_base_signal_second_buy`/`_base_signal_third_buy` import aliases in `sell_signals.py`.
+Resolve `equity_mode`: either delete the key, or make `"compound"` raise `NotImplementedError` at
+a real call site.
 
 ## Acceptance Criteria
 
-- [x] `contract_adjustment_verification.py` produces a definitive, cited conclusion about the
-      splicing/adjustment method for each of the 5 default symbols, cross-referenced against A34's
-      H4 finding (state explicitly whether it still holds or has changed).
-- [x] `data_adapter.py` carries an explicit comment stating the confirmed method — phrased as
-      "confirmed by `contract_adjustment_verification.py` on `<date>`", not "assumed."
-- [x] `rollover_stat_tagging="off"` (default) → equity curve and every `Position.pairs` entry
-      byte-identical to current (full-`BacktestEngine` equivalence test with a git-tracked golden
-      snapshot, per the A44-A51 house pattern — do not ship with only a unit-level check).
-- [x] `rollover_stat_tagging="on"` → a fixture with a known rollover transition date (reuse a date
-      already known from A39's real detected transitions, or a constructed fixture date) proves
-      bars/trades within the transition window (`transition_date ± 1 trading day`, matching A39's
-      own window definition) are correctly tagged `is_rollover_window=True`; bars/trades outside
-      are `False` (unit-tested).
-- [x] `"on"` mode adds a tag only — it never excludes, filters, or otherwise changes which trades
-      appear in `Position.pairs` or the equity curve (unit-tested: same trade count/prices as
-      `"off"`, only the new tag field differs).
-- [x] The transition-date detection logic is imported/reused from
-      `diagnostics/rollover_exclusion_report.py`, not reimplemented (verify via code read — a
-      second independent implementation of the same date-detection logic is a reject).
-- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
-      order/cancel/send path changed; no `GOAL PASSED`; no back-adjustment/re-splice of the data
-      (out of scope, same as A39's own Boundary); no gating of live opens around rollover windows
-      (out of scope).
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] All four orphan keys exist in `config.py` with defaults matching today's de-facto behavior;
+      a full-`BacktestEngine` equivalence test proves default output is byte-identical to before
+      this task (per the A44-A52 house pattern — do not ship with only a unit-level check).
+- [ ] Each orphan key's actual on-behavior (`True`/non-`None` value) is unit-tested and confirmed
+      to behave as its variable name implies (e.g. `block_1buy_daily_down=True` genuinely blocks a
+      一买 open when daily direction is 向下) — this is real verification of previously-untested
+      logic, not just a smoke test.
+- [ ] `structural_invalidation_pct` is read from `STRATEGY_CONFIG` at all 4 former hardcode sites
+      (`signals.py:726,793`, `sell_signals.py:235,261`); changing the config value changes all 4
+      call sites' behavior identically (unit-tested); a comment at the config key distinguishes it
+      from `stop_loss_1buy`/`2buy`/`3buy`.
+- [ ] `signals.py`'s superseded `signal_second_buy`/`signal_third_buy` are either deleted (with an
+      import-graph check proving nothing outside `sell_signals.py`'s own now-confirmed-unused
+      aliases referenced them) or carry an explicit deprecation comment pointing to the
+      authoritative version.
+- [ ] `sell_signals.py:21-22`'s dead `_base_signal_second_buy`/`_base_signal_third_buy` import
+      aliases are removed (they are never used — confirmed 2026-07-13 by grep).
+- [ ] `equity_mode` either no longer exists, or `"compound"` raises `NotImplementedError` at a
+      real call site (unit-tested) — not a decorative unread key either way.
+- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+      order/cancel/send path changed; no `GOAL PASSED`; does not touch `structural_atr`/P8a exit
+      logic (A47, done) or the P8b portfolio coordinator (A48, done).
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
@@ -93,75 +100,62 @@ backtest by default — it only makes the tag available for reporting.
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A52". Fourth task of the
+1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A53". Fifth task of the
    6-task remediation roadmap (A49-A54) triaging `docs/review/ai_trading_review_2026-07-12.md` —
-   read that audit report's Findings #4 and #5 (🟠 medium) for full context.
-2. **Scope:** new `examples/czsc_strategy/diagnostics/contract_adjustment_verification.py`
-   (read-only), `chan_strategy/data_adapter.py` (adjustment-method comment block; optional
-   `is_rollover_window` tagging under the new gate), `chan_strategy/config.py`
-   (`rollover_stat_tagging` key). Do not touch `positions.py`'s exit/sizing logic, `backtest_engine.py`'s
-   core loop structure beyond threading the new tag through (same additive-kwarg pattern A51 just
-   established for `entry_at_limit`/`exit_at_limit` — follow that precedent), or any P8b portfolio
-   coordinator code (A48, done).
-3. **Reuse A39's detection, do not reimplement it.** `diagnostics/rollover_exclusion_report.py`'s
-   `_detect_transitions`/`_exclusion_dates` functions already solve "find rollover transition
-   dates" and "compute the ±1-trading-day exclusion window" — import and call them (or factor the
-   shared logic into a small importable module if the diagnostic script itself isn't cleanly
-   importable, mirroring how A51 extracted `chan_strategy/limit_config.py` from A50's diagnostic
-   for exactly this kind of reuse).
-4. **Part A and Part B are independent — ship both, but Part A has no gate/equivalence
-   requirement** (it's a read-only verification script + a comment, not a runtime behavior change).
-   Part B follows the standard gated-default-off discipline.
-5. **`"on"` is tagging only, mirroring A51's tagging-only discipline exactly** — if you find
-   yourself writing code that excludes a trade or changes a fill, stop; that is explicitly out of
-   scope (same Boundary A39's original P2a rollover diagnostic set: "does not exclude rollover
-   trades from the live strategy — only the diagnostic excludes them").
+   read that audit report's Findings #6, #7, #8, #10 for full context.
+2. **Scope:** `chan_strategy/config.py` (new keys, `equity_mode` resolution),
+   `chan_strategy/positions.py` (now-reachable orphan-key gates — verify correctness, since this
+   logic has never actually run against real data before),
+   `chan_strategy/signals.py`/`sell_signals.py` (`structural_invalidation_pct` call-site updates;
+   legacy-signal deprecation/deletion; dead alias-import removal). Do not touch
+   `structural_atr`/P8a exit logic (A47), the P8b portfolio coordinator (A48), or anything from
+   A49-A52 (already done, independent of this task).
+3. **The orphan-key gates enable previously-unreachable code — treat it with the same scrutiny as
+   new code, not as "already correct because it's already written."** Since `.get()` always
+   returned `None`/falsy before this task, the conditional branches in `positions.py` around lines
+   396-409 have never actually executed against real signals. Read them carefully; if the logic
+   turns out to be subtly wrong once reachable, that is a legitimate finding to fix in this same
+   task (it's still in scope — you're the one making it reachable).
+4. **`structural_invalidation_pct` is a NEW name for an OLD concept** — do not confuse it with
+   `stop_loss_1buy`/`stop_loss_2buy`/`stop_loss_3buy` (position stop-loss, basis points, used by
+   `positions.py`'s exit logic). `structural_invalidation_pct` is `signal_risk_control`'s
+   "结构失效" threshold (a fraction like 0.05, used to compute whether price breaking 5% past a
+   center edge counts as structural failure). Keep the config comment explicit about this
+   distinction — this exact confusion is what caused the original finding.
+5. **Re-verify the `signals.py` deletion is safe before deleting** — re-run the import-graph check
+   (`grep -rn "from chan_strategy.signals import" examples/czsc_strategy/ | grep
+   "signal_second_buy\|signal_third_buy"` and similarly for any direct `chan_strategy.signals.
+   signal_second_buy`/`signal_third_buy` module-attribute access) at dev time, since code may have
+   changed since this HANDOFF was written. If genuinely unreferenced outside `sell_signals.py`'s
+   now-dead aliases, delete; otherwise, deprecation-comment instead.
 6. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection;
    no pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched; no
-   `GOAL PASSED`; no back-adjustment/re-splice logic; no live-open gating around rollover windows;
-   transition-date detection logic must be reused, not reimplemented.
+   `GOAL PASSED`; any orphan-key on-behavior test must genuinely verify the variable name matches
+   real behavior, not just "the key is now settable."
 7. **Before claiming any script "doesn't exist," verify the path carefully** —
    `run_next_work.ps1` lives at `examples/czsc_strategy/diagnostics/run_next_work.ps1`.
-8. **Add the Manual-verification block proactively if you anticipate a sandboxed review** — A49
-   and A51 both had to redo a round solely because this block was missing (codex's sandboxed
-   pytest/preflight reruns hit the documented WinError 5 limitation); if you run the acceptance
-   commands natively yourself before finishing, consider recording those counts under a "Manual
-   verification (symlink-privilege sandbox limitation)" heading up front to save a round-trip.
+8. **Include a Manual-verification block with natively-run counts proactively** — A52's dev round
+   did this and passed review on the first attempt; A49 and A51 both needed a second round solely
+   because this block was missing. Follow A52's precedent.
 9. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A52 continuous-contract data-integrity implemented"`.
+   `python tools/handoff.py next --actor kimi-code --summary "A53 config/signal single-source-of-truth cleanup implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-13 - A52 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
-  active HANDOFF task, started immediately after A51 reached `done`. Independent of A49-A51/A53/
-  A54 — no dependency either way, promoted next per the roadmap's recommended priority order.
-- 2026-07-13 - Re-verified `data_adapter.py` has no adjustment/rollover-tagging fields yet, and
-  `rollover_exclusion_report.py`'s `_detect_transitions`/`_exclusion_dates` functions exist
-  unchanged since A39 — both confirmed reusable, no drift.
-- 2026-07-13 - Added a proactive note (item 8) suggesting dev record Manual-verification evidence
-  up front, after A49 and A51 both needed a second review round solely for this reason.
-
-## Manual verification (symlink-privilege sandbox limitation)
-
-The acceptance commands below were run natively (unsandboxed) on 2026-07-13 and
-passed. If a sandboxed review rerun hits the documented pytest `tmp_path` /
-symlink WinError 5 limitation, rely on these recorded counts instead.
-
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`  
-  → 547 passed, 4 deselected, 2 warnings in ~30 s.
-- `python tools/sync_check.py`  
-  → PASS (version truth 4.4.0).
-- `python tools/sync_check.py --root examples/czsc_strategy`  
-  → PASS.
-- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight`  
-  → Preflight complete; SimNow unit-test subset 155 passed; backfill plan built.
+- 2026-07-13 - A53 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
+  active HANDOFF task, started immediately after A52 reached `done`. Independent of A49-A52/A54.
+- 2026-07-13 - Re-verified all four cited targets (orphan keys, duplicated `stop_loss_pct`,
+  superseded `signals.py` functions, dead `equity_mode`) are unchanged since the audit.
+- 2026-07-13 - Found an additional, previously-unflagged issue while re-verifying finding #8:
+  `sell_signals.py:21-22` imports `signal_second_buy`/`signal_third_buy` from `signals.py` under
+  `_base_*` aliases but never uses either — confirming `sell_signals.py`'s versions are genuine
+  independent reimplementations (not wrappers calling the base), and adding a small bonus
+  dead-import cleanup to this task's scope.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-13 | codex → claude-code | done → design | A52 promoted from the audit remediation roadmap draft after A51 reached done |
-| 2026-07-13 | claude-code → kimi-code | design → dev | A52 (continuous-contract data-integrity) started |
-| 2026-07-13 | kimi-code → codex | dev → review | A52 continuous-contract data-integrity implemented |
-| 2026-07-13 | codex → codex | review → done | A52 review accepted: acceptance criteria verified; pytest/preflight sandbox WinError 5 covered by recorded manual counts |
+| 2026-07-13 | codex → claude-code | done → design | A53 promoted from the audit remediation roadmap draft after A52 reached done |
+| 2026-07-13 | claude-code → kimi-code | design → dev | A53 (config/signal single-source-of-truth cleanup) started |
