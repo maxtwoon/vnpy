@@ -1,7 +1,7 @@
 ---
 task: A43 P4 - MACD-Area Divergence (Replace _bi_power Proxy)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-12
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -189,3 +189,4 @@ A43 (P4) MACD-area divergence implemented by kimi-code 2026-07-12:
 | 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: MACD mode has undocumented amplitude fallback |
 | 2026-07-12 | kimi-code → codex | dev → review | A43 (P4) MACD-area divergence implemented |
+| 2026-07-12 | codex → codex | review → done | A43 (P4) MACD-area divergence review accepted |
