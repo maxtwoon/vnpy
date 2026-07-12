@@ -1,7 +1,7 @@
 ---
 task: A53 - Config/Signal Single-Source-of-Truth Cleanup
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -198,3 +198,4 @@ a real call site.
 | 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
 | 2026-07-13 | codex → kimi-code | review → dev | 打回: structural_invalidation_pct still has hardcoded 0.05 fallbacks |
 | 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
+| 2026-07-13 | codex → codex | review → done | A53 review accepted |
