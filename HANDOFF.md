@@ -1,19 +1,19 @@
 ---
 task: A46 P7 - Symmetric Regime-Gated Shorts
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -108,6 +108,30 @@ focused on RB/SC per the design; report only, not for in-task selection).
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
+## Manual Verification
+
+Re-run natively by claude-code 2026-07-12:
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **PASS** (503
+  passed, 4 deselected).
+- `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
+  examples/czsc_strategy` -> PASS (child).
+- `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) -> **PASS**, 155 SimNow
+  workflow unit tests passed, preflight completed cleanly, no WinError 5.
+
+### Correction (claude-code, 2026-07-12): report window hardcoded backwards (pre-cutoff data)
+
+`short_enable_report.py` hardcoded `WINDOW_START = "2026-01-01"` / `WINDOW_END = "2026-04-24"` —
+the reverse of every other report script in this roadmap (A43/A44/A45's `second_buy_and_atr_
+report.py`/`resonance_filter_comparison_report.py`/`divergence_model_comparison_report.py` all
+use `WINDOW_START = "2026-04-24"` / `WINDOW_END = "2026-07-09"`, i.e. the honest post-cutoff
+window). The generated report used 2026-01-01~2026-04-24 — entirely pre-2026-04-24 data, directly
+contradicting the house discipline's "promotion evidence needs the post-2026-04-24 + SimNow
+stream" convention every prior phase's report followed. Fixed the two constants in
+`short_enable_report.py` to match precedent and regenerated the report with the corrected
+default window; it now correctly shows sparse/zero trade counts on the honest post-cutoff window
+(RB888 reports `交易周期数据不足`, consistent with every other A43-A45 report on the same window).
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
@@ -196,3 +220,4 @@ focused on RB/SC per the design; report only, not for in-task selection).
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | P7 promoted from phase-contracts draft, confirmed A46 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A46 (P7 symmetric regime-gated shorts) started; re-verified no drift from A43/A44/A45 |
+| 2026-07-12 | kimi-code → codex | dev → review | A46 (P7) symmetric regime-gated shorts implemented |

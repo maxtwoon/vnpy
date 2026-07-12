@@ -1,0 +1,150 @@
+{
+  "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
+  "generated_at": "2026-07-12T16:33:56.240433",
+  "regime_model": "long_only vs independent vs router",
+  "note": "This report is evidence only and is not used to select or tune parameters. No threshold tuning is performed from this report in-task. Window chosen as the most recent continuous 4-month period available for both RB888 and SC888.",
+  "window": {
+    "start_date": "2026-04-24",
+    "end_date": "2026-07-09"
+  },
+  "total_symbols": 2,
+  "symbols_attempted": [
+    "RB888",
+    "SC888"
+  ],
+  "totals": {
+    "long_only": {
+      "trade_count": 0,
+      "short_trade_count": 0,
+      "both_long_short_bars": 0
+    },
+    "independent": {
+      "trade_count": 0,
+      "short_trade_count": 0,
+      "both_long_short_bars": 0
+    },
+    "router": {
+      "trade_count": 0,
+      "short_trade_count": 0,
+      "both_long_short_bars": 0
+    }
+  },
+  "per_symbol": [
+    {
+      "symbol": "RB888",
+      "long_only": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "both_long_short_bars": 0,
+        "long_trade_count": 0,
+        "long_win_rate": 0.0,
+        "long_expectancy": 0.0,
+        "short_trade_count": 0,
+        "short_win_rate": 0.0,
+        "short_expectancy": 0.0,
+        "pairs": []
+      },
+      "independent": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "both_long_short_bars": 0,
+        "long_trade_count": 0,
+        "long_win_rate": 0.0,
+        "long_expectancy": 0.0,
+        "short_trade_count": 0,
+        "short_win_rate": 0.0,
+        "short_expectancy": 0.0,
+        "pairs": []
+      },
+      "router": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "both_long_short_bars": 0,
+        "long_trade_count": 0,
+        "long_win_rate": 0.0,
+        "long_expectancy": 0.0,
+        "short_trade_count": 0,
+        "short_win_rate": 0.0,
+        "short_expectancy": 0.0,
+        "pairs": []
+      },
+      "error": "router_error: 交易周期数据不足: 需要至少110根30分钟K线，实际95根"
+    },
+    {
+      "symbol": "SC888",
+      "long_only": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "both_long_short_bars": 0,
+        "long_trade_count": 0,
+        "long_win_rate": 0.0,
+        "long_expectancy": 0.0,
+        "short_trade_count": 0,
+        "short_win_rate": 0.0,
+        "short_expectancy": 0.0,
+        "pairs": []
+      },
+      "independent": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "both_long_short_bars": 0,
+        "long_trade_count": 0,
+        "long_win_rate": 0.0,
+        "long_expectancy": 0.0,
+        "short_trade_count": 0,
+        "short_win_rate": 0.0,
+        "short_expectancy": 0.0,
+        "pairs": []
+      },
+      "router": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "both_long_short_bars": 0,
+        "long_trade_count": 0,
+        "long_win_rate": 0.0,
+        "long_expectancy": 0.0,
+        "short_trade_count": 0,
+        "short_win_rate": 0.0,
+        "short_expectancy": 0.0,
+        "pairs": []
+      },
+      "error": null
+    }
+  ]
+}

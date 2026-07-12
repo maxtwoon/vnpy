@@ -406,6 +406,39 @@ def _research_first_buy_allowed(symbol: str, signals_dict: dict) -> bool:
     return True
 
 
+def _research_short_open_allowed(
+    symbol: str,
+    signals_dict: dict,
+    freq: str,
+) -> bool:
+    """Research-only gate for short opens; enforces P4/P5 symmetry.
+
+    Short opens require:
+    - P4 MACD 顶背驰 (or amplitude divergence when divergence_model="amplitude"),
+      encoded as the ``{freq}_D1BI_背驰V260615`` signal not being "无".
+    - P5 short-side resonance: daily (and 4H when configured) direction=向下
+      and position in {中枢下方, 中枢内}.
+
+    This gate is applied symmetrically to all short sub-strategies so that the
+    short side uses the same P4/P5 rigor already shipped for the long side in
+    A43/A44.
+    """
+    if signals_dict is None or freq is None:
+        return False
+
+    # P4 MACD/top divergence signal (amplitude or macd model depending on config).
+    div_key = f"{freq}_D1BI_背驰V260615"
+    div_val = signals_dict.get(div_key, "")
+    if not (div_val.startswith("疑似") or div_val.startswith("确认")):
+        return False
+
+    # P5 short-side resonance filter (actual resonance, not legacy daily fallback).
+    if not _resonance_holds(signals_dict, direction="short", force_resonance=True):
+        return False
+
+    return True
+
+
 def _build_exit_events(
     name: str,
     operate: str,
@@ -519,6 +552,7 @@ class Position:
         self.last_open_dt = None  # 最后开仓时间
         self.trades: List[TradeRecord] = []  # 交易记录
         self.pairs: List[dict] = []  # 配对交易
+        self.opens_allowed: bool = True  # A46: regime router can suppress new opens
 
         # A40 sizing skip counters
         self.size_zero_skip = 0
@@ -600,6 +634,10 @@ class Position:
 
         # 再检查开仓事件
         if self.pos == 0:
+            # A46: regime router can suppress new opens while still allowing exits.
+            if not self.opens_allowed:
+                return None, ""
+
             # 检查开仓间隔
             if self.last_open_dt and self.interval > 0:
                 elapsed = (dt - self.last_open_dt).total_seconds()
@@ -1468,6 +1506,22 @@ class ChanTimingStrategy:
             self._last_daily_trend_status = status
             self.write_log(f"[日线趋势] {dt}: 方向={direction}, 位置={position} -> {status}")
 
+    def _daily_regime(self, signals_dict: dict) -> str:
+        """Classify the current daily regime for the A46 router.
+
+        :return: "long" (daily up + not below center),
+                 "short" (daily down + not above center),
+                 or "ambiguous" (inside center, no center, or conflicting).
+        """
+        direction = (signals_dict.get("日线_D1BI_方向V260615", "") or "").split("_")[0]
+        position = (signals_dict.get("日线_D1ZS_位置V260615", "") or "").split("_")[0]
+
+        if direction == "向上" and position != "中枢下方":
+            return "long"
+        if direction == "向下" and position != "中枢上方":
+            return "short"
+        return "ambiguous"
+
     def _record_buy1_anchor(self, signals_dict: dict, price: float, dt: datetime,
                              czsc_obj=None):
         """记录一买锚点信息
@@ -1647,6 +1701,34 @@ class ChanTimingStrategy:
             signals_dict = dict(signals_dict)
             signals_dict.update(self._atr_tracker.signal(self.freq))
 
+        # A46: regime router decides which side is allowed to open NEW positions.
+        # Existing positions always exit normally because opens_allowed only blocks
+        # open events (pos == 0).
+        regime_model = STRATEGY_CONFIG.get("regime_model", "independent")
+        if regime_model == "router":
+            regime = self._daily_regime(signals_dict)
+            current_long = any(p.pos > 0 for p in self.positions)
+            current_short = any(p.pos < 0 for p in self.positions)
+            for pos in self.positions:
+                if pos.pos != 0:
+                    pos.opens_allowed = True
+                    continue
+                if "多头" in pos.name:
+                    pos.opens_allowed = (regime == "long" and not current_short)
+                elif "空头" in pos.name:
+                    pos.opens_allowed = (regime == "short" and not current_long)
+                else:
+                    pos.opens_allowed = False
+        else:
+            for pos in self.positions:
+                pos.opens_allowed = True
+
+        # A46: symmetric P4/P5 gating for short opens (applied in both modes).
+        short_open_allowed = (
+            _research_short_open_allowed(self.symbol, signals_dict, self.freq)
+            if self.enable_short else False
+        )
+
         # 更新各子策略
         buy1_pos = self.positions[0]  # 一买子策略
         buy2_pos = self.positions[1]  # 二买子策略
@@ -1685,16 +1767,29 @@ class ChanTimingStrategy:
             sell2_pos = self.positions[4]  # 二卖子策略
             sell3_pos = self.positions[5]  # 三卖子策略
 
-            # 一卖和三卖正常更新
-            sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
-            sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+            # 一卖和三卖正常更新（已有持仓仍接收退出/风控；新仓受 P4/P5 门控）
+            if sell1_pos.pos != 0 or short_open_allowed:
+                sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+            else:
+                sell1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+
+            if sell3_pos.pos != 0 or short_open_allowed:
+                sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+            else:
+                sell3_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
 
             # 二卖需要一卖上下文
             if sell1_pos.pairs or self.sell1_history:
-                sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                if sell2_pos.pos != 0 or short_open_allowed:
+                    sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                else:
+                    sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
             else:
                 sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                  equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)

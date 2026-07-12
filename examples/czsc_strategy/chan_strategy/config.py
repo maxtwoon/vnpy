@@ -21,6 +21,7 @@ STRATEGY_CONFIG = {
     "pos_2buy": 0.20,          # 二买仓位20%
     "pos_3buy": 0.30,          # 三买仓位30%
     "enable_short": False,     # 是否启用一卖/二卖/三卖空头子策略
+    "regime_model": "independent",  # "independent" (default, each side self-gated) | "router" (daily regime selects allowed side)
     "enable_short_symbols": None,  # Research-only short enable list; None means all when enable_short=True.
     "symbol_position_overrides": {},  # Research-only per-symbol pos_* overrides.
     "pos_1sell": 0.10,         # 一卖仓位10%（左侧试仓）
