@@ -1,188 +1,142 @@
 ---
-task: A50 - Limit-Up/Down/Halt Impact Diagnostic (Read-Only)
+task: A51 - Limit-Up/Down/Halt Fill-Constraint Tagging (Gated)
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Second task of the 2026-07-12 audit remediation roadmap
-(`docs/design/a49-audit-remediation-roadmap.md` §"A50"), started after A49 (ATR trailing-stop
-reachability fix) reached `done`.
+Third task of the 2026-07-12 audit remediation roadmap
+(`docs/design/a49-audit-remediation-roadmap.md` §"A51"), started after A50 (limit-up/down/halt
+exposure diagnostic) reached `done`. Per the design's own diagnostic-first discipline, this task's
+exact scope was left unfinalized in the original draft, to be determined using A50's real
+evidence rather than assumption. **That evidence is now in:**
+`diagnostics/limit_halt_exposure_report_2026-07-13.md` measured only **2 total trades** across all
+5 default symbols on the post-2026-04-24 window (AP888: 2 trades, 0 at limit; RB888/A888:
+`交易周期数据不足` — insufficient bars to even run a baseline replay; SC888/ZN888: 0 trades in the
+window). This sample is far too thin to justify actual fill-blocking enforcement, or to calibrate
+any enforcement threshold responsibly — doing so now would effectively be tuning risk-control
+behavior on 2 data points, which the roadmap's own guardrails already forbid in spirit
+("no threshold tuning via backtest/capture-data selection").
 
-`docs/review/ai_trading_review_2026-07-12.md` Finding #2 (🔴 high) found zero limit-up/limit-down/
-trading-halt handling anywhere in `chan_strategy/data_adapter.py`/`backtest_engine.py`/
-`positions.py` (confirmed by full-repo grep, re-confirmed 2026-07-13 — still zero hits for
-`涨停|跌停|limit|halt|停牌` in those three files). Entries fill at next-bar open
-(`backtest_engine.py`, `execution_price=bar.open`), stops fill at current-bar close/high/low, with
-no check for whether that bar was actually tradable. AP888 (苹果) and RB888 (螺纹钢) both carry
-real daily price-limit bands under Chinese futures exchange rules.
+**Scope decision (this promotion, informed by A50's evidence):** ship the **lowest-risk option**
+from the original design's two alternatives — statistics-only tagging (per-fill limit-band flag
+in the report/trade record), NOT fill-blocking/repricing enforcement. This is not a permanent
+decision to never enforce; it is the evidence-appropriate choice given how little data currently
+exists to validate a blocking rule against. A future task may revisit enforcement once the
+post-2026-04-24 window has accumulated enough trade volume for the diagnostic to actually measure
+something.
 
-Per house discipline ("diagnostic-first: where a phase claims an effect, a read-only diagnostic
-quantifies it before the switch is turned on by default" — the same pattern already used for
-A39's P2a rollover diagnostic before P2b's enforcement), **this task ships the read-only
-measurement only.** A51 (fill-constraint enforcement, gated) does not start until this task
-reaches `done` and its numbers exist — A51's exact enforcement scope will be finalized using this
-task's evidence, not decided in advance.
-
-Full contract: `docs/design/a49-audit-remediation-roadmap.md` §"A50 — Limit-Up/Down/Halt Impact
-Diagnostic (Read-Only)" (the authoritative design — this HANDOFF summarizes it).
+Full contract: `docs/design/a49-audit-remediation-roadmap.md` §"A51 — Limit-Up/Down/Halt
+Fill-Constraint Enforcement (Gated)" (originally titled "enforcement" — this task narrows that to
+"tagging" per the evidence above; the design doc's own placeholder Semantics section explicitly
+anticipated this could be the outcome: "at minimum, tag every fill... if A50's measured exposure
+is material... additionally suppress/reprice fills"). A50's exposure is not material (0 of 2
+measured trades were at-limit), so only the tagging half applies this round.
 
 ## Goal
 
-Ship `diagnostics/limit_halt_exposure_report.py`: for each symbol in the standard default set
-(AP888/RB888/SC888/A888/ZN888), compute a daily price-limit band from the contract's real
-exchange-published daily limit percentage and the previous trading day's settlement/close, then
-check every historical trade's entry-fill bar and exit-fill bar against that band on the honest
-post-2026-04-24 baseline replay (defaults: `exit_model`, `sizing_model` unchanged). Report
-counts/percentages of trades whose fill bar sits at or beyond the limit, per symbol. This is a
-measurement only — it must not change any existing report's numbers, must not be consulted by
-`BacktestEngine`/`PortfolioEngine`, and must not block or adjust any fill.
+Add `limit_halt_model` config gate (`"off"` default, current behavior, byte-identical |
+`"aware"`). Under `"aware"`, every `pairs` entry (from `Position`, surfaced by
+`get_combined_trades()`) gains an `is_entry_at_limit: bool` / `is_exit_at_limit: bool` field pair,
+computed the same way A50's diagnostic already computes it (reuse that logic — do not
+reimplement), using the same cited exchange limit percentages A50 already sourced. This is a
+**tagging-only** change: it must not alter which trades open/close, must not alter any fill price,
+and must not alter `Position.pairs`' existing numeric fields (`pnl_pct`, `open_price`,
+`close_price`, etc.) in any way — only adds the two new boolean fields.
 
 ## Acceptance Criteria
 
-- [x] Report generated for all 5 default symbols on the post-2026-04-24 window
-      (`WINDOW_START="2026-04-24"`, `WINDOW_END="2026-07-09"`, matching every A43-A48 report
-      script's precedent) — or an explicit `unavailable`/error reason per symbol where data is
-      insufficient (matching the `交易周期数据不足` pattern already established for RB888/A888 in
-      prior reports on this same window).
-- [x] Each symbol's daily limit percentage carries an inline, cited exchange-rule source comment
-      (real exchange-published daily price-limit percentage — CZCE/SHFE/INE/DCE as applicable per
-      symbol; do NOT fabricate or guess a number; if the real percentage cannot be sourced and
-      cited, the report must say `unavailable` for that symbol rather than silently using a
-      placeholder value — same citation discipline as A40's `contract_specs`).
-- [x] Report distinguishes entry-fill-at-limit vs. exit-fill-at-limit counts per symbol; the sum
-      of "at limit" + "not at limit" trades reconciles exactly with that symbol's total trade
-      count from the same baseline replay (unit-tested arithmetic check).
-- [x] If the raw K-line table exposes any volume/turnover column, the report additionally flags
-      zero-volume bars near each trade's fill bar as a secondary halted/no-liquidity proxy signal
-      (best-effort; report `unavailable` for this secondary signal if no such column exists rather
-      than fabricating one).
-- [x] RESEARCH-ONLY banner (`Diagnostic only, not a trading recommendation.`) present; report is
-      evidence only — verify via grep that no changes were made to `BacktestEngine`/
-      `PortfolioEngine`'s actual fill logic in this task's diff.
-- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
-      order/cancel/send path changed; no `GOAL PASSED`.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] `limit_halt_model="off"` (default) → equity curve and every `Position.pairs` entry
+      byte-identical to current (full-`BacktestEngine` equivalence test with a git-tracked golden
+      snapshot, per the A44-A50 house pattern — do not ship with only a signal-filter unit check).
+- [ ] `limit_halt_model="aware"` → every `pairs` entry gains `is_entry_at_limit`/
+      `is_exit_at_limit` boolean fields; all other existing `pairs` fields are numerically
+      identical to what `"off"` would have produced for the same trade (unit-tested: run the same
+      fixture under both modes, assert every field except the two new ones matches exactly).
+- [ ] The limit-band computation reuses A50's existing cited percentages
+      (`diagnostics/limit_halt_exposure_report.py`'s `SYMBOL_LIMIT_CONFIG` or an equivalent shared
+      module — do not duplicate/re-cite the percentages a second time; import or extract a shared
+      source of truth).
+- [ ] A fixture with a known at-limit entry bar and a known not-at-limit entry bar both correctly
+      tag `is_entry_at_limit` (unit-tested, both directions).
+- [ ] No fill is blocked, repriced, or delayed under `"aware"` — verify via a test asserting
+      trade count and every trade's `open_dt`/`close_dt`/`open_price`/`close_price` are identical
+      between `"off"` and `"aware"` on the same fixture (only the two new tag fields differ).
+- [ ] `diagnostics/limit_halt_exposure_report.py` (from A50) is updated to note, in its Methodology
+      section, that `limit_halt_model="aware"` now exists as a per-trade tagging option (a
+      one-line pointer, not a rewrite) — regenerate the report to confirm it still runs cleanly.
+- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+      order/cancel/send path changed; no `GOAL PASSED`; does not touch position sizing (P3/A40)
+      or exit-model logic (P8a/A47) beyond adding the two read-only tag fields to the pairs
+      dict.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
-
-## Manual Verification / Note for A51 (claude-code, 2026-07-13)
-
-Ran the full suite natively: `python -m pytest examples/czsc_strategy/tests/unit -q -m "not
-realdb"` -> **536 passed, 4 deselected**. Both `sync_check` gates PASS. `run_next_work.ps1
--Preflight` -> **155 passed**. Confirmed via `git diff --stat` that `data_adapter.py`/
-`backtest_engine.py`/`positions.py` are untouched — pure read-only diagnostic as required.
-
-Spot-verified the cited limit percentages against live web search (not just trusting the citation
-text): AP888 5% and RB888 3% both confirmed as the exchanges' published steady-state figures.
-**Note for A51's design refinement**, not a defect in this task: the search also surfaced that
-both symbols had their limit bands *temporarily widened* by exchange notice **within this report's
-own 2026-04-24~2026-07-09 window** — RB888 to 5% effective 2026-05-19, AP888 to 8% effective
-2026-05-06 (both presumably following limit-hit days, per the standard CZCE/SHFE escalation
-mechanism). The report's code comment already generically acknowledges "exchanges reserve the
-right to widen limits... this diagnostic uses the standard contract percentage as a first-cut
-measurement," satisfying this task's acceptance bar, but does not specifically flag that these
-exact widening events occurred inside the measured window. Given the report currently measures
-only 2 total trades (AP888; RB888/A888 report `交易周期数据不足`), the practical impact on this
-round's numbers is negligible — but if A51 (or any future re-run of this diagnostic on a longer
-window with more trades) needs tighter accuracy, sourcing the actual date-varying limit percentage
-per trading day (not just the steady-state default) would be a worthwhile refinement.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-Review rejected by Codex on 2026-07-13 for one real, non-sandbox blocker:
-
-1. Fix the new ruff error in `examples/czsc_strategy/tests/unit/test_limit_halt_exposure_report.py:7`.
-   `ruff check examples\czsc_strategy\diagnostics\limit_halt_exposure_report.py examples\czsc_strategy\tests\unit\test_limit_halt_exposure_report.py`
-   currently fails with `F401 [*] pytest imported but unused`. Remove the unused `import pytest`.
-
-Verified during review before rejection:
-
-- `python tools\sync_check.py` passed.
-- `python tools\sync_check.py --root examples\czsc_strategy` passed.
-- The A50 committed diff does not modify `data_adapter.py`, `backtest_engine.py`, `positions.py`,
-  or `portfolio_engine.py`.
-- The generated JSON report covers `WINDOW_START="2026-04-24"`, `WINDOW_END="2026-07-09"` and all
-  five default symbols (`AP888`, `RB888`, `SC888`, `A888`, `ZN888`).
-- Report arithmetic reconciles per symbol and in totals.
-- The RESEARCH-ONLY banner is present, and `run_next_work.ps1` exists at
-  `examples/czsc_strategy/diagnostics/run_next_work.ps1`.
-- Pytest/preflight checks that need `tmp_path` hit the documented sandbox `PermissionError
-  [WinError 5]` signature; use the existing manual verification block for those two acceptance
-  items unless the Windows symlink/tmp_path environment has been fixed.
-
-1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A50". Second task of the
-   6-task remediation roadmap (A49-A54) triaging `docs/review/ai_trading_review_2026-07-12.md` —
-   read that audit report's Finding #2 (🔴 high) for full context.
-2. **Scope:** new `examples/czsc_strategy/diagnostics/limit_halt_exposure_report.py` and its unit
-   test only. **Do NOT touch `data_adapter.py`, `backtest_engine.py`, or `positions.py` in this
-   task** — this is read-only measurement, not enforcement (that's A51's job, and A51 does not
-   start until this task is `done` and reviewed). Reuse `BacktestEngine`'s existing trade-pairs
-   output (`engine.strategy.get_combined_trades()`, same pattern as A43-A48's comparison reports)
-   rather than reimplementing a backtest loop.
-3. **Sourcing the limit percentages is the highest-scrutiny item in this task** — cite real
-   exchange rules (WebSearch or authoritative reference), the same bar A40 set for
-   `contract_specs`. AP888 trades on CZCE (郑州商品交易所), RB888/ZN888 on SHFE (上海期货交易所),
-   SC888 on INE (上海国际能源交易中心), A888 on DCE (大连商品交易所) — each exchange publishes its
-   own daily price-limit percentage per product (and these can differ from the general default,
-   e.g. wider limits on contract-listing day or after a limit-hit day — a first-cut using the
-   standard/steady-state percentage is acceptable, document that simplification explicitly rather
-   than silently ignoring the exceptions).
-4. **This is a measurement, not a judgment** — do not conclude "the strategy is unrealistic" or
-   any similar promotional/demotional claim in the report; state the raw counts/percentages and
-   let a human (or A51's own design step) interpret them.
+1. **Entry point:** `docs/design/a49-audit-remediation-roadmap.md` §"A51" for the original
+   two-option design shape; this HANDOFF's Background section explains why only the tagging
+   option is in scope this round (A50's evidence was too thin to justify enforcement).
+2. **Scope:** `chan_strategy/positions.py` (add the two tag fields to `pairs` entries at close
+   time — in `_close_long`/`_close_short`/`_scale_out`, wherever a `pairs` dict is appended),
+   `chan_strategy/config.py` (`limit_halt_model` key). Reuse A50's `SYMBOL_LIMIT_CONFIG` (or
+   extract it into a small shared module both A50's diagnostic and this task's tagging logic can
+   import — dev's choice on exact factoring, but do not copy-paste the cited percentages a second
+   time).
+3. **Tagging only — no fill-path changes.** Do not touch `_stop_triggered`/`_stop_fill`/the open
+   dispatch in `ChanTimingStrategy.update`/`BacktestEngine`'s `execution_price=bar.open` fill
+   timing. The only new code is: (a) a helper that checks whether a given fill price/bar is
+   at-or-beyond a symbol's limit band (reusing A50's band-computation math), and (b) two new keys
+   written into each `pairs` dict when `limit_halt_model="aware"`.
+4. **`"off"` must remain the exact default** — this is a new opt-in tag, not a behavior change;
+   the full-`BacktestEngine` equivalence test is mandatory from the first dev round (learn from
+   A44's review reject — do not ship without it).
 5. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection;
-   no pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched;
-   RESEARCH-ONLY banner on the new report; no `GOAL PASSED`; zero changes to
-   `data_adapter.py`/`backtest_engine.py`/`positions.py` (verify via `git diff --stat` before
-   finishing).
-6. **Verify diagnostic report window and symbols before committing** — use
-   `WINDOW_START="2026-04-24"`, `WINDOW_END="2026-07-09"` and the standard 5-symbol default list
-   (copy constants from an existing A43-A48 report script). A47/A49 got this right from the start;
-   follow that precedent rather than A45/A46's first-attempt mistakes.
-7. **Before claiming any script "doesn't exist," verify the path carefully** —
+   no pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched; no
+   `GOAL PASSED`; any fill-blocking/repricing logic is OUT OF SCOPE this round — if you find
+   yourself writing code that changes whether/when/at-what-price a trade executes, stop, that
+   belongs to a future task once more evidence exists.
+6. **Before claiming any script "doesn't exist," verify the path carefully** —
    `run_next_work.ps1` lives at `examples/czsc_strategy/diagnostics/run_next_work.ps1`.
-8. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A50 limit-up/down/halt exposure diagnostic implemented"`.
+7. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A51 limit-halt fill tagging implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-13 - A50 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
-  active HANDOFF task, started immediately after A49 reached `done`. A51 (fill-constraint
-  enforcement) is explicitly gated on this task's completion, per the diagnostic-first discipline
-  already used for A39's rollover exclusion (P2a before P2b).
-- 2026-07-13 - Re-verified zero limit/halt handling exists anywhere in
-  `data_adapter.py`/`backtest_engine.py`/`positions.py` — no drift since the audit.
-- 2026-07-13 - Scoped this task strictly to the new diagnostic script; explicitly forbade touching
-  `data_adapter.py`/`backtest_engine.py`/`positions.py` in this round, since any enforcement
-  change belongs to A51 and must be informed by this task's own evidence first.
+- 2026-07-13 - A51 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
+  active HANDOFF task, started immediately after A50 reached `done`. Scope narrowed from the
+  original design's two-option placeholder ("tag-only" vs. "tag + block/reprice") to tag-only
+  ONLY, because A50's real evidence (2 total trades measured, 0 at-limit) is too thin to
+  responsibly scope or calibrate any blocking/repricing rule — doing so now would be tuning risk
+  logic on 2 data points, contrary to the roadmap's own no-tuning-on-thin-evidence discipline.
+  Blocking/repricing enforcement is deferred to a future task once the post-2026-04-24 window
+  accumulates enough trades for A50's diagnostic to measure something material.
+- 2026-07-13 - Confirmed the tagging logic must reuse A50's already-cited `SYMBOL_LIMIT_CONFIG`
+  percentages rather than re-deriving or re-citing them, per single-source-of-truth discipline.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-13 | codex → claude-code | done → design | A50 promoted from the audit remediation roadmap draft after A49 reached done |
-| 2026-07-13 | claude-code → kimi-code | design → dev | A50 (limit-up/down/halt exposure diagnostic) started |
-| 2026-07-13 | kimi-code → codex | dev → review | A50 limit-up/down/halt exposure diagnostic implemented |
-| 2026-07-13 | codex → kimi-code | review → dev | 打回: ruff check fails: unused pytest import in test_limit_halt_exposure_report.py |
-| 2026-07-13 | kimi-code → codex | dev → review | A50 limit-up/down/halt exposure diagnostic implemented |
-| 2026-07-13 | codex → codex | review → done | A50 review accepted; pytest/preflight accepted via documented WinError 5 manual verification counts |
+| 2026-07-13 | codex → claude-code | done → design | A51 promoted from the audit remediation roadmap draft after A50 reached done; scope narrowed to tagging-only per A50's thin evidence |
+| 2026-07-13 | claude-code → kimi-code | design → dev | A51 (limit/halt fill tagging) started |
