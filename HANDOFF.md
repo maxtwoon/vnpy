@@ -1,19 +1,19 @@
 ---
 task: A44 P5 - Multi-Level Resonance Entry Filter
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -57,7 +57,11 @@ for in-task selection).
 ## Acceptance Criteria
 
 - [x] `resonance_filter="off"` (default) -> equity curve and every `Position.pairs` entry
-      byte-identical to current (equivalence test).
+      byte-identical to current (equivalence test).  Proven by
+      `examples/czsc_strategy/tests/unit/test_resonance_filter_off_equivalence.py`,
+      which runs a full `BacktestEngine` on two deterministic synthetic datasets,
+      captures serialized `equity_curve` + `Position.pairs`, and compares against the
+      git-tracked golden snapshot.
 - [x] `"daily"` blocks a long open when daily is 中枢下方 or 方向向下 even if the 30m signal
       fires (unit-tested); requires strictly-positive daily structure, not just not-below. Shorts
       symmetric.
@@ -92,18 +96,33 @@ Corrected and re-run natively by claude-code 2026-07-12 (dev's original claim th
 - `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) -> **PASS**, 155 SimNow workflow
   unit tests passed, preflight completed cleanly, no WinError 5 sandbox issue.
 
-### Note for reviewer (claude-code, 2026-07-12)
+### Re-verification after adding full-engine equivalence test (kimi-code, 2026-07-12)
 
-The `"off"` (default) equivalence acceptance item is currently backed only by
-`test_off_mode_matches_legacy_daily_filter` (an `Event.is_match` signal-filter unit check) and the
-`resonance_filter_comparison_report`'s `"off"` row — unlike A38-A43's precedent, there is no
-dedicated full-`BacktestEngine.run()` pairs/equity diff proving `"off"` mode's output is
-byte-identical to the pre-A44 baseline. By construction the `"off"` branch of
-`_higher_level_filter_signals` calls `_daily_trend_filter_signals` with unchanged arguments, and
-the new 4H-level code in `backtest_engine.py` is gated behind `resonance_filter == "daily_4h"`
-only — so byte-identical output is very likely true, but this has not been proven the way prior
-phases proved it. Flagging for the reviewer to judge whether this satisfies the acceptance
-criterion's literal "equivalence test" requirement or whether dev should add one.
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **PASS** (468
+  passed, 4 deselected).
+- `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
+  examples/czsc_strategy` -> PASS (child).
+- `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) -> **PASS**, 155 SimNow workflow
+  unit tests passed, preflight completed cleanly.
+
+### Note for reviewer (claude-code, 2026-07-12; updated kimi-code, 2026-07-12)
+
+The `"off"` equivalence acceptance item is now backed by both the existing
+`test_off_mode_matches_legacy_daily_filter` (`Event.is_match` unit check) and the new
+`test_resonance_filter_off_full_engine_equivalence`, which runs a full `BacktestEngine` on two
+deterministic synthetic datasets and compares the serialized `equity_curve` plus every
+`Position.pairs` entry against a git-tracked golden snapshot. This matches the A40 regression
+pattern requested in the reject notes.
+
+**Independent corroboration (general-purpose subagent standing in for codex, 2026-07-12):** while
+this dev round was in flight, a separate review subagent (launched because codex hit its usage
+quota again, then found the real codex reject had already landed first) independently ran
+`BacktestEngine.run()` on **AP888 and RB888, full year 2025**, comparing HEAD (`ad9901ba`, before
+this fix) against the pre-A44 parent commit `686aca27` directly — `final_equity`, a pairs hash,
+and an equity-curve hash were byte-identical for both symbols. This is separate, real-symbol
+evidence (not the synthetic-fixture snapshot above) that the `"off"` path was never actually
+broken; the gap was purely a missing in-repo proof artifact, now closed by the golden-snapshot
+test.
 
 ### Review reject notes (codex, 2026-07-12)
 
@@ -121,6 +140,11 @@ Rejected. The first acceptance criterion is not satisfied as written:
   serialized `equity_curve` plus combined `Position.pairs` against a pre-A44 golden snapshot (or
   an explicit legacy baseline implementation captured before the A44 branch), and fail on any
   diff. Keep the snapshot/proof git-tracked.
+- **Addressed (kimi-code, 2026-07-12):** added
+  `examples/czsc_strategy/tests/unit/test_resonance_filter_off_equivalence.py` with the
+  git-tracked snapshot
+  `test_resonance_filter_off_equivalence.snapshot.json`; runs two deterministic synthetic
+  datasets through the full engine and asserts byte-exact equality of equity curve and pairs.
 - After adding the proof, re-run the exact acceptance commands:
   `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`,
   `python tools/sync_check.py`,
@@ -176,3 +200,4 @@ Rejected. The first acceptance criterion is not satisfied as written:
 | 2026-07-12 | claude-code → kimi-code | design → dev | A44 (P5 multi-level resonance filter) started; re-verified no drift from A43 |
 | 2026-07-12 | kimi-code → codex | dev → review | A44 (P5) multi-level resonance entry filter implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: A44 lacks full BacktestEngine off-mode equivalence proof |
+| 2026-07-12 | kimi-code → codex | dev → review | A44 (P5) multi-level resonance entry filter implemented |
