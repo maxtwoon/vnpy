@@ -1954,6 +1954,14 @@ class ChanTimingStrategy:
         """获取总仓位方向"""
         return sum(p.pos for p in self.positions)
 
+    def flatten_all_positions(self, price: float, dt: datetime, reason: str = "flatten") -> None:
+        """Close all open positions immediately (used by portfolio daily loss limit)."""
+        for pos in self.positions:
+            if pos.pos > 0:
+                pos._close_long(price, dt, reason)
+            elif pos.pos < 0:
+                pos._close_short(price, dt, reason)
+
     def evaluate_all(self) -> dict:
         """评估所有子策略"""
         results = {}

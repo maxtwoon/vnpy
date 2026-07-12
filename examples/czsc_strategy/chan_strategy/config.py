@@ -1,6 +1,5 @@
 """缠论择时策略配置"""
 import os
-from pathlib import Path
 
 # 数据库路径
 SQLITE_DB_PATH = os.getenv(
@@ -107,6 +106,17 @@ STRATEGY_CONFIG = {
     "exit_model": "legacy",               # "legacy" (default, byte-identical) | "structural_atr"
     "atr_trail_mult": 3.0,                # ATR trailing-stop multiplier
     "partial_tp_frac": 0.5,               # fraction of position scaled out at the first directional target
+
+    # A48 portfolio risk coordinator (P8b). "off" is the legacy byte-identical default;
+    # "on" enables a backtest-only cross-symbol coordinator above per-symbol engines.
+    "portfolio_risk": "off",              # "off" (legacy, default) | "on"
+    "weighting": "fixed",                 # "fixed" (legacy 10/20/30 split) | "risk_parity"
+    "corr_clusters": {                    # correlated symbol clusters for gross exposure cap
+        "industrial_energy": ["RB888", "ZN888", "SC888"],
+    },
+    "cluster_gross_cap": 1.0,             # max summed gross weight within a cluster
+    "daily_loss_limit_pct": 0.03,         # flatten + block new opens when day PnL <= -limit
+    "risk_parity_lookback": 60,           # trade-period bars used for per-symbol volatility estimate
 
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).

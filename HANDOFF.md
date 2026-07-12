@@ -1,19 +1,19 @@
 ---
 task: A48 P8b - Portfolio Risk (Cross-Symbol Coordinator)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -107,6 +107,47 @@ not for in-task selection).
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
+## Manual Verification / Notes for reviewer (claude-code, 2026-07-12)
+
+Ran the full suite natively: `python -m pytest examples/czsc_strategy/tests/unit -q -m "not
+realdb"` -> **521 passed, 4 deselected**. Both `sync_check` gates PASS. Diff scope confirmed
+clean (no SimNow files, no changes to `_size_open`'s formula or the exit priority chains beyond
+the new additive `flatten_all_positions` helper).
+
+Found two issues while reading the diff that no existing test catches — flagging for the
+reviewer's judgment rather than fixing myself (dev's job per role division):
+
+1. **Daily-loss-limit flatten does not propagate into the reported portfolio pairs/equity.**
+   `PortfolioCoordinator._flatten_all` (in `portfolio_engine.py`) clears the *coordinator's own*
+   `self.open_positions` dict and logs `flat_events` for evidence — but `PortfolioEngine.
+   _build_on_report` maintains a **separate, local** `open_positions` dict (used to build
+   `coordinated_pairs` and the unrealized-PnL portion of the reported equity curve) that
+   `_flatten_all` never touches. When the daily loss limit triggers mid-day, a still-open
+   position keeps accruing unrealized PnL in the reported equity curve past the trigger bar, and
+   its eventual `coordinated_pairs` entry reports the ORIGINAL close price/date from that
+   symbol's independent, uncoordinated backtest — not a forced early close at the flatten bar.
+   `test_daily_loss_limit_flattens_and_blocks_then_resets_next_day` only exercises
+   `PortfolioCoordinator` in isolation (constructed `on_bar`/`allow_open`/`record_open` calls) and
+   passes; there is no test that runs `PortfolioEngine._build_on_report`'s actual replay and
+   asserts the reported pairs/equity reflect an early close at the trigger bar. This looks like a
+   real gap against the acceptance criterion "flattens all open positions... for the remainder of
+   that trading day" — as currently wired, the *report* does not reflect the flatten, only the
+   coordinator's internal exposure bookkeeping does (which does correctly block new opens for the
+   rest of the day — that part is real and tested).
+2. **`BacktestEngine.run(..., coordinator=None)` and its `_filter_signals_for_coordinator`/
+   `_update_coordinator_after_bar`/`self._coordinator` machinery (all new in this diff) appear to
+   be dead code** — grepped the full `examples/czsc_strategy` tree (including tests) for
+   `coordinator=` passed to `BacktestEngine.run(...)` or `.run(coordinator=`: zero hits outside
+   the parameter's own definition. `PortfolioEngine._run_per_symbol` calls `engine.run()` with no
+   `coordinator` argument every time; the actual coordination happens entirely via the separate
+   post-hoc trade-replay in `PortfolioEngine._build_on_report`/`_build_on_report`. If this
+   `BacktestEngine`-level wiring genuinely isn't used by the final design, it should probably be
+   removed rather than shipped as unreachable code; if it *was* meant to be the real mechanism
+   (which would also resolve finding #1, since a coordinator wired directly into the per-symbol
+   run loop would make blocked opens genuinely never execute in that symbol's own state), that's
+   a more substantial rework. Flagging for the reviewer/next dev round to decide which path to
+   take — not a call I'm making myself.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
@@ -173,3 +214,4 @@ not for in-task selection).
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | P8b promoted from phase-contracts draft, confirmed A48 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A48 (P8b portfolio risk) started; re-verified no drift from A43-A47 |
+| 2026-07-12 | kimi-code → codex | dev → review | A48 (P8b) portfolio risk coordinator implemented |
