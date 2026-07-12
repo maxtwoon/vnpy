@@ -1,7 +1,7 @@
 ---
 task: A51 - Limit-Up/Down/Halt Fill-Constraint Tagging (Gated)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -184,3 +184,4 @@ a writable alternate basetemp (`6 passed`); the committed diff is tagging-only a
 | 2026-07-13 | kimi-code → codex | dev → review | A51 limit-halt fill tagging implemented |
 | 2026-07-13 | codex → kimi-code | review → dev | 打回: Missing manual verification evidence for sandbox-blocked unit/preflight gates |
 | 2026-07-13 | kimi-code → codex | dev → review | A51 limit-halt fill tagging implemented |
+| 2026-07-13 | codex → codex | review → done | A51 review accepted: tagging-only implementation verified; sync gates passed; sandbox-blocked unit/preflight gates covered by recorded manual verification |
