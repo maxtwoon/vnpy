@@ -249,7 +249,7 @@ def signal_short_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: fl
         current_price = last_bi.high
     else:
         current_price = last_bi.low
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
     if current_price > last_zs["zg"] * (1 + pct):
         v1, score = "结构失效", 95
     elif last_zs["n_bis"] >= 9:
@@ -282,7 +282,7 @@ def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_
         current_price = last_bi.high
     else:
         current_price = last_bi.low
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
     if current_price > last_zs["zg"] * (1 + pct):
         v1, score = "结构失效", 95
     return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}

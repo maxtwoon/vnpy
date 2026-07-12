@@ -784,7 +784,7 @@ def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float | 
         current_price = last_bi.low
 
     # 结构失效检测: 价格跌破中枢下沿的 (1 - structural_invalidation_pct) 位置
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
     stop_level = zd * (1 - pct)
     if current_price < stop_level:
         v1 = "结构失效"
@@ -839,7 +839,7 @@ def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: f
     else:
         current_price = last_bi.low
 
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)
+    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
     stop_level = zd * (1 - pct)
     if current_price < stop_level:
         v1 = "结构失效"

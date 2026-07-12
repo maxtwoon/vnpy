@@ -1,19 +1,19 @@
 ---
 task: A53 - Config/Signal Single-Source-of-Truth Cleanup
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -158,7 +158,7 @@ a real call site.
 
 ## Manual Verification (natively run)
 
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **559 passed, 4 deselected** (30.75s)
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **559 passed, 4 deselected** (30.29s)
 - `python -m pytest examples/czsc_strategy/tests/unit/test_a53_config_signal_cleanup.py examples/czsc_strategy/tests/unit/test_a53_orphan_keys_equivalence.py -q` → **12 passed**
 - `python tools/sync_check.py` → **PASS**
 - `python tools/sync_check.py --root examples/czsc_strategy` → **PASS**
@@ -184,6 +184,10 @@ a real call site.
     `signal_third_buy` after re-verifying they are still imported by existing unit tests.
   - Removed dead `_base_signal_second_buy`/`_base_signal_third_buy` aliases from `sell_signals.py`.
   - Made `equity_mode="compound"` raise `NotImplementedError` in `Position._size_open`.
+- 2026-07-13 - Review rejection fix by kimi-code:
+  - Replaced the remaining `STRATEGY_CONFIG.get("structural_invalidation_pct", 0.05)` hardcoded
+    fallbacks in `signals.py` (2 sites) and `sell_signals.py` (2 sites) with direct config access
+    `STRATEGY_CONFIG["structural_invalidation_pct"]`; verified no duplicate 0.05 fallback remains.
 
 ## 交接历史
 
@@ -193,3 +197,4 @@ a real call site.
 | 2026-07-13 | claude-code → kimi-code | design → dev | A53 (config/signal single-source-of-truth cleanup) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
 | 2026-07-13 | codex → kimi-code | review → dev | 打回: structural_invalidation_pct still has hardcoded 0.05 fallbacks |
+| 2026-07-13 | kimi-code → codex | dev → review | A53 config/signal single-source-of-truth cleanup implemented |
