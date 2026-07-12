@@ -1,19 +1,19 @@
 ---
 task: A51 - Limit-Up/Down/Halt Fill-Constraint Tagging (Gated)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -59,33 +59,33 @@ and must not alter `Position.pairs`' existing numeric fields (`pnl_pct`, `open_p
 
 ## Acceptance Criteria
 
-- [ ] `limit_halt_model="off"` (default) → equity curve and every `Position.pairs` entry
+- [x] `limit_halt_model="off"` (default) → equity curve and every `Position.pairs` entry
       byte-identical to current (full-`BacktestEngine` equivalence test with a git-tracked golden
       snapshot, per the A44-A50 house pattern — do not ship with only a signal-filter unit check).
-- [ ] `limit_halt_model="aware"` → every `pairs` entry gains `is_entry_at_limit`/
+- [x] `limit_halt_model="aware"` → every `pairs` entry gains `is_entry_at_limit`/
       `is_exit_at_limit` boolean fields; all other existing `pairs` fields are numerically
       identical to what `"off"` would have produced for the same trade (unit-tested: run the same
       fixture under both modes, assert every field except the two new ones matches exactly).
-- [ ] The limit-band computation reuses A50's existing cited percentages
+- [x] The limit-band computation reuses A50's existing cited percentages
       (`diagnostics/limit_halt_exposure_report.py`'s `SYMBOL_LIMIT_CONFIG` or an equivalent shared
       module — do not duplicate/re-cite the percentages a second time; import or extract a shared
       source of truth).
-- [ ] A fixture with a known at-limit entry bar and a known not-at-limit entry bar both correctly
+- [x] A fixture with a known at-limit entry bar and a known not-at-limit entry bar both correctly
       tag `is_entry_at_limit` (unit-tested, both directions).
-- [ ] No fill is blocked, repriced, or delayed under `"aware"` — verify via a test asserting
+- [x] No fill is blocked, repriced, or delayed under `"aware"` — verify via a test asserting
       trade count and every trade's `open_dt`/`close_dt`/`open_price`/`close_price` are identical
       between `"off"` and `"aware"` on the same fixture (only the two new tag fields differ).
-- [ ] `diagnostics/limit_halt_exposure_report.py` (from A50) is updated to note, in its Methodology
+- [x] `diagnostics/limit_halt_exposure_report.py` (from A50) is updated to note, in its Methodology
       section, that `limit_halt_model="aware"` now exists as a per-trade tagging option (a
       one-line pointer, not a rewrite) — regenerate the report to confirm it still runs cleanly.
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`; does not touch position sizing (P3/A40)
       or exit-model logic (P8a/A47) beyond adding the two read-only tag fields to the pairs
       dict.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
@@ -98,6 +98,10 @@ command in `.synccheck.yml`):
 
 - `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **542 passed, 4
   deselected**, no WinError 5.
+- `python -m pytest examples/czsc_strategy/tests/unit/test_limit_halt_aware.py
+  examples/czsc_strategy/tests/unit/test_limit_halt_off_equivalence.py
+  examples/czsc_strategy/tests/unit/test_limit_halt_exposure_report.py -q -m "not realdb"` ->
+  **16 passed**, no WinError 5.
 - `run_next_work.ps1 -Preflight` -> **155 passed** (SimNow workflow unit tests), preflight
   completed cleanly, no WinError 5.
 - `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
@@ -179,3 +183,4 @@ a writable alternate basetemp (`6 passed`); the committed diff is tagging-only a
 | 2026-07-13 | claude-code → kimi-code | design → dev | A51 (limit/halt fill tagging) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A51 limit-halt fill tagging implemented |
 | 2026-07-13 | codex → kimi-code | review → dev | 打回: Missing manual verification evidence for sandbox-blocked unit/preflight gates |
+| 2026-07-13 | kimi-code → codex | dev → review | A51 limit-halt fill tagging implemented |
