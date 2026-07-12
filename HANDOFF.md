@@ -1,19 +1,19 @@
 ---
 task: A51 - Limit-Up/Down/Halt Fill-Constraint Tagging (Gated)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -140,3 +140,4 @@ and must not alter `Position.pairs`' existing numeric fields (`pnl_pct`, `open_p
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → design | A51 promoted from the audit remediation roadmap draft after A50 reached done; scope narrowed to tagging-only per A50's thin evidence |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A51 (limit/halt fill tagging) started |
+| 2026-07-13 | kimi-code → codex | dev → review | A51 limit-halt fill tagging implemented |

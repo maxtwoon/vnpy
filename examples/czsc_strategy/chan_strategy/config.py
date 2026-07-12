@@ -110,6 +110,11 @@ STRATEGY_CONFIG = {
     # A48 portfolio risk coordinator (P8b). "off" is the legacy byte-identical default;
     # "on" enables a backtest-only cross-symbol coordinator above per-symbol engines.
     "portfolio_risk": "off",              # "off" (legacy, default) | "on"
+
+    # A51 limit-up/down/halt fill tagging (P9). "off" is the legacy byte-identical default;
+    # "aware" adds ``is_entry_at_limit`` / ``is_exit_at_limit`` boolean fields to each
+    # ``Position.pairs`` entry without changing fills, prices or trade counts.
+    "limit_halt_model": "off",            # "off" (legacy, default) | "aware"
     "weighting": "fixed",                 # "fixed" (legacy 10/20/30 split) | "risk_parity"
     "corr_clusters": {                    # correlated symbol clusters for gross exposure cap
         "industrial_energy": ["RB888", "ZN888", "SC888"],

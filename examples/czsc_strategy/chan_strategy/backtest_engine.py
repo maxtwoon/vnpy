@@ -26,6 +26,11 @@ from czsc.objects import RawBar, Freq
 
 from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG, BACKTEST_CONFIG
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
+from chan_strategy.limit_config import (
+    SYMBOL_LIMIT_CONFIG,
+    _bar_at_limit,
+    _daily_prev_close_map,
+)
 from chan_strategy.sell_signals import get_all_signals
 from chan_strategy.positions import ChanTimingStrategy
 
@@ -295,8 +300,23 @@ class BacktestEngine:
         sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
         risk_mode = sizing_model == "risk"
 
+        # A51: pre-compute daily previous-close map for limit-band tagging.
+        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        limit_aware = limit_halt_model == "aware"
+        prev_close_map = _daily_prev_close_map(trade_bars) if limit_aware else {}
+        limit_pct = SYMBOL_LIMIT_CONFIG.get(self.symbol, {}).get("limit_pct")
+
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]
+
+            # A51: compute per-bar limit-band flags for entry/exit tagging.
+            entry_at_limit: bool | None = None
+            exit_at_limit: bool | None = None
+            if limit_aware and limit_pct is not None:
+                bar_date = bar.dt.date()
+                prev_close, _ = prev_close_map.get(bar_date, (None, None))
+                entry_at_limit, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
+                exit_at_limit, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
 
             # Pre-update equity/margin for A40 risk-mode sizing (no lookahead).
             # Uses bar.open, the same delayed-fill execution price used by opens.
@@ -306,21 +326,31 @@ class BacktestEngine:
                 equity_at_entry, total_open_margin = self._compute_equity_and_margin(bar.open)
 
             # 1. 先执行上一根bar产生的待执行信号（用当根开盘价成交）
+            update_kwargs = {
+                "execution_price": bar.open,
+                "czsc_obj": czsc_trade,
+                "bar_high": bar.high,
+                "bar_low": bar.low,
+                "equity_at_entry": equity_at_entry,
+                "total_open_margin": total_open_margin,
+            }
+            # A51 flags are only injected under "aware" to preserve the default
+            # off-mode call signature (keeps legacy tests/fake strategies valid).
+            if limit_aware:
+                update_kwargs["entry_at_limit"] = entry_at_limit
+                update_kwargs["exit_at_limit"] = exit_at_limit
+
             if pending_signals is not None:
                 self.strategy.update(
                     pending_signals, bar.close, bar.dt,
-                    execution_price=bar.open, czsc_obj=czsc_trade,
-                    bar_high=bar.high, bar_low=bar.low,
-                    equity_at_entry=equity_at_entry, total_open_margin=total_open_margin,
+                    **update_kwargs,
                 )
                 pending_signals = None
             else:
                 # 无待执行信号时，仍需更新风控（止损/超时检查用当前价格）
                 # 传入空信号字典，只触发风控逻辑
                 # intrabar 触价止损用当根 bar 的 high/low（仅当前bar，无未来函数）
-                self.strategy.update({}, bar.close, bar.dt, czsc_obj=czsc_trade,
-                                     bar_high=bar.high, bar_low=bar.low,
-                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                self.strategy.update({}, bar.close, bar.dt, **update_kwargs)
 
             # 2. 更新交易周期CZSC
             czsc_trade.update(bar)

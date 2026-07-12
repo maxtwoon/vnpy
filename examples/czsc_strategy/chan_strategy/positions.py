@@ -599,12 +599,18 @@ class Position:
         self._peak_price: float = 0.0  # 最有利价格（多=最高，空=最低）
         self._partial_tp_done: bool = False  # 是否已执行部分止盈
 
+        # A51 limit-up/down/halt tagging state (tagging only, no fill-path changes)
+        self._pending_entry_at_limit: bool = False  # entry bar limit flag for the open position
+        self._pending_exit_at_limit: bool = False  # exit bar limit flag for the current bar
+
     def update(self, signals_dict: dict, price: float, dt: datetime,
                bar_count: int = 1, execution_price: float = None,
                bar_high: float = None, bar_low: float = None,
                equity_at_entry: float | None = None,
                total_open_margin: float | None = None,
-               atr: float | None = None):
+               atr: float | None = None,
+               entry_at_limit: bool | None = None,
+               exit_at_limit: bool | None = None):
         """
         根据当前信号更新持仓状态
 
@@ -621,16 +627,21 @@ class Position:
         :param total_open_margin: A40 risk-mode pre-open margin across all positions
         :param atr: A47 current ATR value for the structural_atr trailing stop.
                     Ignored when exit_model is ``"legacy"``.
+        :param entry_at_limit: A51 flag: the current execution bar is at/beyond the
+                               daily limit band for an entry fill.
+        :param exit_at_limit: A51 flag: the current bar is at/beyond the daily limit
+                              band for an exit fill.
         """
+        self._pending_exit_at_limit = bool(exit_at_limit)
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
 
         if operate == Operate.LO and self.pos == 0:
-            self._open_long(trade_price, dt, event_name, equity_at_entry, total_open_margin)
+            self._open_long(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
         elif operate == Operate.LC and self.pos > 0:
             self._close_long(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
         elif operate == Operate.SO and self.pos == 0:
-            self._open_short(trade_price, dt, event_name, equity_at_entry, total_open_margin)
+            self._open_short(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
         elif operate == Operate.SC and self.pos < 0:
             self._close_short(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
 
@@ -860,7 +871,7 @@ class Position:
             - transaction_cost * self.cost * scale_volume * self.contract_multiplier
         )
 
-        self.pairs.append({
+        pair: dict = {
             "open_dt": self.last_open_dt,
             "close_dt": dt,
             "open_price": self.cost,
@@ -873,7 +884,11 @@ class Position:
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
             "is_partial_tp": True,
-        })
+        }
+        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+            pair["is_entry_at_limit"] = self._pending_entry_at_limit
+            pair["is_exit_at_limit"] = self._pending_exit_at_limit
+        self.pairs.append(pair)
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LC if self.pos > 0 else Operate.SC,
                                        price=price, volume=scale_volume, reason=reason))
         self.volume -= scale_volume
@@ -881,7 +896,8 @@ class Position:
 
     def _open_long(self, price: float, dt: datetime, reason: str = "开多",
                    equity_at_entry: float | None = None,
-                   total_open_margin: float | None = None):
+                   total_open_margin: float | None = None,
+                   entry_at_limit: bool | None = None):
         if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
             self.volume, self.contract_multiplier = self._size_open(
                 price, equity_at_entry, total_open_margin
@@ -900,6 +916,7 @@ class Position:
         self.trailing_active = False
         self._peak_price = price
         self._partial_tp_done = False
+        self._pending_entry_at_limit = bool(entry_at_limit)
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, volume=self.volume, reason=reason))
 
     def _size_open(self, price: float, equity_at_entry: float | None,
@@ -952,7 +969,7 @@ class Position:
             (price - self.cost) * self.volume * self.contract_multiplier
             - transaction_cost * self.cost * self.volume * self.contract_multiplier
         )
-        self.pairs.append({
+        pair: dict = {
             "open_dt": self.last_open_dt,
             "close_dt": dt,
             "open_price": self.cost,
@@ -964,7 +981,11 @@ class Position:
             "bars_held": self.bars_since_open,
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
-        })
+        }
+        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+            pair["is_entry_at_limit"] = self._pending_entry_at_limit
+            pair["is_exit_at_limit"] = self._pending_exit_at_limit
+        self.pairs.append(pair)
         self.pos = 0
         self.cost = 0
         self.volume = 1
@@ -974,11 +995,14 @@ class Position:
         self.trailing_active = False
         self._peak_price = 0.0
         self._partial_tp_done = False
+        self._pending_entry_at_limit = False
+        self._pending_exit_at_limit = False
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, volume=self.volume, reason=reason))
 
     def _open_short(self, price: float, dt: datetime, reason: str = "开空",
                     equity_at_entry: float | None = None,
-                    total_open_margin: float | None = None):
+                    total_open_margin: float | None = None,
+                    entry_at_limit: bool | None = None):
         if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
             self.volume, self.contract_multiplier = self._size_open(
                 price, equity_at_entry, total_open_margin
@@ -997,6 +1021,7 @@ class Position:
         self.trailing_active = False
         self._peak_price = price
         self._partial_tp_done = False
+        self._pending_entry_at_limit = bool(entry_at_limit)
         self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, volume=self.volume, reason=reason))
 
     def _close_short(self, price: float, dt: datetime, reason: str = ""):
@@ -1007,7 +1032,7 @@ class Position:
             (self.cost - price) * self.volume * self.contract_multiplier
             - transaction_cost * self.cost * self.volume * self.contract_multiplier
         )
-        self.pairs.append({
+        pair: dict = {
             "open_dt": self.last_open_dt,
             "close_dt": dt,
             "open_price": self.cost,
@@ -1019,7 +1044,11 @@ class Position:
             "bars_held": self.bars_since_open,
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
-        })
+        }
+        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+            pair["is_entry_at_limit"] = self._pending_entry_at_limit
+            pair["is_exit_at_limit"] = self._pending_exit_at_limit
+        self.pairs.append(pair)
         self.pos = 0
         self.cost = 0
         self.volume = 1
@@ -1029,6 +1058,8 @@ class Position:
         self.trailing_active = False
         self._peak_price = 0.0
         self._partial_tp_done = False
+        self._pending_entry_at_limit = False
+        self._pending_exit_at_limit = False
         self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, volume=self.volume, reason=reason))
 
     def evaluate(self) -> dict:
@@ -1777,7 +1808,9 @@ class ChanTimingStrategy:
                execution_price: float = None, czsc_obj=None,
                bar_high: float = None, bar_low: float = None,
                equity_at_entry: float | None = None,
-               total_open_margin: float | None = None):
+               total_open_margin: float | None = None,
+               entry_at_limit: bool | None = None,
+               exit_at_limit: bool | None = None):
         """
         更新所有持仓子策略
 
@@ -1790,7 +1823,16 @@ class ChanTimingStrategy:
         :param bar_low: 当根bar最低价，透传给各子策略用于 intrabar 触价止损
         :param equity_at_entry: A40 risk-mode equity basis for lot sizing
         :param total_open_margin: A40 risk-mode pre-open margin across all positions
+        :param entry_at_limit: A51 flag passed to each Position for entry tagging.
+        :param exit_at_limit: A51 flag passed to each Position for exit tagging.
         """
+        # A51: only forward limit flags under "aware" to keep off-mode
+        # Position.update signatures backward-compatible.
+        limit_kwargs: dict = {}
+        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+            limit_kwargs["entry_at_limit"] = entry_at_limit
+            limit_kwargs["exit_at_limit"] = exit_at_limit
+
         # 记录日线趋势状态（便于验证日线过滤是否生效）
         self._log_daily_trend(signals_dict, dt)
 
@@ -1895,12 +1937,15 @@ class ChanTimingStrategy:
         # 一买和三买正常更新
         if buy1_pos.pos != 0 or _research_first_buy_allowed(self.symbol, signals_dict):
             buy1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                            **limit_kwargs)
         else:
             buy1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                            **limit_kwargs)
         buy3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                        equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                        equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                        **limit_kwargs)
 
         # 二买需要一买上下文: 仅当一买子策略有过历史交易记录或有一买锚点时才生效
         if buy1_pos.pairs or self.buy1_history:
@@ -1911,14 +1956,17 @@ class ChanTimingStrategy:
                 self.symbol, self._last_buy1_anchor, trade_price, signals_dict, self.freq
             ):
                 buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                **limit_kwargs)
             else:
                 buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                **limit_kwargs)
         else:
             # 无一买上下文，二买仅执行风控（传空信号，不触发开仓）
             buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                            **limit_kwargs)
 
         if self.enable_short:
             sell1_pos = self.positions[3]  # 一卖子策略
@@ -1928,29 +1976,36 @@ class ChanTimingStrategy:
             # 一卖和三卖正常更新（已有持仓仍接收退出/风控；新仓受 P4/P5 门控）
             if sell1_pos.pos != 0 or short_open_allowed:
                 sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                 **limit_kwargs)
             else:
                 sell1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                 **limit_kwargs)
 
             if sell3_pos.pos != 0 or short_open_allowed:
                 sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                 **limit_kwargs)
             else:
                 sell3_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                 **limit_kwargs)
 
             # 二卖需要一卖上下文
             if sell1_pos.pairs or self.sell1_history:
                 if sell2_pos.pos != 0 or short_open_allowed:
                     sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                     **limit_kwargs)
                 else:
                     sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                     **limit_kwargs)
             else:
                 sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
+                                 **limit_kwargs)
 
     def get_total_pos(self) -> int:
         """获取总仓位方向"""

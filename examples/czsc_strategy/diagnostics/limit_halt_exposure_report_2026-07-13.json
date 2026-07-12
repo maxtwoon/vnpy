@@ -1,6 +1,6 @@
 {
   "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
-  "generated_at": "2026-07-13T00:24:08.276970",
+  "generated_at": "2026-07-13T01:15:00.541722",
   "window": {
     "start_date": "2026-04-24",
     "end_date": "2026-07-09"
@@ -13,7 +13,7 @@
     "A888",
     "ZN888"
   ],
-  "note": "This report is read-only evidence.  It uses the exchange-published steady-state daily price-limit percentage per symbol and the previous trading day's last close observed in the loaded window.  It does not change BacktestEngine/PortfolioEngine fill logic, does not enforce any limit/halt constraint, and is not used to tune parameters.",
+  "note": "This report is read-only evidence.  It uses the exchange-published steady-state daily price-limit percentage per symbol and the previous trading day's last close observed in the loaded window.  It does not change BacktestEngine/PortfolioEngine fill logic, does not enforce any limit/halt constraint, and is not used to tune parameters.  For per-trade tagging, set ``limit_halt_model='aware'`` in ``chan_strategy.config.STRATEGY_CONFIG``; trades will still open/close at unchanged prices and only gain ``is_entry_at_limit``/``is_exit_at_limit`` boolean fields.",
   "totals": {
     "trade_count": 2,
     "entry_at_limit_count": 0,

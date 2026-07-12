@@ -2,7 +2,7 @@
 
 > RESEARCH-ONLY — Diagnostic only, not a trading recommendation.
 
-Generated: 2026-07-13T00:24:08.276970
+Generated: 2026-07-13T01:15:00.541722
 Window: 2026-04-24 ~ 2026-07-09
 
 ## Totals
@@ -37,6 +37,6 @@ Window: 2026-04-24 ~ 2026-07-09
 
 ## Methodology
 
-This report is read-only evidence.  It uses the exchange-published steady-state daily price-limit percentage per symbol and the previous trading day's last close observed in the loaded window.  It does not change BacktestEngine/PortfolioEngine fill logic, does not enforce any limit/halt constraint, and is not used to tune parameters.
+This report is read-only evidence.  It uses the exchange-published steady-state daily price-limit percentage per symbol and the previous trading day's last close observed in the loaded window.  It does not change BacktestEngine/PortfolioEngine fill logic, does not enforce any limit/halt constraint, and is not used to tune parameters.  For per-trade tagging, set ``limit_halt_model='aware'`` in ``chan_strategy.config.STRATEGY_CONFIG``; trades will still open/close at unchanged prices and only gain ``is_entry_at_limit``/``is_exit_at_limit`` boolean fields.
 
 A trade is flagged 'at limit' on the entry/exit side when the fill bar's high or low touches or exceeds the computed daily price-limit band. The band is derived from the previous trading day's last close observed in the loaded window and the symbol's steady-state exchange limit percentage. Zero-volume bars within one bar of the fill bar are reported as a secondary halted/no-liquidity proxy when the raw table exposes a volume column.
