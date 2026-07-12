@@ -152,6 +152,38 @@ reviewer's judgment rather than fixing myself (dev's job per role division):
 
 (dev = kimi-code must read this before writing code)
 
+### Codex review reject findings (2026-07-12)
+
+1. **Blocker: daily-loss-limit flatten is not reflected in `PortfolioEngine`'s reported pairs or
+   equity.** `PortfolioCoordinator._flatten_all()` clears only the coordinator's own
+   `open_positions`, but `PortfolioEngine._build_on_report()` keeps a separate local
+   `open_positions` ledger for `coordinated_pairs`, `gross_exposure`, and unrealized PnL. A
+   minimal in-memory replay produced one `flat_event` at `2024-01-02 09:00:00`, but the reported
+   pair still closed at the original independent-backtest close `2024-01-03 09:00:00` with
+   `close_price=120.0`, and the trigger-bar equity row still reported `gross_exposure=0.1`.
+   This fails the acceptance item that a daily-loss breach flattens all open positions and blocks
+   new opens for the rest of the day. Add an end-to-end `PortfolioEngine` replay test, not only a
+   `PortfolioCoordinator` unit test, and make the report's pairs/equity reflect the forced close
+   at the flatten bar.
+2. **Related: daily-loss decisions are based on standalone per-symbol equity, not coordinated
+   portfolio equity.** `_build_on_report()` calls `coordinator.on_bar(dt, prices,
+   per_symbol_equity)` before recomputing the filtered/coordinated equity, so blocked trades from
+   the independent per-symbol backtests can still influence the loss-limit trigger. The acceptance
+   criterion says the day's cumulative *portfolio* PnL triggers flattening; compute this from the
+   coordinated realized+unrealized ledger.
+3. **Clean up or complete the unused `BacktestEngine.run(coordinator=...)` path.** The new
+   `backtest_engine.py` wiring calls coordinator APIs named `can_open`, `get_weights`, and
+   `update_after_bar`, but `PortfolioCoordinator` exposes `allow_open`, `_position_weight`, and
+   `on_bar`. `PortfolioEngine._run_per_symbol()` never passes a coordinator, so this path is
+   currently unreachable and would raise if used. Either remove it to keep the cross-symbol pass
+   surgical, or implement and test the API if it is meant to be the real coordinator path.
+4. **Before resubmitting review:** rerun the acceptance gates. In this Codex sandbox,
+   `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` and
+   `diagnostics/run_next_work.ps1 -Preflight` both hit the documented `PermissionError:
+   [WinError 5]` temp-directory setup failure, so those sandbox failures were not treated as code
+   defects. The handoff currently records a native unit-test pass (`521 passed, 4 deselected`) and
+   sync-check passes, but no native preflight pass was recorded in the manual notes I found.
+
 1. **Entry point:** `docs/design/a38-phase-contracts-p2-p8.md`, section "P8 (A45) - Exit Overhaul
    + Portfolio Risk", **P8b subsection only**. Ignore the stale `(A45)` label in the header, this
    task's real ID is **A48**. Full dev prompt and review checklist are in that section.
