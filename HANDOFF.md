@@ -1,170 +1,130 @@
 ---
-task: A42 sync-guardian Hardening
+task: A43 P4 - MACD-Area Divergence (Replace _bi_power Proxy)
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
-  - docs/design/a42-sync-guardian-hardening.md
-  - tools/sync_guardian/handoff.py
-  - tools/sync_guardian/sync_check.py
-  - tools/handoff.py
-  - tools/sync_check.py
-  - .synccheck.yml
-  - examples/czsc_strategy/.synccheck.yml
-  - examples/czsc_strategy/HANDOFF.md
-  - examples/czsc_strategy/diagnostics/archive/HANDOFF-A32-archived-2026-07-11.md
-  - .github/workflows/pythonapp.yml
-  - AGENTS.md
-  - tests/test_sync_guardian.py
+  - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Tooling/process hardening, not part of the P1-P8 backtest-return-quality roadmap
-(`docs/design/a38-phase-contracts-p2-p8.md`) — same parallel diagnostics-integrity line of work
-as A41, started after A41 (SimNow authenticity fix) reached `done`. Promoted 2026-07-12 from a
-DRAFT design produced during the same independent read-only 3-way audit that produced A40's §7a
-addendum and A41; re-verified at promotion time that none of A42's five target findings drifted
-during A40/A41 (both scoped to `chan_strategy/` and `diagnostics/simnow_*.py` respectively, never
-`tools/`, `.synccheck.yml`, or `.github/workflows/`).
+Resumes the P1-P8 backtest-return-quality roadmap (`docs/design/a38-strategy-improvement-roadmap.md`
+Part I, `docs/design/a38-phase-contracts-p2-p8.md` Part II) after the diagnostics-integrity
+detour (A41 SimNow authenticity fix, A42 sync-guardian hardening) reached `done`. P1 (A38 touch
+stops), P2 (A39 rollover/trading-calendar), P3 (A40 real position sizing) are all `done`,
+satisfying this phase's `Depends on` gate.
 
-Five gaps in the sync-guardian workflow itself, verified 2026-07-11 and re-verified 2026-07-12:
+**Task-ID renumbering note:** the phase-contracts doc's original `Task mapping` table
+(`P4=A41, P5=A42, ..., P8=A45`) is now stale — task IDs A41/A42 were consumed by the unplanned
+SimNow-authenticity/sync-guardian audit line of work, not by P4/P5. Renumbered per user decision
+2026-07-12: **P4=A43 (this task), P5=A44, P6=A45, P7=A46, P8a=A47, P8b=A48.** Each phase remains
+its own handoff task (design→dev→review→done); do not batch multiple phases into one dev handoff
+(explicit rule in the phase-contracts doc's Cross-Phase Notes) — P5 is not promoted until P4
+reaches `done`.
 
-1. `tools/handoff.py:9` / `tools/sync_check.py:9` hardcode
-   `SCRIPT_DIR = Path(r"D:\repo\ashare\skills\sync-guardian\scripts")` — fails on any
-   machine/CI runner without that exact external path.
-2. `no_auto_advance` is real, existing functionality in the external `handoff.py`, but neither
-   `.synccheck.yml` (root or `examples/czsc_strategy`) sets it — every stage, including `review`,
-   is eligible for the automated `run` loop's silent auto-transition-on-agent-silence behavior.
-3. `sync_check.py`'s deliverables check only verifies files **exist on disk**, not that they were
-   actually touched during the current stage — a stage can complete without ever registering its
-   real output as a tracked deliverable.
-4. `examples/czsc_strategy/HANDOFF.md` is stale and misleading: `task: A32`, `stage: design`,
-   `owner: claude-cowork`, `updated: 2026-07-03`, frozen since before A34 while all real work has
-   flowed through the root `HANDOFF.md` since.
-5. `.github/workflows/pythonapp.yml` runs lint/typecheck/build only — no pytest step, no
-   `sync_check` step — so a version/handoff-state drift or broken acceptance gate is only ever
-   caught locally.
+背驰 (divergence) is currently approximated by raw stroke amplitude `_bi_power = abs(high-low)`
+(`chan_strategy/signals.py:55`, re-verified unchanged 2026-07-12), a crude proxy that mislabels
+many 一买/一卖 → low first-buy win rate (26-37% on several symbols per the original trading-expert
+review). Standard 缠论 背驰 compares MACD area/DIF between the entering and leaving segments. This
+is flagged as the single highest-leverage win-rate lever in the roadmap.
 
-Single source of truth: `docs/design/a42-sync-guardian-hardening.md`.
+Full contract: `docs/design/a38-phase-contracts-p2-p8.md` §"P4 (A41) - MACD-Area Divergence" (the
+section header still says A41 — that is the stale label; this task's real ID is A43, content is
+otherwise authoritative and unchanged).
 
 ## Goal
 
-Vendor `tools/handoff.py`/`tools/sync_check.py`'s external dependency into
-`tools/sync_guardian/` for reproducibility; add `handoff.no_auto_advance: [review]` to both
-`.synccheck.yml` files; add a deliverables-freshness enforcement check to the vendored
-`sync_check.py` (fails loudly, not a warning, when a `dev`→`review` transition's deliverables
-weren't freshly git-tracked — including `git add -f` for git-ignored paths); archive the stale
-`examples/czsc_strategy/HANDOFF.md` and replace it with a truthful current-state file; add
-`sync_check` (root + child) and the `czsc_strategy` unit-test suite as new CI steps in
-`.github/workflows/pythonapp.yml`; update `AGENTS.md`'s CI section accordingly. No
-strategy/backtest/SimNow code touched — scope is strictly `tools/`, `.synccheck.yml` files,
-`.github/workflows/pythonapp.yml`, `AGENTS.md`, `examples/czsc_strategy/HANDOFF.md`/archive.
+Add `divergence_model` config gate (`"amplitude"` default, byte-identical to current | `"macd"`).
+Under `"macd"`: compute `DIF = EMA(fast) - EMA(slow)`, `DEA = EMA(DIF, signal)`,
+`hist = 2*(DIF-DEA)` on confirmed trade-frequency closes (fixed 12/26/9, NOT tuned in-task);
+compare leaving-segment vs entering-segment MACD magnitude for 一买/一卖/一买多头/一卖空头
+classification instead of `_bi_power`. Delete the orphaned amplitude `背驰=失效` branch
+(`signals.py:268-284`, A37 already removed its consumers — confirmed still unreachable/orphaned
+2026-07-12). Add a read-only `divergence_model_comparison_report.py` (amplitude vs macd win-rate,
+report only, not for in-task selection).
 
 ## Acceptance Criteria
 
-- [ ] `tools/sync_guardian/handoff.py` and `tools/sync_guardian/sync_check.py` exist,
-      byte-content-equivalent (modulo the added provenance comment) to the source at
-      `D:\repo\ashare\skills\sync-guardian\scripts\`; `tools/handoff.py`/`tools/sync_check.py`'s
-      `SCRIPT_DIR` no longer references any path outside the repo.
-- [ ] `python tools/handoff.py status` and `python tools/sync_check.py` both succeed when run
-      from a fresh clone of the repo with `D:\repo\ashare` renamed/inaccessible (or simulated via
-      a temporarily-unset/invalid `D:\repo\ashare` path in a test harness) — direct reproducibility
-      proof for Finding #5 in the design's numbering (external-path removal).
-- [ ] `.synccheck.yml` (root) and `examples/czsc_strategy/.synccheck.yml` both set
-      `handoff.no_auto_advance: [review]`.
-- [ ] A test/fixture exercises the vendored `handoff.py run` loop with a stub agent command that
-      exits 0 without transitioning stage while at `stage: review`; the loop halts with a
-      non-zero exit and the stage remains `review` (does not silently auto-advance to `done`).
-- [ ] `sync_check`'s new deliverables-tracking check fails (non-zero exit, named deliverable in
-      the error) for a fixture HANDOFF.md at `stage: review` whose listed deliverables were not
-      touched by any commit after its `design`→`dev` transition; passes for a fixture where at
-      least one was.
-- [ ] The same check fails for a fixture deliverable path under a git-ignored directory that
-      exists on disk but was never `git add -f`'d into any tracked commit; passes once it is.
-- [ ] `examples/czsc_strategy/HANDOFF.md`'s `stage`/`task`/`updated` fields are truthful as of
-      the change date; the old content is preserved at
-      `examples/czsc_strategy/diagnostics/archive/HANDOFF-A32-archived-2026-07-11.md`
-      (git-tracked, added with `git add -f` since the archive dir sits under the git-ignored
-      `diagnostics/`).
-- [ ] `python tools/sync_check.py --root examples/czsc_strategy` still passes after the change.
-- [ ] `.github/workflows/pythonapp.yml` runs `python tools/sync_check.py`,
-      `python tools/sync_check.py --root examples/czsc_strategy`, and
-      `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` as CI steps; a
-      deliberately-broken `HANDOFF.md` (e.g. malformed front matter) in a throwaway test branch
-      is confirmed to fail the CI job (gate has teeth in CI, not just locally).
-- [ ] `AGENTS.md`'s CI section no longer states "no automated pytest step."
-- [ ] No SimNow/backtest/strategy code touched (diff scoped to `tools/`, `.synccheck.yml` files,
-      `.github/workflows/pythonapp.yml`, `AGENTS.md`, `examples/czsc_strategy/HANDOFF.md`/
-      archive).
-- [ ] `python tools/sync_check.py` (root, using the newly-vendored implementation) passes on this
-      task's own final state.
+- [ ] `divergence_model="amplitude"` (default) → equity curve and every `Position.pairs` entry
+      byte-identical to current (equivalence test, ≥2 symbols × 1 year).
+- [ ] `"macd"`: a fixture where amplitude flags divergence but MACD does not (and the reverse)
+      yields the specified differing classifications; MACD params are exactly 12/26/9 and NOT
+      tuned in-task.
+- [ ] Orphan `背驰=失效` branch removed; no code references it; `chan_strategy/validation.py`
+      exhaustiveness sets updated to match; a test enforces confirmed-BI direction alternation
+      (no adjacent same-direction fake structure as coverage).
+- [ ] If a MACD `失效` class is added, real signal-history replay shows count > 0; else it is
+      absent (no unreachable class shipped).
+- [ ] `divergence_model_comparison_report.py` generated (report only, RESEARCH-ONLY banner
+      `Diagnostic only, not a trading recommendation.`); not used to select/tune parameters
+      in-task.
+- [ ] No tuning of any threshold via backtest selection; no pre-2026-04-24 data used for any
+      parameter choice; no SimNow order/cancel/send path changed; no `GOAL PASSED`.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+      pass.
+- [ ] `run_next_work.ps1 -Preflight` passes (or the documented Manual-verification accommodation
+      applies if the codex-sandbox symlink limitation recurs — add a fresh block to this
+      HANDOFF.md if needed).
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a42-sync-guardian-hardening.md`. Full dev prompt in design §8;
-   review checklist in §9.
-2. **This is pure tooling/process work** — `tools/`, `.synccheck.yml` (both), `.github/workflows/
-   pythonapp.yml`, `AGENTS.md`, `examples/czsc_strategy/HANDOFF.md`. Do not touch
-   `chan_strategy/` or `diagnostics/simnow_*.py` — none of the five findings are there.
-3. **Vendoring scope is exactly two files** (§3a): `handoff.py` + `sync_check.py` from
-   `D:\repo\ashare\skills\sync-guardian\scripts\`, preserving their mutual import relationship.
-   Do NOT vendor `dashboard.py`/`init_project.py` — confirmed via import-graph check that neither
-   is required.
-4. **`no_auto_advance: [review]` needs no new logic** — it's a config key the vendored
-   `handoff.py`'s existing `run` loop already consumes (confirmed at its lines ~544-552). Just
-   add the key to both `.synccheck.yml` files after vendoring.
-5. **§3d (stale sub-project HANDOFF.md) is a judgment call** — pick (a) mark
-   `examples/czsc_strategy/HANDOFF.md` as done/superseded pointing to root, or (b) keep it active
-   with a distinct honest purpose. The acceptance criterion only requires truthful fields and a
-   passing `--root examples/czsc_strategy` gate, not a specific choice. Record the decision in a
-   decision-log entry either way.
-6. **Deliverables-freshness check (§3c) must fail loudly** — non-zero exit with the specific
-   deliverable named, not a warning. This is the single highest-value check in this task: it's
-   what would have caught A40/A41's repeated "report/module not git-tracked" defects automatically
-   instead of requiring manual `git ls-files` due diligence each time.
-7. **CI-gate-has-teeth evidence is required**, not just "the steps exist" — a deliberately-broken
-   fixture/branch shown to fail the new CI job.
-8. **Guardrails (reject-on-violation):** no `chan_strategy/`/SimNow code touched; no threshold
-   tuning; `handoff.py`/`sync_check.py`'s public CLI surface (`python tools/handoff.py ...`)
-   unchanged for all existing callers.
-9. **Known environment accommodation:** if pytest/preflight hit the documented codex-sandbox
-   Windows-symlink limitation during review, add a fresh Manual-verification block to this task's
-   HANDOFF.md (doesn't persist automatically across tasks).
-10. Finish with the acceptance commands, then
-    `python tools/handoff.py next --actor kimi-code --summary "A42 sync-guardian hardening implemented"`.
-    Transactional gate — fix and retry if it blocks; no `--no-gate`.
+1. **Entry point:** `docs/design/a38-phase-contracts-p2-p8.md`, section "P4 (A41) - MACD-Area
+   Divergence" — ignore the stale `(A41)` label in the header, this task's real ID is **A43**.
+   Full dev prompt and review checklist are in that section (verbatim, still accurate).
+2. **Scope:** `chan_strategy/signals.py` (new `signal_divergence_macd` helper; gate in
+   `signal_divergence_status`/`signal_first_buy`; delete orphan `失效` branch),
+   `chan_strategy/sell_signals.py` (`signal_first_sell` MACD path), `chan_strategy/validation.py`
+   (keep exhaustiveness exact), `chan_strategy/config.py` (new keys), plus tests and the new
+   diagnostic. Do not touch `positions.py`'s 二买/三买 structural definitions (P6/A45), resonance
+   filtering (P5/A44), or any SimNow file.
+3. **Gated + default-off discipline (standard, unlike A41's deliberate exception):**
+   `divergence_model="amplitude"` must reproduce current behavior byte-for-byte. This is back to
+   the normal A37-A40 house style — A41's safe-by-default deviation does NOT apply here.
+4. **H3 resolution:** the amplitude `背驰=失效` branch (`signals.py:268-284`) is confirmed
+   unreachable and orphaned (A37 already removed its consumers; re-verified 2026-07-12) — delete
+   it under all modes, not just under `"macd"`. A MACD-based failure class may optionally be
+   added under `"macd"` ONLY if real signal-history replay shows a nonzero count; do not ship an
+   unreachable class either way.
+5. **MACD params are fixed, not tunable in this task:** 12/26/9 standard values only. The
+   comparison report is read-only evidence, never a selection mechanism — reject-on-violation if
+   used to pick parameters in-task.
+6. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection;
+   no pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched;
+   RESEARCH-ONLY banner on the new report; no `GOAL PASSED`; validation exhaustiveness must stay
+   exact (no orphaned or unreachable classes).
+7. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A43 (P4) MACD-area divergence implemented"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-12 - A42 promoted from DRAFT to an active HANDOFF task after A41 reached `done`,
-  matching the user's chosen sequencing ("先完成 A40 再依次 A41→A42"). Re-verified all cited
-  file:line targets are unchanged since the draft was written — A40/A41's changes never touched
-  `tools/`, `.synccheck.yml`, or `.github/workflows/`.
-- 2026-07-11 (design, original) - Scoped vendoring to exactly the two files
-  (`handoff.py`/`sync_check.py`) required for the existing CLI surface to keep working;
-  `dashboard.py`/`init_project.py` explicitly excluded (not imported by either).
-- 2026-07-11 (design, original) - §3d (stale sub-project HANDOFF.md) deliberately left as an
-  explicit human judgment call rather than resolved unilaterally by the design, since it depends
-  on whether the sub-project gate is meant to track something distinct from the root gate going
-  forward.
+- 2026-07-12 - P4 promoted from the pre-authored phase-contracts draft to an active HANDOFF task
+  as **A43** (not A41 — A41/A42 were already consumed by the SimNow-authenticity/sync-guardian
+  detour). User chose this renumbering (A43-A48 for P4-P8) plus sequential single-phase-at-a-time
+  promotion over the phase-contracts doc's own explicit "one dev handoff per phase" rule.
+- 2026-07-12 - Re-verified `_bi_power` (signals.py:55) and the orphaned amplitude `失效` branch
+  (signals.py:268-284) are unchanged since the phase-contracts draft was written — no drift from
+  A39/A40/A41/A42, none of which touched `chan_strategy/signals.py`.
+- 2026-07-11 (design, original phase-contracts doc) - Fixed MACD params at the 12/26/9 standard,
+  explicitly deferring tuning to a future holdout-validated task, to keep this phase's scope to
+  the divergence *measure* only, not parameter selection.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-12 | codex → claude-code | done → design | A42 promoted from draft to active task after A41 reached done |
-| 2026-07-12 | claude-code → kimi-code | design → dev | A42 promoted from draft to active task; re-verified no drift from A40/A41 |
-| 2026-07-12 | kimi-code → codex | dev → review | A42 sync-guardian hardening implemented |
-| 2026-07-12 | codex → codex | review → done | A42 verified: vendoring reproducible (no D:\repo\ashare refs remain, status/sync_check run standalone), no_auto_advance:[review] in both .synccheck.yml, 6 real pytest fixtures pass proving no_auto_advance halts run loop (non-zero exit, stage stays review) and deliverables-freshness/git-add-f checks fail loudly with named deliverable; czsc HANDOFF.md truthfully rewritten (stage:done/superseded) with A32 content archived+git-tracked via add -f; sync_check passes root+czsc_strategy; CI workflow adds the 3 required steps and AGENTS.md updated; independently re-verified CI-gate-has-teeth by injecting a malformed HANDOFF.md locally (exit 1, both checks fail) since dev did not record this evidence itself - noted as a minor gap, not blocking; zero touches to chan_strategy/ or diagnostics/simnow_*.py; 437 czsc unit tests pass |
+| 2026-07-12 | codex → claude-code | (new) → design | P4 promoted from phase-contracts draft, renumbered A41→A43 (A41/A42 consumed by SimNow/sync-guardian detour) |
+| 2026-07-12 | claude-code → kimi-code | design → dev | A43 (P4 MACD-area divergence) started; re-verified no drift in signals.py since draft |

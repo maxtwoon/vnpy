@@ -8,7 +8,12 @@ change A38's Phase-1 dev scope (touch-based stop execution), which remains the o
 contract. When each future task is started, its `design` stage adopts the matching section
 below as its contract (or points to it).
 
-**Task mapping:** P2=A39, P3=A40, P4=A41, P5=A42, P6=A43, P7=A44, P8=A45.
+**Task mapping:** P2=A39, P3=A40. ~~P4=A41, P5=A42, P6=A43, P7=A44, P8=A45~~ **superseded
+2026-07-12** — A41/A42 were consumed by an unplanned SimNow-authenticity/sync-guardian audit
+line of work, not by P4/P5. Renumbered: **P4=A43, P5=A44, P6=A45, P7=A46, P8a=A47, P8b=A48.**
+The section headers below still say "(A41)" through "(A45)" — those labels are stale; use this
+renumbering table as authoritative for actual HANDOFF task IDs. Section content otherwise
+unchanged.
 
 **Shared discipline (every phase, reject-on-violation).** Identical to A37/A38:
 
