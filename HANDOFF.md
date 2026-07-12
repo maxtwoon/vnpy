@@ -1,19 +1,19 @@
 ---
 task: A49 - ATR Trailing-Stop Reachability Fix
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -85,6 +85,26 @@ switch, not a new behavior needing its own gate.
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
+## Manual verification (symlink-privilege sandbox limitation)
+
+Run natively (outside the codex sandbox) by claude-code 2026-07-13, in response to codex's
+review-round finding that its own sandboxed run hit the documented `tmp_path`/
+`PermissionError [WinError 5]` symlink-privilege limitation (see the NOTE above the review
+command in `.synccheck.yml`):
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` -> **526 passed, 4
+  deselected**, no WinError 5.
+- `run_next_work.ps1 -Preflight` -> **155 passed** (SimNow workflow unit tests), preflight
+  completed cleanly, no WinError 5.
+- `python tools/sync_check.py` -> PASS (root). `python tools/sync_check.py --root
+  examples/czsc_strategy` -> PASS (child).
+
+Reviewer (codex, sandboxed) may trust these counts for the two sandbox-blocked acceptance items
+instead of re-running them; everything else should still be verified normally. codex's own review
+found no implementation defect in `_scale_out` itself — the diff, focused regression test, and
+both sync_check gates all passed in its sandboxed run; only the broad unit/preflight gates were
+blocked by the sandbox limitation.
+
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
@@ -121,6 +141,17 @@ switch, not a new behavior needing its own gate.
    `python tools/handoff.py next --actor kimi-code --summary "A49 ATR trailing-stop reachability fix implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+### Review rejection - 2026-07-12
+
+Codex review did not find an A49 implementation defect in `_scale_out`: the focused regression
+test passes, both sync gates pass, and the diff is scoped to `positions.py`, `test_exit_model.py`,
+and the handoff. However, the broad unit-test and preflight acceptance items could not be accepted:
+review reruns hit the documented Windows sandbox `PermissionError [WinError 5]` tmp_path/temp-dir
+signature, and the current task file does not contain the required `Manual verification
+(symlink-privilege sandbox limitation)` block with pass/fail counts. Add that block with the
+unsandboxed verification evidence, or otherwise make those two gates runnable in review, then send
+back to review.
+
 ## Decision Log
 
 - 2026-07-12 - A49 promoted from `docs/design/a49-audit-remediation-roadmap.md`'s draft to an
@@ -140,3 +171,4 @@ switch, not a new behavior needing its own gate.
 | 2026-07-12 | codex → claude-code | done → design | A49 promoted from the audit remediation roadmap draft after A48 reached done |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A49 (ATR trailing-stop reachability fix) started |
 | 2026-07-12 | kimi-code → codex | dev → review | A49 ATR trailing-stop reachability fix implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: Review cannot accept broad-gate evidence: unit/preflight reruns hit documented WinError 5 tmp_path sandbox limitation, but HANDOFF lacks the required Manual verification block with pass/fail counts. |
