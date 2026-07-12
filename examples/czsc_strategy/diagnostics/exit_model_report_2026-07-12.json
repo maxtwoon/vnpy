@@ -1,0 +1,367 @@
+{
+  "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
+  "generated_at": "2026-07-12T17:31:05.342674",
+  "exit_model": "legacy vs structural_atr",
+  "note": "This report is evidence only and is not used to select or tune parameters. No threshold tuning is performed from this report in-task. Window chosen as the most recent continuous post-2026-04-24 period available.",
+  "window": {
+    "start_date": "2026-04-24",
+    "end_date": "2026-07-09"
+  },
+  "total_symbols": 5,
+  "symbols_attempted": [
+    "AP888",
+    "RB888",
+    "SC888",
+    "A888",
+    "ZN888"
+  ],
+  "totals": {
+    "legacy": {
+      "trade_count": 2,
+      "win_count": 0,
+      "loss_count": 2
+    },
+    "structural_atr": {
+      "trade_count": 3,
+      "win_count": 2,
+      "loss_count": 1
+    }
+  },
+  "per_symbol": [
+    {
+      "symbol": "AP888",
+      "legacy": {
+        "trade_count": 2,
+        "win_count": 0,
+        "loss_count": 2,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": -0.900528094142472,
+        "max_drawdown_pct": 1.1802067542718984,
+        "sharpe_ratio": -2.692929803361515,
+        "avg_give_back_pct": 0.05011195536480878,
+        "avg_early_exit_pct": 0.04781554409909934,
+        "median_give_back_pct": 0.06231730002657454,
+        "median_early_exit_pct": 0.05195322880680308,
+        "pairs": [
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-10T09:29:00",
+            "open_price": 7526.0,
+            "close_price": 7330.0,
+            "pnl_pct": -0.026743050757374435,
+            "pnl_currency": -201.2682,
+            "volume": 1,
+            "contract_multiplier": 1,
+            "bars_held": 45,
+            "reason": "止损",
+            "reason_code": "stop_loss",
+            "strategy": "一买多头"
+          },
+          {
+            "open_dt": "2026-06-04T13:59:00",
+            "close_dt": "2026-06-09T14:59:00",
+            "open_price": 7624.0,
+            "close_price": 7388.0,
+            "pnl_pct": -0.03165487932843652,
+            "pnl_currency": -241.3368,
+            "volume": 1,
+            "contract_multiplier": 1,
+            "bars_held": 27,
+            "reason": "止损",
+            "reason_code": "stop_loss",
+            "strategy": "二买多头"
+          }
+        ],
+        "diagnostics": [
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-10T09:29:00",
+            "strategy": "一买多头",
+            "direction": "long",
+            "open_price": 7526.0,
+            "close_price": 7330.0,
+            "pnl_pct": -0.026743050757374435,
+            "exit_reason": "止损",
+            "peak_price": 7799.0,
+            "trough_price": 7308.0,
+            "give_back_pct": 0.06231730002657454,
+            "subsequent_high": 7721.0,
+            "subsequent_low": 7324.0,
+            "early_exit_pct": 0.05195322880680308
+          },
+          {
+            "open_dt": "2026-06-04T13:59:00",
+            "close_dt": "2026-06-09T14:59:00",
+            "strategy": "二买多头",
+            "direction": "long",
+            "open_price": 7624.0,
+            "close_price": 7388.0,
+            "pnl_pct": -0.03165487932843652,
+            "exit_reason": "止损",
+            "peak_price": 7677.0,
+            "trough_price": 7382.0,
+            "give_back_pct": 0.03790661070304302,
+            "subsequent_high": 7721.0,
+            "subsequent_low": 7308.0,
+            "early_exit_pct": 0.043677859391395596
+          }
+        ]
+      },
+      "structural_atr": {
+        "trade_count": 3,
+        "win_count": 2,
+        "loss_count": 1,
+        "win_rate": 0.6666666666666666,
+        "profit_factor": 0.2942380895890622,
+        "total_return_pct": -0.539956874371017,
+        "max_drawdown_pct": 0.867105831052863,
+        "sharpe_ratio": -1.9394231675272542,
+        "avg_give_back_pct": 0.02915604358894064,
+        "avg_early_exit_pct": 0.02656212108156804,
+        "median_give_back_pct": 0.03095934095136859,
+        "median_early_exit_pct": 0.031225086367260166,
+        "pairs": [
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-02T13:59:00",
+            "open_price": 7526.0,
+            "close_price": 7564.0,
+            "pnl_pct": 0.004699162901939942,
+            "pnl_currency": 17.682949999999998,
+            "volume": 0.5,
+            "contract_multiplier": 1,
+            "bars_held": 2,
+            "reason": "部分止盈-一买平多-部分止盈",
+            "reason_code": "partial_tp",
+            "is_partial_tp": true,
+            "strategy": "一买多头"
+          },
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-08T09:29:00",
+            "open_price": 7526.0,
+            "close_price": 7566.0,
+            "pnl_pct": 0.004614908317831517,
+            "pnl_currency": 17.3659,
+            "volume": 0.5,
+            "contract_multiplier": 1,
+            "bars_held": 29,
+            "reason": "ATR移动止损",
+            "reason_code": "atr_trailing_stop",
+            "strategy": "一买多头"
+          },
+          {
+            "open_dt": "2026-06-04T13:59:00",
+            "close_dt": "2026-06-09T14:59:00",
+            "open_price": 7624.0,
+            "close_price": 7388.0,
+            "pnl_pct": -0.03165487932843652,
+            "pnl_currency": -241.3368,
+            "volume": 1,
+            "contract_multiplier": 1,
+            "bars_held": 27,
+            "reason": "止损",
+            "reason_code": "stop_loss",
+            "strategy": "二买多头"
+          }
+        ],
+        "diagnostics": [
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-02T13:59:00",
+            "strategy": "一买多头",
+            "direction": "long",
+            "open_price": 7526.0,
+            "close_price": 7564.0,
+            "pnl_pct": 0.004699162901939942,
+            "exit_reason": "部分止盈-一买平多-部分止盈",
+            "peak_price": 7704.0,
+            "trough_price": 7516.0,
+            "give_back_pct": 0.01860217911241031,
+            "subsequent_high": 7799.0,
+            "subsequent_low": 7520.0,
+            "early_exit_pct": 0.031225086367260166
+          },
+          {
+            "open_dt": "2026-06-02T11:29:00",
+            "close_dt": "2026-06-08T09:29:00",
+            "strategy": "一买多头",
+            "direction": "long",
+            "open_price": 7526.0,
+            "close_price": 7566.0,
+            "pnl_pct": 0.004614908317831517,
+            "exit_reason": "ATR移动止损",
+            "peak_price": 7799.0,
+            "trough_price": 7511.0,
+            "give_back_pct": 0.03095934095136859,
+            "subsequent_high": 7602.0,
+            "subsequent_low": 7308.0,
+            "early_exit_pct": 0.0047834174860483655
+          },
+          {
+            "open_dt": "2026-06-04T13:59:00",
+            "close_dt": "2026-06-09T14:59:00",
+            "strategy": "二买多头",
+            "direction": "long",
+            "open_price": 7624.0,
+            "close_price": 7388.0,
+            "pnl_pct": -0.03165487932843652,
+            "exit_reason": "止损",
+            "peak_price": 7677.0,
+            "trough_price": 7382.0,
+            "give_back_pct": 0.03790661070304302,
+            "subsequent_high": 7721.0,
+            "subsequent_low": 7308.0,
+            "early_exit_pct": 0.043677859391395596
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "symbol": "RB888",
+      "legacy": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "structural_atr": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "error": "legacy_error: 交易周期数据不足: 需要至少110根30分钟K线，实际95根; structural_atr_error: 交易周期数据不足: 需要至少110根30分钟K线，实际95根"
+    },
+    {
+      "symbol": "SC888",
+      "legacy": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "structural_atr": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "error": null
+    },
+    {
+      "symbol": "A888",
+      "legacy": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "structural_atr": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "error": "legacy_error: 交易周期数据不足: 需要至少110根30分钟K线，实际86根; structural_atr_error: 交易周期数据不足: 需要至少110根30分钟K线，实际86根"
+    },
+    {
+      "symbol": "ZN888",
+      "legacy": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "structural_atr": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "total_return_pct": 0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0,
+        "avg_give_back_pct": 0.0,
+        "avg_early_exit_pct": 0.0,
+        "median_give_back_pct": 0.0,
+        "median_early_exit_pct": 0.0,
+        "pairs": [],
+        "diagnostics": []
+      },
+      "error": null
+    }
+  ]
+}

@@ -102,6 +102,12 @@ STRATEGY_CONFIG = {
     "atr_lookback": 100,                  # number of past ATR values used for percentile
     "atr_percentile_floor": 0.30,         # block opens when current ATR percentile is below this
 
+    # A47 exit-model overhaul (P8a). "legacy" keeps the fixed-percentage-giveback trailing stop;
+    # "structural_atr" uses ATR trailing + partial take-profit at directional targets.
+    "exit_model": "legacy",               # "legacy" (default, byte-identical) | "structural_atr"
+    "atr_trail_mult": 3.0,                # ATR trailing-stop multiplier
+    "partial_tp_frac": 0.5,               # fraction of position scaled out at the first directional target
+
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
         # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.

@@ -939,3 +939,7 @@ class AtrStateTracker:
         key = f"{freq}_ATR_波动V260615"
         value = f"{state}_任意_任意_{score}"
         return {key: value}
+
+    def current_atr(self) -> float | None:
+        """Return the latest smoothed ATR value, or None if still warming up."""
+        return self.atr_history[-1] if self.atr_history else None

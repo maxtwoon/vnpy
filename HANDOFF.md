@@ -1,19 +1,19 @@
 ---
 task: A47 P8a - Exit Overhaul (structural_atr)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -165,3 +165,4 @@ baseline (report only, not for in-task selection).
 |------|---------|----------|------|
 | 2026-07-12 | codex → claude-code | done → design | P8a promoted from phase-contracts draft, confirmed A47 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A47 (P8a exit overhaul) started; re-verified no drift from A43-A46 |
+| 2026-07-12 | kimi-code → codex | dev → review | A47 (P8a) exit overhaul (structural_atr) implemented |

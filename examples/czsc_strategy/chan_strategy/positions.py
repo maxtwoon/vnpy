@@ -226,6 +226,8 @@ class Event:
     signals_all: List[Signal] = field(default_factory=list)
     signals_any: List[Signal] = field(default_factory=list)
     signals_not: List[Signal] = field(default_factory=list)
+    is_structural: bool = field(default=False, compare=False)
+    is_partial_tp: bool = field(default=False, compare=False)
 
     def is_match(self, signals_dict: dict) -> bool:
         """检查事件是否触发"""
@@ -274,6 +276,7 @@ class TradeRecord:
 REASON_CODE_MAP = {
     "移动止损": "trailing_stop",
     "绉诲姩姝㈡崯": "trailing_stop",
+    "ATR移动止损": "atr_trailing_stop",
     "止损": "stop_loss",
     "姝㈡崯": "stop_loss",
     "超时": "timeout",
@@ -287,6 +290,8 @@ def normalize_exit_reason(reason: str) -> str:
         return REASON_CODE_MAP[reason]
     if reason.startswith("信号平仓") or reason.startswith("淇″彿骞仓"):
         return "signal_exit"
+    if reason.startswith("部分止盈"):
+        return "partial_tp"
     if "风控" in reason or "风险" in reason:
         return "risk_exit"
     if reason:
@@ -453,41 +458,67 @@ def _build_exit_events(
     the directional factors (current Phase 1 behavior). ``restructured`` emits
     two independent events: a standalone structural exit and a standalone
     directional exit.
+
+    When ``exit_model`` is ``"structural_atr"``, a partial-take-profit event is
+    additionally emitted from the directional factors.  Position.update splits
+    full-close exits from partial-tp events so that profit-side scaling only
+    occurs when the center-boundary / measured-target conditions are met.
     """
     semantics = STRATEGY_CONFIG.get("exit_event_semantics", "legacy")
+    exit_model = STRATEGY_CONFIG.get("exit_model", "legacy")
+    events: list[Event] = []
+
     if semantics == "legacy":
-        return [Event.load({
+        events.append(Event.load({
             "name": name,
             "operate": operate,
             "signals_all": [],
             "signals_any": legacy_signals_any,
             "signals_not": [],
             "factors": directional_factors,
-        })]
+        }))
+    else:
+        # restructured: standalone structural exit + standalone directional exit
+        structural_signals_any = [
+            f"{restructured_structural_signal_key}_结构失效_任意_任意_0",
+        ]
+        if restructured_extra_signals_any:
+            structural_signals_any.extend(restructured_extra_signals_any)
+        structural_event = Event.load({
+            "name": f"{name}-结构",
+            "operate": operate,
+            "signals_all": [],
+            "signals_any": structural_signals_any,
+            "signals_not": [],
+            "factors": [],
+        })
+        structural_event.is_structural = True
+        events.append(structural_event)
 
-    # restructured: standalone structural exit + standalone directional exit
-    structural_signals_any = [
-        f"{restructured_structural_signal_key}_结构失效_任意_任意_0",
-    ]
-    if restructured_extra_signals_any:
-        structural_signals_any.extend(restructured_extra_signals_any)
-    structural_event = Event.load({
-        "name": f"{name}-结构",
-        "operate": operate,
-        "signals_all": [],
-        "signals_any": structural_signals_any,
-        "signals_not": [],
-        "factors": [],
-    })
-    directional_event = Event.load({
-        "name": f"{name}-方向",
-        "operate": operate,
-        "signals_all": [],
-        "signals_any": [],
-        "signals_not": [],
-        "factors": directional_factors,
-    })
-    return [structural_event, directional_event]
+        directional_event = Event.load({
+            "name": f"{name}-方向",
+            "operate": operate,
+            "signals_all": [],
+            "signals_any": [],
+            "signals_not": [],
+            "factors": directional_factors,
+        })
+        events.append(directional_event)
+
+    if exit_model == "structural_atr":
+        # partial TP triggers on directional factors alone (the "target").
+        partial_tp_event = Event.load({
+            "name": f"{name}-部分止盈",
+            "operate": operate,
+            "signals_all": [],
+            "signals_any": [],
+            "signals_not": [],
+            "factors": directional_factors,
+        })
+        partial_tp_event.is_partial_tp = True
+        events.append(partial_tp_event)
+
+    return events
 
 
 class Position:
@@ -532,7 +563,9 @@ class Position:
         self.name = name
         self.symbol = symbol
         self.opens = opens
-        self.exits = exits or []
+        all_exit_events = exits or []
+        self.exits = [e for e in all_exit_events if not e.is_partial_tp]
+        self.partial_tp_events = [e for e in all_exit_events if e.is_partial_tp]
         self.interval = interval  # 同类开仓间隔（秒）
         # timeout 按交易周期 bar 计数；当前交易周期为 30 分钟
         self.timeout = timeout    # 超时K线数（交易周期级别，如 600 根 30 分钟 K 线 ≈ 12.5 个交易日）
@@ -562,11 +595,16 @@ class Position:
         self.max_profit_bp = 0  # 持仓期间最大盈利(BP)
         self.trailing_active = False  # 移动止损是否激活
 
+        # A47 structural_atr exit-model state
+        self._peak_price: float = 0.0  # 最有利价格（多=最高，空=最低）
+        self._partial_tp_done: bool = False  # 是否已执行部分止盈
+
     def update(self, signals_dict: dict, price: float, dt: datetime,
                bar_count: int = 1, execution_price: float = None,
                bar_high: float = None, bar_low: float = None,
                equity_at_entry: float | None = None,
-               total_open_margin: float | None = None):
+               total_open_margin: float | None = None,
+               atr: float | None = None):
         """
         根据当前信号更新持仓状态
 
@@ -581,6 +619,8 @@ class Position:
                         为 None 时（旧调用方/close模型）固定止损回退到收盘价检查，保持基线一致
         :param equity_at_entry: A40 risk-mode equity basis for lot sizing
         :param total_open_margin: A40 risk-mode pre-open margin across all positions
+        :param atr: A47 current ATR value for the structural_atr trailing stop.
+                    Ignored when exit_model is ``"legacy"``.
         """
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
@@ -601,25 +641,51 @@ class Position:
             # 更新最大盈利追踪（用实际价格，非成交价）
             self._update_trailing(price)
 
-            # 检查移动止损（优先级最高）- 风控用当前价格立即执行
-            if self._check_trailing_stop(price):
-                if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                    self._close_long(price, dt, "移动止损")
-                elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                    self._close_short(price, dt, "移动止损")
-            # 检查固定止损 - close 模型用收盘价，intrabar 模型用当根 low/high 触价
-            elif self._stop_triggered(price, bar_high, bar_low):
-                stop_fill = self._stop_fill(price, bar_high, bar_low)
-                if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                    self._close_long(stop_fill, dt, "止损")
-                elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                    self._close_short(stop_fill, dt, "止损")
-            # 检查超时 - 风控立即执行
-            elif self.bars_since_open >= self.timeout:
-                if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                    self._close_long(price, dt, "超时")
-                elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                    self._close_short(price, dt, "超时")
+            exit_model = STRATEGY_CONFIG.get("exit_model", "legacy")
+            if exit_model == "legacy":
+                # 历史基线路径：百分比回撤移动止损 > 固定止损 > 超时
+                # 信号平仓已在上面处理，保持最高优先级。
+                if self._check_trailing_stop(price):
+                    if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                        self._close_long(price, dt, "移动止损")
+                    elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                        self._close_short(price, dt, "移动止损")
+                # 检查固定止损 - close 模型用收盘价，intrabar 模型用当根 low/high 触价
+                elif self._stop_triggered(price, bar_high, bar_low):
+                    stop_fill = self._stop_fill(price, bar_high, bar_low)
+                    if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                        self._close_long(stop_fill, dt, "止损")
+                    elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                        self._close_short(stop_fill, dt, "止损")
+                # 检查超时 - 风控立即执行
+                elif self.bars_since_open >= self.timeout:
+                    if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                        self._close_long(price, dt, "超时")
+                    elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                        self._close_short(price, dt, "超时")
+            else:
+                # A47 structural_atr: 结构止损/信号平仓已在上面处理；
+                # 风险侧：固定止损 > 超时；盈利侧：部分止盈 > ATR trailing。
+                if self._stop_triggered(price, bar_high, bar_low):
+                    stop_fill = self._stop_fill(price, bar_high, bar_low)
+                    if self.pos > 0:  # pragma: no branch
+                        self._close_long(stop_fill, dt, "止损")
+                    elif self.pos < 0:  # pragma: no branch
+                        self._close_short(stop_fill, dt, "止损")
+                elif self.bars_since_open >= self.timeout:
+                    if self.pos > 0:  # pragma: no branch
+                        self._close_long(price, dt, "超时")
+                    elif self.pos < 0:  # pragma: no branch
+                        self._close_short(price, dt, "超时")
+                elif not self._partial_tp_done:
+                    partial_event = self._get_partial_tp_event(signals_dict)
+                    if partial_event:
+                        self._scale_out(price, dt, f"部分止盈-{partial_event.name}")
+                elif self._check_atr_trailing_stop(price, atr):
+                    if self.pos > 0:  # pragma: no branch
+                        self._close_long(price, dt, "ATR移动止损")
+                    elif self.pos < 0:  # pragma: no branch
+                        self._close_short(price, dt, "ATR移动止损")
 
     def _get_operate(self, signals_dict: dict, price: float, dt: datetime) -> Tuple[Optional[Operate], str]:
         """获取当前应执行的操作"""
@@ -656,8 +722,12 @@ class Position:
             return
         if self.pos > 0:
             profit_bp = (price - self.cost) / self.cost * 10000
+            if price > self._peak_price:
+                self._peak_price = price
         elif self.pos < 0:
             profit_bp = (self.cost - price) / self.cost * 10000
+            if price < self._peak_price or self._peak_price == 0:
+                self._peak_price = price
         else:
             return
 
@@ -685,6 +755,25 @@ class Position:
         drawback = self.max_profit_bp - profit_bp
         tolerance = self.max_profit_bp * self.trailing_drawback_pct
         return drawback >= tolerance
+
+    def _get_partial_tp_event(self, signals_dict: dict) -> Event | None:
+        """Return the first matching partial-take-profit event, if any."""
+        for event in self.partial_tp_events:
+            if event.is_match(signals_dict):
+                return event
+        return None
+
+    def _check_atr_trailing_stop(self, price: float, atr: float | None) -> bool:
+        """检查是否触发 ATR 移动止损（structural_atr 模式）。"""
+        if atr is None or atr <= 0 or self.cost == 0 or self.pos == 0:
+            return False
+        mult = STRATEGY_CONFIG.get("atr_trail_mult", 3.0)
+        if self.pos > 0:
+            trail = self._peak_price - mult * atr
+            return price <= trail
+        else:
+            trail = self._peak_price + mult * atr
+            return price >= trail
 
     def _check_stop_loss(self, price: float) -> bool:
         """检查是否触发固定止损"""
@@ -732,6 +821,62 @@ class Position:
             return max(trigger, price) * (1 + penalty)
         return price
 
+    def _scale_out(self, price: float, dt: datetime, reason: str):
+        """Scale out ``partial_tp_frac`` of the current position.
+
+        Records a partial pair, reduces ``self.volume``, and keeps the remainder
+        open for the ATR trailing stop.  Transaction costs are scaled by the
+        same fraction so total costs remain consistent when the remainder is
+        later closed.
+        """
+        if self.pos == 0 or self.cost == 0 or self.volume <= 0:
+            return
+
+        partial_tp_frac = STRATEGY_CONFIG.get("partial_tp_frac", 0.5)
+        if partial_tp_frac <= 0 or partial_tp_frac >= 1:
+            return
+
+        scale_volume = self.volume * partial_tp_frac
+        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+            scale_volume = int(floor(scale_volume))
+            if scale_volume < 1:
+                return
+            if scale_volume >= self.volume:
+                return
+
+        if self.pos > 0:
+            gross_pnl = (price - self.cost) / self.cost
+        else:
+            gross_pnl = (self.cost - price) / self.cost
+
+        scale_fraction = scale_volume / self.volume
+        full_transaction_cost = 2 * self.commission_rate + self.slippage
+        transaction_cost = full_transaction_cost * scale_fraction
+        pnl = gross_pnl - transaction_cost
+        pnl_currency = (
+            gross_pnl * self.cost * scale_volume * self.contract_multiplier
+            - transaction_cost * self.cost * scale_volume * self.contract_multiplier
+        )
+
+        self.pairs.append({
+            "open_dt": self.last_open_dt,
+            "close_dt": dt,
+            "open_price": self.cost,
+            "close_price": price,
+            "pnl_pct": pnl,
+            "pnl_currency": pnl_currency,
+            "volume": scale_volume,
+            "contract_multiplier": self.contract_multiplier,
+            "bars_held": self.bars_since_open,
+            "reason": reason,
+            "reason_code": normalize_exit_reason(reason),
+            "is_partial_tp": True,
+        })
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.LC if self.pos > 0 else Operate.SC,
+                                       price=price, volume=scale_volume, reason=reason))
+        self.volume -= scale_volume
+        self._partial_tp_done = True
+
     def _open_long(self, price: float, dt: datetime, reason: str = "开多",
                    equity_at_entry: float | None = None,
                    total_open_margin: float | None = None):
@@ -751,6 +896,8 @@ class Position:
         self.last_open_dt = dt
         self.max_profit_bp = 0
         self.trailing_active = False
+        self._peak_price = price
+        self._partial_tp_done = False
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, volume=self.volume, reason=reason))
 
     def _size_open(self, price: float, equity_at_entry: float | None,
@@ -823,6 +970,8 @@ class Position:
         self.bars_since_open = 0
         self.max_profit_bp = 0
         self.trailing_active = False
+        self._peak_price = 0.0
+        self._partial_tp_done = False
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, volume=self.volume, reason=reason))
 
     def _open_short(self, price: float, dt: datetime, reason: str = "开空",
@@ -844,6 +993,8 @@ class Position:
         self.last_open_dt = dt
         self.max_profit_bp = 0
         self.trailing_active = False
+        self._peak_price = price
+        self._partial_tp_done = False
         self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, volume=self.volume, reason=reason))
 
     def _close_short(self, price: float, dt: datetime, reason: str = ""):
@@ -874,6 +1025,8 @@ class Position:
         self.bars_since_open = 0
         self.max_profit_bp = 0
         self.trailing_active = False
+        self._peak_price = 0.0
+        self._partial_tp_done = False
         self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, volume=self.volume, reason=reason))
 
     def evaluate(self) -> dict:
@@ -1688,11 +1841,14 @@ class ChanTimingStrategy:
         # The ATR signal is injected only when it is actually needed:
         #   - atr_chop_filter="on" gates all new opens, or
         #   - second_buy_mode="gated" needs the ATR expansion check.
-        self._atr_tracker.update(
+        # A47: the current ATR value is also passed to each Position for the
+        # structural_atr trailing stop.
+        atr_state = self._atr_tracker.update(
             high=bar_high if bar_high is not None else price,
             low=bar_low if bar_low is not None else price,
             close=price,
         )
+        current_atr = atr_state.get("atr")
         inject_atr = (
             STRATEGY_CONFIG.get("atr_chop_filter") == "on"
             or STRATEGY_CONFIG.get("second_buy_mode") == "gated"
@@ -1737,12 +1893,12 @@ class ChanTimingStrategy:
         # 一买和三买正常更新
         if buy1_pos.pos != 0 or _research_first_buy_allowed(self.symbol, signals_dict):
             buy1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
         else:
             buy1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
         buy3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                        equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                        equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
 
         # 二买需要一买上下文: 仅当一买子策略有过历史交易记录或有一买锚点时才生效
         if buy1_pos.pairs or self.buy1_history:
@@ -1753,14 +1909,14 @@ class ChanTimingStrategy:
                 self.symbol, self._last_buy1_anchor, trade_price, signals_dict, self.freq
             ):
                 buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
             else:
                 buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
         else:
             # 无一买上下文，二买仅执行风控（传空信号，不触发开仓）
             buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                            equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
 
         if self.enable_short:
             sell1_pos = self.positions[3]  # 一卖子策略
@@ -1770,29 +1926,29 @@ class ChanTimingStrategy:
             # 一卖和三卖正常更新（已有持仓仍接收退出/风控；新仓受 P4/P5 门控）
             if sell1_pos.pos != 0 or short_open_allowed:
                 sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
             else:
                 sell1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
 
             if sell3_pos.pos != 0 or short_open_allowed:
                 sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
             else:
                 sell3_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
 
             # 二卖需要一卖上下文
             if sell1_pos.pairs or self.sell1_history:
                 if sell2_pos.pos != 0 or short_open_allowed:
                     sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
                 else:
                     sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                     equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
             else:
                 sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
-                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin)
+                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr)
 
     def get_total_pos(self) -> int:
         """获取总仓位方向"""
