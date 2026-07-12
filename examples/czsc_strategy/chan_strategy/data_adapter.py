@@ -358,6 +358,15 @@ class SqliteDataAdapter:
         """
         df = self.load_kline_data(symbol, start_date, end_date, freq, table_name)
 
+        # A52 adjustment-method declaration. Confirmed by
+        # diagnostics/contract_adjustment_verification.py on 2026-07-13:
+        # the 888 continuous-contract tables (AP888/RB888/SC888/A888/ZN888) are
+        # raw, unadjusted contract splices. They carry a ``real_symbol`` column
+        # but no adjustment/factor columns, and price discontinuities exist at
+        # rollover transition dates. This matches the A34 H4 ``found_spliced``
+        # finding, which this codebase therefore treats as still holding.
+        # No front-adjustment, back-adjustment, or re-splicing is performed here.
+
         if df.empty:
             return []
 

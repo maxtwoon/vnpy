@@ -115,6 +115,12 @@ STRATEGY_CONFIG = {
     # "aware" adds ``is_entry_at_limit`` / ``is_exit_at_limit`` boolean fields to each
     # ``Position.pairs`` entry without changing fills, prices or trade counts.
     "limit_halt_model": "off",            # "off" (legacy, default) | "aware"
+
+    # A52 rollover-window stat tagging (P10). "off" is the legacy byte-identical default;
+    # "on" adds an ``is_rollover_window`` boolean field to each ``Position.pairs`` entry
+    # without changing fills, prices or trade counts.
+    "rollover_stat_tagging": "off",       # "off" (legacy, default) | "on"
+
     "weighting": "fixed",                 # "fixed" (legacy 10/20/30 split) | "risk_parity"
     "corr_clusters": {                    # correlated symbol clusters for gross exposure cap
         "industrial_energy": ["RB888", "ZN888", "SC888"],

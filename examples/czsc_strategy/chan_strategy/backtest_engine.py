@@ -14,6 +14,7 @@
 - 数据为1分钟K线，需要合成更高周期
 """
 import sys
+from datetime import date
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -30,6 +31,12 @@ from chan_strategy.limit_config import (
     SYMBOL_LIMIT_CONFIG,
     _bar_at_limit,
     _daily_prev_close_map,
+)
+from chan_strategy.rollover_config import (
+    _detect_transitions,
+    _exclusion_dates,
+    _pair_in_exclusion_window,
+    _trading_dates_from_bars,
 )
 from chan_strategy.sell_signals import get_all_signals
 from chan_strategy.positions import ChanTimingStrategy
@@ -502,6 +509,14 @@ class BacktestEngine:
         # 保存CZSC对象供外部使用
         self.czsc_obj = czsc_trade
 
+        # A52: post-loop rollover-window tagging only when explicitly enabled.
+        # "off" skips this entirely, keeping the legacy path byte-identical.
+        if STRATEGY_CONFIG.get("rollover_stat_tagging", "off") == "on":
+            excluded_dates = self._rollover_excluded_dates()
+            for pos in self.strategy.positions:
+                for pair in pos.pairs:
+                    pair["is_rollover_window"] = _pair_in_exclusion_window(pair, excluded_dates)
+
         # 生成报告
         return self.generate_report()
 
@@ -537,6 +552,22 @@ class BacktestEngine:
         """Resolve A40 contract spec for a Position's symbol."""
         from chan_strategy.positions import _research_contract_spec
         return _research_contract_spec(pos.symbol)
+
+    def _rollover_excluded_dates(self) -> set[date]:
+        """Return the set of dates in any rollover exclusion window for the symbol."""
+        try:
+            transitions = _detect_transitions(
+                Path(self.db_path), self.symbol, self.start_date, self.end_date
+            )
+        except Exception:
+            # Tagging is best-effort: if the metadata DB is missing or malformed,
+            # fall back to no tags rather than failing the backtest.
+            return set()
+        if transitions.get("unavailable"):
+            return set()
+        trading_dates = _trading_dates_from_bars(Path(self.db_path), self.symbol)
+        excluded, _ = _exclusion_dates(transitions.get("transition_dates", []), trading_dates)
+        return excluded
 
     def _update_realized_currency(self) -> None:
         """Incrementally track closed-pair currency PnL for risk-mode accounting."""

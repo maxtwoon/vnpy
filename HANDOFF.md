@@ -1,19 +1,19 @@
 ---
 task: A52 - Continuous-Contract Data-Integrity (Adjustment Method + Rollover Stat Field)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a49-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -59,33 +59,33 @@ backtest by default — it only makes the tag available for reporting.
 
 ## Acceptance Criteria
 
-- [ ] `contract_adjustment_verification.py` produces a definitive, cited conclusion about the
+- [x] `contract_adjustment_verification.py` produces a definitive, cited conclusion about the
       splicing/adjustment method for each of the 5 default symbols, cross-referenced against A34's
       H4 finding (state explicitly whether it still holds or has changed).
-- [ ] `data_adapter.py` carries an explicit comment stating the confirmed method — phrased as
+- [x] `data_adapter.py` carries an explicit comment stating the confirmed method — phrased as
       "confirmed by `contract_adjustment_verification.py` on `<date>`", not "assumed."
-- [ ] `rollover_stat_tagging="off"` (default) → equity curve and every `Position.pairs` entry
+- [x] `rollover_stat_tagging="off"` (default) → equity curve and every `Position.pairs` entry
       byte-identical to current (full-`BacktestEngine` equivalence test with a git-tracked golden
       snapshot, per the A44-A51 house pattern — do not ship with only a unit-level check).
-- [ ] `rollover_stat_tagging="on"` → a fixture with a known rollover transition date (reuse a date
+- [x] `rollover_stat_tagging="on"` → a fixture with a known rollover transition date (reuse a date
       already known from A39's real detected transitions, or a constructed fixture date) proves
       bars/trades within the transition window (`transition_date ± 1 trading day`, matching A39's
       own window definition) are correctly tagged `is_rollover_window=True`; bars/trades outside
       are `False` (unit-tested).
-- [ ] `"on"` mode adds a tag only — it never excludes, filters, or otherwise changes which trades
+- [x] `"on"` mode adds a tag only — it never excludes, filters, or otherwise changes which trades
       appear in `Position.pairs` or the equity curve (unit-tested: same trade count/prices as
       `"off"`, only the new tag field differs).
-- [ ] The transition-date detection logic is imported/reused from
+- [x] The transition-date detection logic is imported/reused from
       `diagnostics/rollover_exclusion_report.py`, not reimplemented (verify via code read — a
       second independent implementation of the same date-detection logic is a reject).
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`; no back-adjustment/re-splice of the data
       (out of scope, same as A39's own Boundary); no gating of live opens around rollover windows
       (out of scope).
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — this script
       genuinely exists at `diagnostics/run_next_work.ps1`; verify the path carefully before
       claiming otherwise (A44's dev round falsely claimed it was absent).
 
@@ -142,9 +142,25 @@ backtest by default — it only makes the tag available for reporting.
 - 2026-07-13 - Added a proactive note (item 8) suggesting dev record Manual-verification evidence
   up front, after A49 and A51 both needed a second review round solely for this reason.
 
+## Manual verification (symlink-privilege sandbox limitation)
+
+The acceptance commands below were run natively (unsandboxed) on 2026-07-13 and
+passed. If a sandboxed review rerun hits the documented pytest `tmp_path` /
+symlink WinError 5 limitation, rely on these recorded counts instead.
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`  
+  → 547 passed, 4 deselected, 2 warnings in ~30 s.
+- `python tools/sync_check.py`  
+  → PASS (version truth 4.4.0).
+- `python tools/sync_check.py --root examples/czsc_strategy`  
+  → PASS.
+- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight`  
+  → Preflight complete; SimNow unit-test subset 155 passed; backfill plan built.
+
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → design | A52 promoted from the audit remediation roadmap draft after A51 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A52 (continuous-contract data-integrity) started |
+| 2026-07-13 | kimi-code → codex | dev → review | A52 continuous-contract data-integrity implemented |
