@@ -2,7 +2,7 @@
 
 **RESEARCH-ONLY — Diagnostic only, not a trading recommendation.**
 
-Generated: 2026-07-12T14:25:29.813436
+Generated: 2026-07-12T14:44:17.855341
 Window: 2026-04-24 ~ 2026-07-09
 
 ## ATR configuration

@@ -1,6 +1,6 @@
 {
   "disclaimer": "RESEARCH-ONLY — Diagnostic only, not a trading recommendation.",
-  "generated_at": "2026-07-12T14:25:29.813436",
+  "generated_at": "2026-07-12T14:44:17.855341",
   "second_buy_mode": "baseline vs gated vs off",
   "note": "This report is evidence only and is not used to select or tune parameters. atr_percentile_floor is NOT adjusted based on this report in-task.",
   "window": {

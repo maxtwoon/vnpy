@@ -91,13 +91,35 @@ def _higher_level_filter_signals(direction: str = "long", strict: bool = True) -
     }
 
 
-def _resonance_holds(signals_dict: dict, direction: str = "long") -> bool:
+def _resonance_holds(
+    signals_dict: dict,
+    direction: str = "long",
+    force_resonance: bool = False,
+) -> bool:
     """Check whether the configured higher-level resonance filter is satisfied.
 
     Reuses the same signal strings produced by ``_higher_level_filter_signals``
     so P5/A44 logic is not duplicated.
+
+    When ``force_resonance`` is True, the ``resonance_filter="off"`` fallback to
+    the legacy daily trend filter is bypassed and the actual P5 resonance
+    condition is enforced: daily level (and 4H when configured as ``daily_4h``).
     """
-    filters = _higher_level_filter_signals(direction=direction, strict=True)
+    if force_resonance:
+        resonance_filter = STRATEGY_CONFIG.get("resonance_filter", "off")
+        if resonance_filter == "daily_4h":
+            freq_4h = STRATEGY_CONFIG.get("resonance_freq_4h", "240分钟")
+            daily = _resonance_filter_signals(direction=direction, level="日线")
+            h4 = _resonance_filter_signals(direction=direction, level=freq_4h)
+            filters = {
+                "signals_all": daily["signals_all"] + h4["signals_all"],
+                "signals_not": daily["signals_not"] + h4["signals_not"],
+            }
+        else:
+            filters = _resonance_filter_signals(direction=direction, level="日线")
+    else:
+        filters = _higher_level_filter_signals(direction=direction, strict=True)
+
     for s in filters.get("signals_all", []):
         if not Signal(s).is_match(signals_dict):
             return False
@@ -338,8 +360,8 @@ def _research_second_buy_allowed(
         if not (div_val.startswith("疑似") or div_val.startswith("确认")):
             return False
 
-        # P5 resonance filter.
-        if not _resonance_holds(signals_dict, direction="long"):
+        # P5 resonance filter (actual resonance, never the legacy daily filter fallback).
+        if not _resonance_holds(signals_dict, direction="long", force_resonance=True):
             return False
 
         # ATR expansion (not in chop).

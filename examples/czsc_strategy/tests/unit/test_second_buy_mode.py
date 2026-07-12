@@ -93,9 +93,28 @@ def test_gated_requires_atr_expansion(all_hold_signals):
 
 
 def test_gated_opens_when_all_conditions_hold(all_hold_signals):
+    # In gated mode the actual P5 resonance condition is enforced even when the
+    # general resonance_filter is off; all_hold_signals satisfies that condition.
     STRATEGY_CONFIG["second_buy_mode"] = "gated"
     STRATEGY_CONFIG["resonance_filter"] = "off"
     assert _research_second_buy_allowed("TEST", {"price": 100}, 101, all_hold_signals, "30分钟")
+
+
+def test_gated_requires_actual_p5_resonance_when_filter_off(all_hold_signals):
+    # Legacy daily filter allows 无中枢; actual P5 resonance does not.
+    STRATEGY_CONFIG["second_buy_mode"] = "gated"
+    STRATEGY_CONFIG["resonance_filter"] = "off"
+    signals = dict(all_hold_signals)
+    signals["日线_D1ZS_位置V260615"] = "无中枢_任意_任意_0"
+    assert not _research_second_buy_allowed("TEST", {"price": 100}, 101, signals, "30分钟")
+
+
+def test_gated_requires_actual_p5_resonance_direction_when_filter_off(all_hold_signals):
+    STRATEGY_CONFIG["second_buy_mode"] = "gated"
+    STRATEGY_CONFIG["resonance_filter"] = "off"
+    signals = dict(all_hold_signals)
+    signals["日线_D1BI_方向V260615"] = "向下_任意_任意_50"
+    assert not _research_second_buy_allowed("TEST", {"price": 100}, 101, signals, "30分钟")
 
 
 def test_gated_with_daily_4h_resonance(all_hold_signals):

@@ -1,19 +1,19 @@
 ---
 task: A45 P6 - 二买 Removal / Hard-Gate + ATR Chop Filter
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -59,29 +59,29 @@ entry win-rate bucketed by ATR percentile, report only, not for in-task selectio
 
 ## Acceptance Criteria
 
-- [ ] `second_buy_mode="baseline"` and `atr_chop_filter="off"` (both defaults) -> equity curve
+- [x] `second_buy_mode="baseline"` and `atr_chop_filter="off"` (both defaults) -> equity curve
       and every `Position.pairs` entry byte-identical to current (full-`BacktestEngine`
       equivalence test with a git-tracked golden snapshot — follow the A44 pattern
       `test_resonance_filter_off_equivalence.py` established after review required it; do not
       ship with only a signal-filter unit check).
-- [ ] `second_buy_mode="off"` -> zero new 二买 opens across a replay; existing 二买 positions
+- [x] `second_buy_mode="off"` -> zero new 二买 opens across a replay; existing 二买 positions
       still receive exit/risk-control signals (unit-tested; do not delete the 二买 code path).
-- [ ] `second_buy_mode="gated"` -> a 二买 signal without MACD divergence (P4/A43), OR without P5
+- [x] `second_buy_mode="gated"` -> a 二买 signal without MACD divergence (P4/A43), OR without P5
       resonance (A44), OR while ATR indicates chop, does NOT open (unit-tested for each missing
       condition individually); with all three conditions satisfied it opens.
-- [ ] `atr_chop_filter="on"` -> an open is blocked when the current ATR percentile <
+- [x] `atr_chop_filter="on"` -> an open is blocked when the current ATR percentile <
       `atr_percentile_floor` (unit-tested); allowed above the floor. Applies to every
       sub-strategy's open path, not just 二买.
-- [ ] `second_buy_and_atr_report.py` generated (report only, RESEARCH-ONLY banner
+- [x] `second_buy_and_atr_report.py` generated (report only, RESEARCH-ONLY banner
       `Diagnostic only, not a trading recommendation.`); `atr_percentile_floor` is NOT tuned via
       the report in-task.
-- [ ] No threshold tuning via backtest/capture-data selection; no pre-2026-04-24 data used for
+- [x] No threshold tuning via backtest/capture-data selection; no pre-2026-04-24 data used for
       any parameter choice; no SimNow order/cancel/send path changed; no `GOAL PASSED`; the 二买
       code path is kept behind `"off"`, not deleted; ATR filter gates opens only, never exits.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — verify this script
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes — verify this script
       genuinely exists at `diagnostics/run_next_work.ps1` before claiming otherwise (A44's dev
       round falsely claimed it was absent; it is not).
 
@@ -187,3 +187,4 @@ table. Replaced the placeholder report files with this real-data version before 
 | 2026-07-12 | claude-code → kimi-code | design → dev | A45 (P6 二买 hard-gate + ATR chop filter) started; re-verified no drift from A43/A44 |
 | 2026-07-12 | kimi-code → codex | dev → review | A45 (P6) second-buy removal/hard-gate + ATR chop filter implemented |
 | 2026-07-12 | codex → kimi-code | review → dev | 打回: gated second-buy opens without required P5 resonance |
+| 2026-07-12 | kimi-code → codex | dev → review | A45 (P6) second-buy removal/hard-gate + ATR chop filter implemented; gated mode now requires actual P5 resonance regardless of resonance_filter setting |
