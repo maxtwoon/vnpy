@@ -1,19 +1,19 @@
 ---
 task: A48 P8b - Portfolio Risk (Cross-Symbol Coordinator)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-12
 deliverables:
   - HANDOFF.md
   - docs/design/a38-phase-contracts-p2-p8.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -194,6 +194,45 @@ reviewer's judgment rather than fixing myself (dev's job per role division):
     `python tools/handoff.py next --actor kimi-code --summary "A48 (P8b) portfolio risk coordinator implemented"`.
     Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Review Reject Notes
+
+Codex review on 2026-07-12 rejects A48 back to dev. The submitted unit tests pass, but they only
+exercise `PortfolioCoordinator` in isolation and miss failures in the actual `PortfolioEngine`
+coordinated replay.
+
+Required fixes:
+
+1. **Daily-loss-limit flatten is not applied to the coordinated replay.** In
+   `chan_strategy/portfolio_engine.py`, `PortfolioCoordinator.on_bar()` can call
+   `_flatten_all()` and records `flat_events`, but `PortfolioEngine._build_on_report()` keeps its
+   own separate `open_positions` dict. Those positions are not removed when the coordinator
+   flattens, so coordinated equity continues carrying the trade until the original per-symbol
+   close event, and `pairs` still shows the original close reason instead of
+   `portfolio_daily_loss_limit`. Repro: a position opened at 2024-01-01 15:00, day-2 09:00 equity
+   at -6% with `daily_loss_limit_pct=0.05` produced `loss_limit_triggers=1` and `flat_events=1`,
+   but `pairs[0].close_dt` remained 2024-01-02 15:00 and `gross_exposure` stayed non-zero until
+   the original close. Acceptance requires flatten all open positions and block new opens for the
+   rest of the day in the actual portfolio report, not just in coordinator-local evidence.
+2. **Short-side portfolio PnL and exposure signs are wrong.** `_build_on_report()` computes
+   unrealized PnL as `(price - open_price) / open_price` and stores all weights as positive. A
+   synthetic `一卖空头` trade from 100 to 90 reported equity 990,000 at the interim bar instead of
+   1,010,000, and `net_exposure` was `+0.1` instead of negative. The replay must preserve trade
+   direction for short strategies: realized/unrealized PnL, net exposure, and flatten accounting
+   must use signed exposure while cluster gross exposure still uses absolute exposure.
+3. **The public convenience entry point is broken.** `chan_strategy/portfolio_engine.py`
+   `run_portfolio_backtest()` passes `table_name=...` to `PortfolioEngine(...)`, but the
+   constructor accepts `table_names`, so the entry point immediately raises
+   `TypeError: PortfolioEngine.__init__() got an unexpected keyword argument 'table_name'`.
+4. **BacktestEngine coordinator wiring references methods that the coordinator does not provide.**
+   `BacktestEngine.run(..., coordinator=...)` calls `get_weights()`, `can_open()`, and
+   `update_after_bar()`, but `PortfolioCoordinator` exposes `allow_open()`, `record_open()`,
+   `record_close()`, and `on_bar()`. Either remove the dead/broken wiring if A48's chosen design
+   is pure post-run replay, or implement and test the wiring end-to-end.
+5. Add regression tests that hit `PortfolioEngine._build_on_report()` (or the public
+   `run_portfolio_backtest()` path), not only `PortfolioCoordinator`: one for daily-loss flatten
+   producing a loss-limit close and zero post-trigger gross exposure, one for short trade signed
+   PnL/net exposure, and one for the public entry point construction.
+
 ## Decision Log
 
 - 2026-07-12 - P8b promoted from the pre-authored phase-contracts draft to an active HANDOFF task
@@ -215,3 +254,4 @@ reviewer's judgment rather than fixing myself (dev's job per role division):
 | 2026-07-12 | codex → claude-code | done → design | P8b promoted from phase-contracts draft, confirmed A48 under the established renumbering |
 | 2026-07-12 | claude-code → kimi-code | design → dev | A48 (P8b portfolio risk) started; re-verified no drift from A43-A47 |
 | 2026-07-12 | kimi-code → codex | dev → review | A48 (P8b) portfolio risk coordinator implemented |
+| 2026-07-12 | codex → kimi-code | review → dev | 打回: A48 portfolio replay does not apply daily-loss flatten and mis-signs short PnL/exposure |
