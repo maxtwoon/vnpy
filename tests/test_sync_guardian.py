@@ -435,7 +435,12 @@ def test_diagnostics_banner_skip_pattern_honors_config(fresh_repo: Path) -> None
 
 
 def test_diagnostics_banner_archive_exempt_honors_config(fresh_repo: Path) -> None:
-    """Files under diagnostics/archive/ must be skippable via exempt_dirs config."""
+    """Files under diagnostics/archive/ must be skippable via exempt_dirs config.
+
+    The same unbannered archived file should fail when exempt_dirs is absent or
+    changed, and pass when diagnostics/archive is configured. This proves the
+    exemption is the active reason the file is skipped, not a glob accident.
+    """
     repo = fresh_repo
     _write_synccheck_yml(
         repo,
@@ -454,6 +459,21 @@ def test_diagnostics_banner_archive_exempt_honors_config(fresh_repo: Path) -> No
 
     result = _sync_check(repo)
     assert result.returncode == 0, result.stderr
+
+    # Remove the exemption; the archived file is now scanned and must fail.
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        diagnostics_banner_check={
+            "dir": "diagnostics",
+            "banner": "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->",
+        },
+    )
+    _commit_all(repo, "remove archive exemption")
+
+    result = _sync_check(repo)
+    assert result.returncode != 0
+    assert "HANDOFF-A32-archived-2026-07-11.md" in result.stderr
 
 
 def _setup_project_version_freshness_repo(repo: Path) -> None:

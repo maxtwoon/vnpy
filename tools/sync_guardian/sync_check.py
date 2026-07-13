@@ -641,7 +641,7 @@ def _check_diagnostics_banner(root: Path, cfg: dict[str, Any], errors: list[str]
         if not d.exists():
             errors.append(f"diagnostics_banner_check: directory not found {rel}")
             continue
-        for path in sorted(d.glob("*.md")):
+        for path in sorted(d.rglob("*.md")):
             if _is_path_exempt(path, root, skip_patterns, exempt_dirs):
                 continue
             text = path.read_text(encoding="utf-8")

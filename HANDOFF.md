@@ -1,19 +1,19 @@
 ---
 task: A60 - Project-Level VERSION/CHANGELOG Gate + Banner-Exemption Config Cleanup
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -194,6 +194,14 @@ All acceptance commands run natively in the dev environment on 2026-07-14:
   subsection under 0.2.2, clearly stating that no VERSION bump occurred when they originally shipped.  # synccheck:ignore
 - 2026-07-14 - `sync_check.py` typing/style modernised in passing to satisfy `ruff check` on the
   changed file (no functional change).
+- 2026-07-14 - codex review rejection round-2 fixes (kimi-code):
+  - Changed `_check_diagnostics_banner` diagnostics scan from `d.glob("*.md")` to
+    `d.rglob("*.md")` so nested files (including `diagnostics/archive/`) are actually visited,
+    and `_is_path_exempt` is applied to each candidate. This makes `exempt_dirs` the active
+    reason archived files are skipped, not an accidental non-recursive glob.
+  - Strengthened `tests/test_sync_guardian.py::test_diagnostics_banner_archive_exempt_honors_config`
+    to prove the exemption is active: the same unbannered archived file passes when
+    `exempt_dirs` contains `diagnostics/archive`, and fails when the exemption is removed.
 
 ## 交接历史
 
@@ -202,3 +210,4 @@ All acceptance commands run natively in the dev environment on 2026-07-14:
 | 2026-07-14 | codex → claude-code | done → dev | A60 (project-level VERSION/CHANGELOG gate + banner-exemption cleanup) promoted from post-remediation audit roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A60 project-level VERSION/CHANGELOG gate + banner-exemption cleanup implemented |
 | 2026-07-14 | codex → kimi-code | review → dev | 打回: Archive banner exemption is not actually exercised because diagnostics scan remains non-recursive |
+| 2026-07-14 | kimi-code → codex | dev → review | A60 project-level VERSION/CHANGELOG gate + banner-exemption cleanup implemented |
