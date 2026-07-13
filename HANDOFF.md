@@ -1,240 +1,164 @@
 ---
-task: A59 - Limit-Band Basis Accuracy
+task: A60 - Project-Level VERSION/CHANGELOG Gate + Banner-Exemption Config Cleanup
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Fifth task of the 2026-07-13 post-remediation re-audit roadmap
-(`docs/design/a55-post-remediation-audit-roadmap.md` §"A59"), promoted immediately after A58
-reached `done` (codex accepted on the first review round).
+Sixth and final task of the 2026-07-13 post-remediation re-audit roadmap
+(`docs/design/a55-post-remediation-audit-roadmap.md` §"A60"), promoted immediately after A59
+reached `done` (codex accepted the round-2 fix directly). Completing this task finishes the entire
+A55-A60 roadmap.
 
-`docs/review/ai_trading_review_2026-07-13.md` Finding 🟠#6 (re-verified 2026-07-14 by claude-code):
-three undocumented simplifications in the A50/A51 limit-band computation, plus one directional gap:
+`docs/review/ai_trading_review_2026-07-13.md` Findings 🟢#8/#9 (re-verified 2026-07-14 by
+claude-code against current code):
 
-1. **Night-session pollution**: `_daily_prev_close_map`'s `_bar_date`
-   (`chan_strategy/limit_config.py:58-86`) buckets bars by *calendar* date. RB/SC's 21:00-23:00
-   night-session bars belong to the *next trading day* per exchange convention, but get bucketed
-   into the current calendar day — "previous close" can self-referentially include same-evaluation
-   -day night-session bars. A39 already solved exactly this class of problem
-   (`daily_agg="trading_calendar"`/`night_session_start_hour`); reuse it, do not reimplement.
-2. **Settlement-vs-close basis**: `SYMBOL_LIMIT_CONFIG`'s cited sources say "previous trading day's
-   **settlement price** ± x%"; the implementation uses the last bar's close. Acknowledged in
-   methodology text but never quantified.
-3. **Temporary widening windows undocumented**: AP888/RB888 had exchange-notice limit widenings
-   inside the A50/A51 measurement window — **see the "IMPORTANT — citation caveat" note below
-   before hardcoding these dates.**
-4. **No directional distinction**: `_bar_at_limit` (`limit_config.py:94-105`) returns a single
-   `at_limit` bool without distinguishing upper-touch (limit-up) from lower-touch (limit-down), so
-   a long open on a limit-down bar (genuinely unexecutable in that direction) and a long open on a
-   limit-up bar get identical tags.
+1. **VERSION/CHANGELOG drift already relapsed.** `examples/czsc_strategy/CHANGELOG.md` currently has entries for `0.1.0` (A31/sync-guardian init), `0.2.0` (A51), and `0.2.1` (A56) — confirmed by reading the file directly. synccheck:ignore
+   **A52 (continuous-contract data-integrity), A53 (config/signal
+   single-source-of-truth cleanup), and A54 (report-disclaimer hygiene + sync_check gate) have NO
+   CHANGELOG entry and never bumped VERSION**, despite each being an externally-visible,
+   already-`done` change (confirmed via `git log --grep` — all three fully shipped and reviewed).
+   Root cause: the root `.synccheck.yml` only guards `vnpy/__init__.py`'s version string; the
+   project-level `examples/czsc_strategy/VERSION` has no gate requiring it to move when the
+   project's own config surface changes.
+2. **Banner-exemption list is half-declared, half-hardcoded.**
+   `tools/sync_guardian/sync_check.py:626`'s `_check_diagnostics_banner` function contains a
+   hardcoded `if path.name.startswith("audit_issue_diagnostics_"): continue` — confirmed present at
+   that exact line — bypassing the config-driven `skip` list entirely for this one prefix pattern.
+   Separately, `diagnostics_banner_check`'s scan uses a non-recursive `d.glob("*.md")`
+   (`sync_check.py:623`), so `diagnostics/archive/` (which DOES exist — confirmed via `ls`, contains
+   `HANDOFF-A32-archived-2026-07-11.md`, confirmed missing the RESEARCH-ONLY banner) is silently
+   never scanned. Both the root and child `.synccheck.yml` already declare `archive_dir:
+   diagnostics/archive/` for a *different* purpose (informational-only WARN if the dir is missing)
+   — its files being outside the banner scan is currently an accident of the non-recursive glob,
+   not a deliberate, documented decision either way.
 
-**IMPORTANT — citation caveat, read before touching the widening-window registry:** the specific
-dates/percentages ("RB888 to 5% effective 2026-05-19, AP888 to 8% effective 2026-05-06") come from
-`git show 4b228834:HANDOFF.md` (A50's own completion record) — claude-code's live web search
-*during that earlier task*, worded with **"presumably"** ("both presumably following limit-hit
-days, per the standard CZCE/SHFE escalation mechanism"). **This is NOT a verified primary-source
-exchange-notice citation** — it is a plausible secondary observation from a web search, not a
-document number. Do NOT invent or fabricate a specific exchange announcement number to make the
-registry entry look more authoritative than it is. If you (kimi-code) have no way to independently
-re-verify this against a primary source in this session, register the entry with an honest
-citation along the lines of: `"source": "claude-code 2026-07-13 web search during A50 review (see
-HANDOFF commit 4b228834); not independently verified against a primary exchange notice — flagged
-for human confirmation"`. This is more honest than a confident-sounding fake citation and satisfies
-the "every entry must carry a citation" bar by being truthful about the citation's actual strength.
-
-Full contract: `docs/design/a55-post-remediation-audit-roadmap.md` §"A59 — Limit-Band Basis
-Accuracy" (the authoritative design — this HANDOFF summarizes it).
+Full contract: `docs/design/a55-post-remediation-audit-roadmap.md` §"A60 — Project-Level
+VERSION/CHANGELOG Gate + Banner-Exemption Config Cleanup" (the authoritative design — this HANDOFF
+summarizes it).
 
 ## Goal
 
-1. **Reuse A39's trading-calendar logic, do not reimplement.** Two existing helpers already solve
-   "map a bar timestamp to its trading day": `data_adapter.py`'s `_trading_day_for_bar` (the
-   original A39 implementation — more rigorous, needs a `trading_dates` set + a `notes` list) and
-   `portfolio_engine.py`'s `_trading_day` (A48's lighter reuse — just `dt.date() + 1` when
-   `dt.hour >= night_session_start_hour`, no `trading_dates` set needed). **Prefer
-   `portfolio_engine.py`'s `_trading_day`** for `_daily_prev_close_map`'s bucketing: it needs no new
-   inputs `limit_config.py` doesn't already have (bars only, no separate trading-dates set), and its
-   simpler night-session-only rule is what this bug actually needs (bars fed into
-   `_daily_prev_close_map` are already trading-day data, not raw calendar data with gaps to skip).
-   Import it explicitly; do not copy its logic into a third implementation.
-2. **Add a cited, dated temporary-widening-window registry** to `SYMBOL_LIMIT_CONFIG` for AP888 and
-   RB888, per the citation caveat above. Structure: a list of `{start_date, end_date, limit_pct,
-   source}` overrides per symbol, falling back to the steady-state percentage outside any
-   registered window.
-3. **Make `_bar_at_limit` return a directional result** (e.g. `(touched_upper, touched_lower)`
-   instead of one bool), and have `backtest_engine.py`'s entry/exit tagging consume the direction
-   that matters for that side of the trade. Decide and document the exact semantic during this
-   task (e.g., for a long position, a limit-up touch on entry is the adverse/unexecutable direction
-   for opening favorably, while a limit-down touch is the more typical "can't get filled" case —
-   work out which direction each of entry/exit for long/short actually cares about; this is a
-   judgment call, document your reasoning in the Decision Log).
-4. **Quantify the settlement-vs-close gap** for the 5 default symbols — a short, read-only
-   measurement (not a full settlement-price data-sourcing project). Report the finding even if the
-   conclusion is "gap is small/immaterial" — that must be a measured conclusion, not an assumption.
+1. **Add a new `sync_check.py` check (or extend the version-consistency check)** requiring
+   `examples/czsc_strategy/VERSION`/`CHANGELOG.md` to be touched whenever a commit modifies
+   `chan_strategy/config.py`'s top-level `STRATEGY_CONFIG`/`BACKTEST_CONFIG` keys — mirroring the
+   spirit of `_check_deliverables_are_tracked_and_fresh` (`sync_check.py:323`, the A42 pattern: git
+   log/diff based, not a static snapshot check). Read that function in full before designing the
+   new heuristic; do not invent an unrelated mechanism. Exact trigger detail (e.g. compare the
+   commit's diff of `config.py` against whether `VERSION`/`CHANGELOG.md` appear in the same
+   commit's changed-files list) is this task's own design refinement — finalize and document your
+   chosen heuristic in the Decision Log before implementing.
+2. **Backfill CHANGELOG entries for A52/A53/A54.** Since none of the three ever bumped VERSION at
+   the time, do not retroactively invent a fake intermediate version number for each — add the
+   three missing entries as a historical backfill note (e.g. under a dated addendum or clearly
+   marked as "retroactively documented by A60; VERSION was not bumped at the time these shipped").
+   The point is closing the documentation gap honestly, not rewriting history to look like it was
+   done right the first time.
+3. **Move the `audit_issue_diagnostics_*` exemption into `.synccheck.yml`'s `skip` config** as a
+   glob/prefix pattern (confirm whether `_check_diagnostics_banner`'s `skip_names` set supports
+   patterns — currently it's an exact-match `set[str]`, so you'll need to extend the matching logic
+   minimally to support at least prefix or glob patterns, not just exact filenames). Remove the
+   hardcoded `startswith` check from the checker once the config-driven version works.
+4. **Resolve the `diagnostics/archive/` scanning ambiguity — pick one, document it:** either extend
+   the banner-check glob to recurse into `archive/` and backfill the banner into
+   `HANDOFF-A32-archived-2026-07-11.md`, or explicitly declare `archive/` as an exempt directory in
+   `.synccheck.yml` with a clear reason (e.g. "archived historical HANDOFF snapshots, not live
+   diagnostic reports, exempt by design"). Do not leave it as an unstated glob accident either way.
 
 ## Acceptance Criteria
 
-- [x] A fixture with a night-session bar proves `_daily_prev_close_map` no longer includes
-      same-evaluation-day night-session data in "previous close" (unit-tested, mirroring A39's own
-      night-session test pattern in `test_data_adapter.py`).
-- [x] AP888 and RB888's known temporary-widening windows are registered with the honest citation
-      described above; a fixture proves a date inside the window uses the overridden percentage, a
-      date outside uses the steady-state percentage.
-- [x] `_bar_at_limit`'s directional result is unit-tested for both upper-touch and lower-touch
-      cases, and the entry/exit consumption logic correctly maps direction to trade side (documented
-      reasoning in the Decision Log for which direction matters for which side).
-- [x] The settlement-vs-close gap for the 5 default symbols is measured and reported (even a "gap is
-      immaterial" conclusion must show the actual measurement, not just assert it).
-- [x] `limit_halt_model="off"` equivalence test (`test_limit_halt_off_equivalence.py`) still passes
-      byte-identical.
-- [x] No threshold tuning; no pre-2026-04-24 data used for any NEW parameter choice (the widening
-      windows are historical facts being registered, not tuned parameters); no SimNow order/cancel/
-      send path changed; no `GOAL PASSED`.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] A new `sync_check.py` check fails (non-zero exit, clear message) for a fixture commit that
+      changes `chan_strategy/config.py`'s top-level keys without touching `VERSION`/`CHANGELOG.md`;
+      passes when both are touched together (unit-tested with real teeth — a fixture test that
+      actually exercises failure, mirroring A42's/A54's own fixture-test pattern in
+      `tests/test_sync_guardian.py`).
+- [ ] `examples/czsc_strategy/VERSION`/`CHANGELOG.md` backfilled with entries for A52 (rollover
+      tagging), A53 (5 config keys + equity_mode resolution), A54 (sizing_caveat + banner gate) —
+      honestly marked as a retroactive backfill, not a fabricated original bump.
+- [ ] `audit_issue_diagnostics_*` exemption is declared in `.synccheck.yml`'s `skip` config (as a
+      pattern, not a hardcoded string in the checker), verified by a test that changes the config
+      pattern and confirms the checker honors the new value from config, not from hardcoded logic.
+- [ ] `diagnostics/archive/` is either included in the banner-check scan (recursive glob, with the
+      one currently-missing file's banner backfilled) or explicitly, deliberately declared exempt in
+      config with a documented reason — not silently unscanned via glob accident.
+- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send paths touched; no
+      `GOAL PASSED`; does not fork a second copy of `sync_check.py`'s logic.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (and, if a new
+      `tools/`-level test file/fixture is added for `sync_check.py` itself, that suite passes too —
+      check whether `tests/test_sync_guardian.py` already exists at the repo root before creating a
+      new one).
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a55-post-remediation-audit-roadmap.md` §"A59". Fifth task of the
-   A55-A60 roadmap triaging `docs/review/ai_trading_review_2026-07-13.md`'s finding #6 (🟠 medium).
-2. **Scope:** `chan_strategy/limit_config.py` (`_daily_prev_close_map` bucketing,
-   `SYMBOL_LIMIT_CONFIG` widening registry, `_bar_at_limit` directional return) and
-   `chan_strategy/backtest_engine.py` (consume the directional result correctly at the two call
-   sites added by A57, around line 314-326). Do not touch `sizing_model`, `portfolio_engine.py`, or
-   anything from A55-A58's already-`done` scope.
-3. **Read the citation caveat in Background above carefully before writing the widening registry.**
-   Do not invent a fake exchange-notice document number. Honesty about the citation's actual
-   strength (a secondary web-search observation, not a primary document) is required, not optional.
-4. **Test file:** `tests/unit/test_limit_halt_aware.py` already exists for limit/halt tagging tests;
-   consider whether the night-session/trading-calendar test fits better alongside
-   `test_data_adapter.py`'s existing night-session tests (mirror that pattern) since it's really
-   testing `_daily_prev_close_map`'s date bucketing, not the tagging logic itself. Use your
-   judgment; do not create a third duplicate test file for the same concern.
-5. **Settlement-vs-close measurement**: this can be a small standalone script under `diagnostics/`
-   (with the RESEARCH-ONLY banner — reuse `declassify_historical_reports.build_banner()`, the
-   A56-fixed pattern, if you add a new report generator) or a one-off computation reported directly
-   in this HANDOFF's Decision Log if a full report script feels like overkill for "measure one gap
-   number for 5 symbols." Your call, but the measurement must be real and reproducible, not a guess.
-6. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection; no
-   pre-2026-04-24 data for any NEW parameter choice (the widening dates are historical facts being
-   registered, not tuned); no SimNow order/cancel/send paths touched; no `GOAL PASSED`;
-   `limit_halt_model="off"`'s existing equivalence snapshot must stay byte-identical; do not
-   fabricate a citation.
-7. **Include a Manual-verification block with natively-run counts, and run `ruff check`
+1. **Entry point:** `docs/design/a55-post-remediation-audit-roadmap.md` §"A60". Sixth and FINAL
+   task of the A55-A60 roadmap — completing this closes out the entire post-remediation re-audit
+   wave.
+2. **Scope:** `tools/sync_guardian/sync_check.py` (new/extended version-freshness check; banner
+   glob/archive resolution; config-driven `audit_issue_diagnostics_*` pattern), `.synccheck.yml`
+   (root) and `examples/czsc_strategy/.synccheck.yml` (new check config; skip pattern),
+   `examples/czsc_strategy/VERSION`/`CHANGELOG.md` (backfill), and a sync-guardian test file (find
+   the existing one first — likely `tests/test_sync_guardian.py` at repo root — do not create a
+   duplicate). Do not touch any `chan_strategy/*.py` trading logic — this is a pure tooling/process
+   task, "No-lookahead & correctness" is explicitly "not applicable" per the design doc.
+3. **Read `_check_deliverables_are_tracked_and_fresh` (`sync_check.py:323-`) in full before
+   designing the new check** — it's the established git-log/diff-based pattern for "did X get
+   touched relative to Y" checks in this codebase; your new check should follow the same spirit
+   (real git history inspection, not a naive current-file-state snapshot).
+4. **`_check_diagnostics_banner`'s exact hardcoded line is `sync_check.py:626`**
+   (`if path.name.startswith("audit_issue_diagnostics_"): continue`) — confirmed present at this
+   line as of 2026-07-14; verify it hasn't drifted before editing.
+5. **`diagnostics/archive/` already exists** with one file
+   (`HANDOFF-A32-archived-2026-07-11.md`, confirmed missing the banner) — your choice of "recurse
+   and backfill" vs. "explicitly exempt" should be informed by what that file actually is (an
+   archived historical HANDOFF snapshot, not a live research/diagnostic report — this leans toward
+   "explicitly exempt," but use your own judgment and document the reasoning either way).
+6. **CHANGELOG backfill wording matters** — do not silently rewrite the `0.2.0`/`0.2.1` sections to pretend A52-A54 happened at those version numbers. synccheck:ignore
+   Add clearly-dated, clearly-marked backfill
+   entries (e.g. their own subsection noting "retroactively documented 2026-07-14 by A60; no VERSION
+   bump occurred when these originally shipped in 2026-07-13").
+7. **Guardrails (reject-on-violation):** no threshold tuning; no pre-2026-04-24 data; no SimNow
+   paths; no `GOAL PASSED`; no forked/duplicated `sync_check.py` logic; the new version-freshness
+   check must have real teeth (a fixture proving it actually fails under the right condition), not
+   just a docstring claiming it works.
+8. **Include a Manual-verification block with natively-run counts, and run `ruff check`
    proactively before finishing.**
-8. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A59 limit-band basis accuracy implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
+9. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A60 project-level VERSION/CHANGELOG gate + banner-exemption cleanup implemented"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`. **This is the last task in the
+   roadmap** — after this reaches `done`, the entire A55-A60 wave is complete.
 
 ## Decision Log
 
-- 2026-07-14 - A59 promoted from `docs/design/a55-post-remediation-audit-roadmap.md`'s draft to an
-  active HANDOFF task, started immediately after A58 reached `done` (codex accepted on the first
-  review round).
-- 2026-07-14 - claude-code re-verified `limit_config.py`'s current implementation matches the
-  audit's description (line numbers shifted slightly since A57's edits but structurally unchanged).
-  Found two existing "map bar to trading day" helpers (`data_adapter.py`'s
-  `_trading_day_for_bar`, `portfolio_engine.py`'s lighter `_trading_day`) and directed dev to prefer
-  the latter since it needs no new inputs. Traced the temporary-widening-window dates/percentages
-  to A50's own completion record (`git show 4b228834:HANDOFF.md`) and found they are a web-search
-  observation worded with "presumably," NOT a verified primary-source exchange notice — flagged
-  this explicitly so dev does not fabricate a more confident-looking citation than the evidence
-  actually supports.
-- 2026-07-14 - kimi-code reused `portfolio_engine._trading_day` inside
-  `limit_config._daily_prev_close_map` (local import to break the backtest_engine <->
-  portfolio_engine cycle) so night-session bars are bucketed by exchange trading day, fixing the
-  same-evaluation-day night-session pollution.
-- 2026-07-14 - kimi-code added `temporary_widening_windows` entries for AP888 (2026-05-06 → 8%)
-  and RB888 (2026-05-19 → 5%) with the honest secondary-source citation required by the caveat
-  above. `_limit_pct_for_date` selects the override when a bar's trading day falls inside the
-  registered window and falls back to the steady-state percentage otherwise.
-- 2026-07-14 - kimi-code changed `_bar_at_limit` to return `(touched_upper, touched_lower, upper,
-  lower)`. The entry/exit consumption maps the touch that matters for each side:
-  * Long entry: upper touch is adverse (cannot buy favorably at limit-up).
-  * Short entry: lower touch is adverse (cannot sell favorably at limit-down).
-  * Long exit: lower touch is adverse (cannot sell to close at limit-down).
-  * Short exit: upper touch is adverse (cannot buy to cover at limit-up).
-  `positions.py` now interprets the `(upper, lower)` tuple per side; legacy callers that pass a
-  plain bool still work unchanged.
-- 2026-07-14 - Settlement-vs-close gap was measured with the post-2026-04-24 window
-  (2026-05-01 ~ 2026-07-13) using a last-30-minute VWAP proxy for settlement (the database has no
-  official settlement column). Mean absolute gaps were well under 0.13% for all five symbols and
-  ≤50 bp on every observed day, so the gap is immaterial under this proxy. A definitive
-  primary-source measurement would require an official settlement-price field.
-
-## Manual Verification
-
-```text
-python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
-586 passed, 4 deselected in 31.46s
-
-ruff check on A59-changed files (limit_config.py, backtest_engine.py,
-test_limit_halt_aware.py, test_limit_halt_exposure_report.py,
-limit_halt_exposure_report.py, settlement_close_gap_report.py): pass
-
-python tools/sync_check.py
-[SYNC-CHECK] PASS: 版本与文档一致。
-
-python tools/sync_check.py --root examples/czsc_strategy
-[SYNC-CHECK] PASS: 版本与文档一致。
-
-diagnostics\run_next_work.ps1 -Preflight
-==> Preflight complete; live SimNow capture was not requested
-```
-
-## Round 2 fixes (claude-code, 2026-07-14, before triggering review)
-
-Independent due-diligence found two real gaps in kimi-code's otherwise solid implementation, both
-fixed in-line rather than sent back for a reject round (small, mechanical, clearly-scoped fixes):
-
-1. **`limit_halt_exposure_report.py` never actually applied the new time-varying limit
-   percentage.** `_bar_at_limit`'s directional upgrade and `_limit_pct_for_date`'s widening-window
-   lookup were both correctly added to `limit_config.py`, and `backtest_engine.py`'s live trading
-   path correctly calls `_limit_pct_for_date` per bar — but the diagnostic report script
-   (`_run_symbol`/`_overall_metrics`/`_compute_trade_diagnostics`) still read a single fixed
-   `limit_cfg.get("limit_pct")` once per symbol and used it for every trade regardless of date, so
-   the widening windows this task exists to register would still have produced the exact
-   false-positive touch tags the original audit finding described — the "corrected basis" the
-   design doc calls for was not actually reaching the report's output. Fixed by threading `symbol`
-   through those three functions instead of a fixed `limit_pct`, and calling
-   `_limit_pct_for_date(symbol, entry_date)`/`(symbol, exit_date)` per trade. Also updated the
-   stale `limit_note` text that claimed widening exceptions were "not applied here" (no longer
-   true). One existing test (`test_compute_trade_diagnostics_reconciles_counts`) called the old
-   `(..., limit_pct: float)` signature with a bare `0.05` — updated to call with `"AP888"` (whose
-   steady-state percentage is 0.05 and whose registered widening window doesn't cover the test's
-   2024 dates, so it still exercises the intended fallback path). Full suite re-run clean after
-   this fix: see Manual Verification above (586 passed includes this fix).
-2. **The new `settlement_close_gap_report.py`/`.md` evidence files were never `git add -f`'d.**
-   `examples/czsc_strategy/diagnostics/` is git-ignored; kimi-code's own commit (`27d590c6`) did not
-   force-add these two new files, so they existed on disk but were invisible to `git status` and
-   would not have shipped with the task. Force-added both in the round-2 commit.
-
-No other changes beyond these two fixes; the directional-touch semantics, trading-calendar reuse,
-widening-window registry values, and settlement-gap measurement/conclusion are all kimi-code's own
-work and were independently re-verified as correct, not altered.
+- 2026-07-14 - A60 promoted from `docs/design/a55-post-remediation-audit-roadmap.md`'s draft to an
+  active HANDOFF task, started immediately after A59 reached `done` (codex accepted the round-2 fix
+  directly). This is the final task of the A55-A60 roadmap.
+- 2026-07-14 - claude-code re-verified both findings against current code: confirmed
+  `CHANGELOG.md` has no A52/A53/A54 entries (reads directly from 0.1.0 to 0.2.0 to 0.2.1). synccheck:ignore
+  Confirmed the hardcoded `audit_issue_diagnostics_*` check at `sync_check.py:626`, and confirmed
+  `diagnostics/archive/` exists with one banner-less file that the current non-recursive glob never
+  reaches. All citations verified by direct file reads, not assumed from the design doc's earlier
+  description.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-14 | codex → claude-code | done → dev | A59 (limit-band basis accuracy) promoted from post-remediation audit roadmap; handoff design->dev |
-| 2026-07-14 | kimi-code → codex | dev → review | A59 limit-band basis accuracy implemented |
-| 2026-07-14 | codex → codex | review → done | A59 review passed |
+| 2026-07-14 | codex → claude-code | done → dev | A60 (project-level VERSION/CHANGELOG gate + banner-exemption cleanup) promoted from post-remediation audit roadmap; handoff design->dev |
