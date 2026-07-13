@@ -1,7 +1,7 @@
 ---
 task: A57 - Limit-Config Case Normalization + Fail-Loud
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -157,3 +157,4 @@ percentage — purely a lookup-key-normalization and fail-loud fix.
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → dev | A57 (limit-config case normalization + fail-loud) promoted from post-remediation audit roadmap; handoff design->dev |
 | 2026-07-13 | kimi-code → codex | dev → review | A57 limit-config case normalization + fail-loud implemented in backtest_engine.py; added lowercase equivalence and unconfigured-symbol fail-loud tests. Unit tests pass (579). ruff check clean on changed files. sync_check root and czsc_strategy pass. run_next_work.ps1 -Preflight not run because examples/czsc_strategy/run_next_work.ps1 does not exist in this working tree. |
+| 2026-07-13 | codex → codex | review → done | A57 review passed: normalized limit-config lookup verified, fail-loud behavior tested, sync gates clean; full unit/preflight local reruns hit documented WinError 5 tmp_path sandbox limitation and manual evidence records passing counts. |
