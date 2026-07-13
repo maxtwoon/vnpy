@@ -862,9 +862,11 @@ class Position:
         else:
             gross_pnl = (self.cost - price) / self.cost
 
-        scale_fraction = scale_volume / self.volume
         full_transaction_cost = 2 * self.commission_rate + self.slippage
-        transaction_cost = full_transaction_cost * scale_fraction
+        # Use the undivided per-unit round-trip cost rate, matching _close_long/
+        # _close_short.  The * scale_volume term in pnl_currency already scales
+        # the cost to the portion actually closed (A55 fix).
+        transaction_cost = full_transaction_cost
         pnl = gross_pnl - transaction_cost
         pnl_currency = (
             gross_pnl * self.cost * scale_volume * self.contract_multiplier
@@ -992,6 +994,10 @@ class Position:
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
         self.pairs.append(pair)
+        # Append the closing trade record BEFORE resetting state so the logged
+        # volume reflects the actual closed lots instead of the default 1
+        # (A55 bundled audit-log fix).
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, volume=self.volume, reason=reason))
         self.pos = 0
         self.cost = 0
         self.volume = 1
@@ -1003,7 +1009,6 @@ class Position:
         self._partial_tp_done = False
         self._pending_entry_at_limit = False
         self._pending_exit_at_limit = False
-        self.trades.append(TradeRecord(dt=dt, operate=Operate.LC, price=price, volume=self.volume, reason=reason))
 
     def _open_short(self, price: float, dt: datetime, reason: str = "开空",
                     equity_at_entry: float | None = None,
@@ -1055,6 +1060,10 @@ class Position:
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
         self.pairs.append(pair)
+        # Append the closing trade record BEFORE resetting state so the logged
+        # volume reflects the actual closed lots instead of the default 1
+        # (A55 bundled audit-log fix).
+        self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, volume=self.volume, reason=reason))
         self.pos = 0
         self.cost = 0
         self.volume = 1
@@ -1066,7 +1075,6 @@ class Position:
         self._partial_tp_done = False
         self._pending_entry_at_limit = False
         self._pending_exit_at_limit = False
-        self.trades.append(TradeRecord(dt=dt, operate=Operate.SC, price=price, volume=self.volume, reason=reason))
 
     def evaluate(self) -> dict:
         """评估策略绩效"""
