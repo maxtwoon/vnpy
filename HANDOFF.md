@@ -1,7 +1,7 @@
 ---
 task: A56 - structural_atr Profit-Protection Gap: Decide and Document
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -236,3 +236,4 @@ required an actual fix before advancing. Two real, separate issues were found an
 | 2026-07-13 | kimi-code → codex | dev → review | A56 structural_atr profit-protection gap: Option B (documentation-only) implemented |
 | 2026-07-13 | codex → kimi-code | review → dev | 打回: sync_check gates fail: HANDOFF version drift plus diagnostics banner drift |
 | 2026-07-13 | kimi-code → codex | dev → review | A56 round 2: fixed sync-gate false-positive and root-caused RESEARCH-ONLY banner generator bug per codex's review-1 rejection |
+| 2026-07-13 | codex → codex | review → done | A56 review passed: Option B disclosures verified; sync gates and guardrails clean; pytest/preflight local failures match documented WinError5 sandbox limitation, manual counts accepted |

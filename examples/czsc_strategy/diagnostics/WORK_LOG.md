@@ -3519,3 +3519,120 @@ Results:
 ### Next Action
 
 Wait for the next day-session window and run the formal 1800-second read-only observation command. Nighttime work should use `-SkipKlineUpdate` smoke mode only while `AP888` remains enabled.
+
+## 2026-07-13 Daily Observation Smoke Run
+
+### Goal
+
+Execute the SimNow daily observation workflow in read-only mode, verify today's artifacts, and record the result without sending any orders.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `155 passed`.
+
+Rejected by design:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The wrapper rejected the command because `300 < 30 * 60`.
+- This is the expected formal-observation guard, not a code failure.
+
+Passed smoke rerun:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Generated today's artifacts:
+  - `simnow_export_2026-07-13.json`
+  - `simnow_replay_2026-07-13.json`
+  - `simnow_record_2026-07-13.json`
+  - `simnow_report_2026-07-13.md`
+  - `simnow_run_summary_2026-07-13.json`
+  - `simnow_daily_brief_2026-07-13.md`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=18023`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Capture counts:
+  - `ticks=4`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Required export keys were present: `meta`, `signals`, `trades`, `positions`, `risk`, `raw`, `captured`.
+- Risk threshold rows were present for all expected metrics, but the final threshold status is `unproven` because replay is not ready.
+- Replay DB readiness stayed unavailable for the day:
+  - `consistency.reason=historical_db_lag`
+  - `record.status=pending`
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+- Ledger summary after the run:
+  - `total_rows=12`
+  - `valid_observation_days=8`
+  - `pending_days=3`
+  - `skipped_days=1`
+
+### Notes
+
+- This run was a documented smoke test, not a valid 20-day observation attempt, because `-SkipKlineUpdate` was required to bypass the short-duration formal gate.
+- The day is not a code failure. It remains `pending/historical_db_lag`, which matches the acceptance rules for incomplete replay coverage.
+
+### Next Action
+
+Wait for the next eligible day-session window and run the formal 1800-second read-only observation command. If historical DB coverage still lags the trade date, keep the result as `pending/historical_db_lag` or backfill when coverage becomes available.
+
+## A33 - Delayed Replay Accounting Semantics
+
+### Goal
+
+Make the SimNow observation reports explicit that the workflow remains read-only: SimNow account activity is external contamination/audit evidence, while strategy PnL comes only from local historical DB delayed replay.
+
+### Changes
+
+- `simnow_run_summary.py` now emits `environment_capture`, `account_contamination`, and `delayed_replay` sections.
+- `simnow_daily_brief.py` renders separate sections for SimNow environment capture, account contamination, and delayed DB replay.
+- `AUTOMATION_PROMPT.md` and `ACCEPTANCE.md` document that local historical DB replay is the only strategy PnL source.
+
+### Verification
+
+- Added failing tests first for run summary and daily brief semantics, then implemented the minimal code to pass them.
+- Targeted tests passed for `test_simnow_run_summary.py`, `test_simnow_daily_brief.py`, `test_run_next_work_wrapper.py`, and `test_simnow_docs.py`.
+
+## A34 - Restart 20-Day Observation Window from 2026-07-14
+
+### Goal
+
+Restart the formal SimNow 20-day observation cycle from tomorrow (`2026-07-14`) without deleting prior ledger evidence.
+
+### Changes
+
+- Added `simnow_observation_window.json` with `observation_start_date=2026-07-14`.
+- Added `simnow_observation_window.py` to load the start date and filter ledger rows on or after the configured start.
+- Updated `simnow_ledger_summary.py`, `simnow_daily_monitor.py`, and `simnow_promotion_decision.py` so 20-day progress excludes rows before the configured start date.
+- Updated `simnow_run_summary.py` to use the same start date when it builds the promotion section.
+- Added preflight compilation coverage for `simnow_observation_window.py`.
+
+### Verification
+
+- Added failing tests first for ledger filtering, 20-day report filtering, promotion decision filtering, and wrapper compile coverage.
+- Targeted tests passed for `test_simnow_ledger_summary.py`, `test_simnow_daily_monitor.py`, `test_simnow_run_summary.py`, and `test_run_next_work_wrapper.py`.

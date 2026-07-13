@@ -117,3 +117,13 @@ powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\ru
 ```
 
 短烟测不会满足 K 线覆盖门槛，不应作为 20 日观察台账的有效观察日。
+
+## Delayed Replay Accounting Semantics
+
+- `local historical DB is the only strategy market-data source`.
+- `strategy PnL comes only from delayed replay`.
+- `SimNow account balance/PnL must not be used as strategy PnL`.
+- `environment_capture` reports SimNow connection, subscription, tick, read-only, and workflow-order-safety counts.
+- `account_contamination` reports external SimNow account orders, trades, and active positions. `external SimNow account activity is audit evidence only`; it must never be treated as strategy PnL.
+- `delayed_replay` reports whether the post-close DB replay/virtual ledger is available, whether it passed, and which DB symbols are still lagged.
+- A `matched` or `valid` daily result means delayed replay validation passed under the observation gates; it does not mean real SimNow order/trade reconciliation unless a future phase explicitly enables strategy-generated SimNow orders.

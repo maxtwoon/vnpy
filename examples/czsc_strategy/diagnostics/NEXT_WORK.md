@@ -53,6 +53,7 @@ with 100% consistency between SimNow and replay event surfaces and no risk-thres
 | A29 | DONE | Update automation prompt to run summary + daily brief split | `AUTOMATION_PROMPT.md` now instructs the daily automation agent to treat `simnow_run_summary_YYYY-MM-DD.json` as the single machine-readable source of truth and `simnow_daily_brief_YYYY-MM-DD.md` as the human-readable report source |
 | A31 | DONE | Audit issue diagnostics for H1/H2/H3/H4/M1 | `audit_issue_diagnostics.py` produces `audit_issue_diagnostics_YYYY-MM-DD.json` and `.md`; tests verify H1/H2/H3/H4/M1 detection and no trading calls or sensitive data leaks |
 | A32 | DONE | Wire real project inputs into audit issue diagnostics | `audit_issue_diagnostics.py` now auto-collects cost inputs from `chan_strategy` config/engine/position defaults, stop-loss pairs and signal records from diagnostics JSON, and continuous-contract evidence from diagnostics filenames; M1 and H2 are now quantified on real project data |
+| A34 | DONE | Restart formal 20-day observation window from 2026-07-14 | `simnow_observation_window.json` defines `observation_start_date=2026-07-14`; ledger summary, 20-day report, and promotion decision preserve older ledger rows but exclude them from the new 20-day progress |
 
 ## Commands
 
@@ -122,3 +123,7 @@ python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py -
 - A31 added read-only audit issue diagnostics for H1/H2/H3/H4/M1. The diagnostics are diagnostic-only, do not modify strategy parameters or trading logic, and mark issues as `unknown`/`unavailable` when evidence is missing.
 
 - A32 wired real project inputs into audit issue diagnostics. M1 is now detected from project config introspection, H2 from diagnostics JSON scan, H1 from diagnostics filename/text scan, and H4 from SQLite metadata (with diagnostics file evidence when no DB is provided). Missing evidence still reports `unknown`/`unavailable`.
+
+- A33 upgrades SimNow observation semantics to read-only environment capture plus delayed replay accounting. `simnow_run_summary_YYYY-MM-DD.json` now separates `environment_capture`, `account_contamination`, and `delayed_replay`; strategy PnL comes only from delayed replay, and SimNow account activity is contamination/audit evidence only.
+
+- A34 restarts the formal 20-day observation cycle from `2026-07-14`. Existing ledger rows are preserved as audit evidence, but `simnow_ledger_summary.py`, `simnow_daily_monitor.py`, and `simnow_promotion_decision.py` count only rows on or after the configured `observation_start_date`.

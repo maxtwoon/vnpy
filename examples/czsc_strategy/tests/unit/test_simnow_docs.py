@@ -93,6 +93,23 @@ def test_automation_prompt_includes_required_final_response_fields():
     assert "是否需要用户处理" in text
 
 
+def test_automation_prompt_declares_delayed_replay_as_strategy_pnl_source():
+    text = _prompt_text()
+
+    assert "delayed_replay" in text
+    assert "local historical DB is the only strategy market-data source" in text
+    assert "strategy PnL comes only from delayed replay" in text
+    assert "SimNow account balance/PnL must not be used as strategy PnL" in text
+
+
+def test_automation_prompt_reports_account_contamination_separately():
+    text = _prompt_text()
+
+    assert "account_contamination" in text
+    assert "environment_capture" in text
+    assert "external SimNow account activity is audit evidence only" in text
+
+
 def test_automation_prompt_requires_read_only_no_orders():
     text = _prompt_text()
 

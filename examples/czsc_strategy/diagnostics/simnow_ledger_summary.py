@@ -9,6 +9,7 @@ from typing import Any
 
 from simnow_action_summary import build_action_summary, _record_reason
 from simnow_observation_rules import is_valid_observation
+from simnow_observation_window import filter_records_by_start, load_observation_start_date
 
 
 HERE = Path(__file__).resolve().parent
@@ -109,15 +110,21 @@ def _count_consecutive_valid_days(ordered: list[dict[str, Any]]) -> int:
     return count
 
 
-def build_ledger_summary(records: list[dict[str, Any]], min_days: int = DEFAULT_MIN_DAYS) -> dict[str, Any]:
+def build_ledger_summary(
+    records: list[dict[str, Any]],
+    min_days: int = DEFAULT_MIN_DAYS,
+    observation_start_date: str | None = None,
+) -> dict[str, Any]:
     """Build a machine-readable summary of the SimNow observation ledger.
 
     The summary only exposes aggregate counts and selected safe fields from the
     latest record. It never includes raw tick payloads, contract maps, account IDs,
     passwords, or the full masked setting object.
     """
-    ordered = sorted(records, key=lambda row: str(row.get("date", "")))
+    all_records = sorted(records, key=lambda row: str(row.get("date", "")))
+    ordered = sorted(filter_records_by_start(all_records, observation_start_date), key=lambda row: str(row.get("date", "")))
     total_rows = len(ordered)
+    excluded_before_start_count = len(all_records) - len(ordered)
 
     valid_days = sum(1 for row in ordered if is_valid_observation(row))
     pending_days = sum(1 for row in ordered if _automation_status(row) == "pending")
@@ -158,7 +165,9 @@ def build_ledger_summary(records: list[dict[str, Any]], min_days: int = DEFAULT_
         latest_action = build_action_summary([_record_safe_latest(latest_record)])[0]
 
     latest_status = _automation_status(latest_record)
-    if ready_to_expand:
+    if not latest_record:
+        next_action = "continue daily observation"
+    elif ready_to_expand:
         next_action = "review promotion readiness"
     elif latest_status == "pending":
         next_action = "resolve latest pending reason"
@@ -172,6 +181,8 @@ def build_ledger_summary(records: list[dict[str, Any]], min_days: int = DEFAULT_
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "min_days": min_days,
+        "observation_start_date": observation_start_date or "",
+        "excluded_before_start_count": excluded_before_start_count,
         "total_rows": total_rows,
         "valid_observation_days": valid_days,
         "pending_days": pending_days,
@@ -225,10 +236,18 @@ def main() -> None:
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER, help="Path to simnow_observation_ledger.jsonl.")
     parser.add_argument("--out-json", type=Path, default=DEFAULT_OUT_JSON, help="Path to write the summary JSON.")
     parser.add_argument("--min-days", type=int, default=DEFAULT_MIN_DAYS, help="Minimum valid observation days required.")
+    parser.add_argument(
+        "--observation-start-date",
+        default=None,
+        help="Only count ledger rows on or after this date. Defaults to simnow_observation_window.json.",
+    )
     args = parser.parse_args()
 
     records = load_ledger(args.ledger)
-    summary = build_ledger_summary(records, min_days=args.min_days)
+    start_date = args.observation_start_date
+    if start_date is None:
+        start_date = load_observation_start_date()
+    summary = build_ledger_summary(records, min_days=args.min_days, observation_start_date=start_date)
 
     sensitive = contains_sensitive_data(summary)
     if sensitive:

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from simnow_action_summary import _record_reason
+from simnow_observation_window import load_observation_start_date
 from simnow_promotion_decision import decide_promotion
 
 
@@ -20,6 +21,8 @@ SENSITIVE_VALUE_FRAGMENTS = {"setting_masked"}
 SAFE_LEDGER_SUMMARY_FIELDS = {
     "generated_at",
     "min_days",
+    "observation_start_date",
+    "excluded_before_start_count",
     "total_rows",
     "valid_observation_days",
     "pending_days",
@@ -86,6 +89,46 @@ def extract_capture_summary(capture: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def extract_environment_capture(capture: dict[str, Any]) -> dict[str, Any]:
+    """Summarize the read-only SimNow environment checks."""
+    raw = capture.get("raw") or {}
+    meta = capture.get("meta") or {}
+    subscribed = raw.get("subscribed") or []
+    return {
+        "ticks": len(raw.get("ticks") or []),
+        "contracts_count": int(raw.get("contracts_count", 0) or 0),
+        "accounts": len(raw.get("accounts") or []),
+        "subscribed_count": len(subscribed),
+        "read_only": meta.get("read_only") is True,
+        "orders_sent_by_workflow": int(meta.get("orders_sent_by_workflow", 0) or 0),
+    }
+
+
+def extract_account_contamination(capture: dict[str, Any]) -> dict[str, Any]:
+    """Report external SimNow account activity without treating it as strategy PnL."""
+    raw = capture.get("raw") or {}
+    orders = raw.get("orders") or []
+    trades = raw.get("trades") or []
+    positions = raw.get("positions") or []
+    active_positions = [
+        row for row in positions
+        if abs(float((row or {}).get("volume", 0.0) or 0.0)) > 0
+    ]
+    position_symbols = sorted({
+        str(row.get("symbol") or "")
+        for row in active_positions
+        if row.get("symbol")
+    })
+    return {
+        "detected": bool(orders or trades or active_positions),
+        "orders": len(orders),
+        "trades": len(trades),
+        "active_positions": len(active_positions),
+        "position_symbols": position_symbols,
+        "note": "SimNow account activity is external audit evidence only; it is not strategy PnL.",
+    }
+
+
 def extract_kline_summary(kline: dict[str, Any]) -> dict[str, Any]:
     """Summarize the kline update JSON."""
     return {
@@ -104,6 +147,24 @@ def extract_record_summary(record: dict[str, Any]) -> dict[str, Any]:
         "threshold_status": record.get("thresholds", {}).get("status", ""),
         "order_safety_status": record.get("order_safety", {}).get("status", ""),
         "consistency_matched": bool(record.get("consistency", {}).get("matched")),
+    }
+
+
+def extract_delayed_replay_summary(replay: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    """Summarize the strategy-only delayed replay/virtual ledger result."""
+    meta = replay.get("meta") or {}
+    consistency = record.get("consistency") or {}
+    return {
+        "available": bool(meta.get("replay_available")),
+        "status": record.get("status", ""),
+        "valid_observation": bool(record.get("valid_observation")),
+        "reason": str(consistency.get("reason") or record.get("skip_reason") or ""),
+        "latest_db_date": str(meta.get("latest_db_date") or ""),
+        "missing_or_lagged_symbols": list(meta.get("missing_or_lagged_symbols") or []),
+        "signals": len(replay.get("signals") or []),
+        "trades": len(replay.get("trades") or []),
+        "positions": len(replay.get("positions") or []),
+        "risk_source": "replay_only",
     }
 
 
@@ -180,6 +241,7 @@ def build_run_summary(
     """
     capture = load_json(files.get("capture_json"))
     kline = load_json(files.get("kline_json"))
+    replay = load_json(files.get("replay_json"))
     record = load_json(files.get("record_json"))
     promotion = promotion_summary or {}
 
@@ -193,8 +255,11 @@ def build_run_summary(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "files": {name: str(path) for name, path in files.items()},
         "capture": extract_capture_summary(capture),
+        "environment_capture": extract_environment_capture(capture),
+        "account_contamination": extract_account_contamination(capture),
         "kline": extract_kline_summary(kline),
         "record": extract_record_summary(record),
+        "delayed_replay": extract_delayed_replay_summary(replay, record),
         "promotion": {
             "ready_to_expand": bool(promotion.get("ready_to_expand")),
             "valid_observation_days": int(promotion.get("valid_observation_days", 0)),
@@ -255,7 +320,8 @@ def main() -> None:
 
     files = default_artifact_paths(args.date, args.out_dir)
     ledger_records = load_jsonl(args.ledger)
-    promotion_summary = decide_promotion(ledger_records)
+    start_date = load_observation_start_date()
+    promotion_summary = decide_promotion(ledger_records, observation_start_date=start_date)
     ledger_summary_path = args.ledger_summary or (args.out_dir / "simnow_ledger_summary.json")
     ledger_summary = load_ledger_summary(ledger_summary_path)
     summary = build_run_summary(

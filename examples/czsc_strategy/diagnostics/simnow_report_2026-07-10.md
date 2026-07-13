@@ -13,24 +13,27 @@
 > - `note`: Future validation must use post-2026-04-24 incremental data and SimNow observation before any promotion claim can be considered.
 
 
-- observed_days: `11/20`
+> Diagnostic only, not a trading recommendation.
+
+- observed_days: `12/20`
 - valid_observation_days: `8/20`
 - pass_days: `8`
 - pending_days: `2`
 - skipped_days: `1`
 - consistency_matched_days: `8`
 - warning_days: `0`
-- halt_days: `0`
-- latest_record_date: `2026-07-10`
+- halt_days: `1`
+- latest_record_date: `2026-07-13`
 - last_valid_observation_date: `2026-07-09`
 - consecutive_clean_days: `0`
 - ready_to_expand: `False`
-- promotion_blockers: `need_12_more_valid_observation_days, pending_days_present, skipped_days_present, non_pass_days_present, consistency_not_fully_matched`
+- promotion_blockers: `need_12_more_valid_observation_days, pending_days_present, skipped_days_present, non_pass_days_present, consistency_not_fully_matched, halt_threshold_breached`
 
 ## Status Counts
 
 | status | days |
 |---|---:|
+| halt | 1 |
 | pass | 8 |
 | pending | 2 |
 | skipped | 1 |
@@ -42,6 +45,7 @@
 | ctp_disconnect_097_no_snapshot | 1 |
 | historical_db_lag | 1 |
 | kline_coverage_incomplete | 1 |
+| no_captured_session_data_only_replay_derived | 1 |
 
 ## Action Summary
 
@@ -57,7 +61,8 @@
 | 2026-07-07 | pass | no_actionable_events_on_either_side | ok | 计入 20 日有效观察。 | True |
 | 2026-07-08 | pass | no_actionable_events_on_either_side | ok | 计入 20 日有效观察。 | True |
 | 2026-07-09 | pass | no_actionable_events_on_either_side | ok | 计入 20 日有效观察。 | True |
-| 2026-07-10 | pending | historical_db_lag | medium | 历史 DB 未覆盖当天；建议等待或执行 backfill。 | False |
+| 2026-07-10 | halt | no_captured_session_data_only_replay_derived | critical | 阈值触发：drawdown_abs_pct=1.2992%, consecutive_loss_days=6.0000days, consecutive_loss_abs_pct=0.1218%；建议检查风险敞口并复核阈值配置。 | False |
+| 2026-07-13 | pending | historical_db_lag | medium | 历史 DB 未覆盖当天；建议等待或执行 backfill。 | False |
 
 ## Recent Records
 
@@ -73,4 +78,5 @@
 | 2026-07-07 | True | pass | no_actionable_events_on_either_side | True | pass | pass | 0 | 2 | 2 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
 | 2026-07-08 | True | pass | no_actionable_events_on_either_side | True | pass | pass | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
 | 2026-07-09 | True | pass | no_actionable_events_on_either_side | True | pass | pass | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
-| 2026-07-10 | False | pending | historical_db_lag | False | pass | pass | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
+| 2026-07-10 | False | halt | no_captured_session_data_only_replay_derived | None | halt | pass | 0 | 0 | 0 |  |  |  | 6.00% | 0.02% | 39.08% | 56.26% |
+| 2026-07-13 | False | pending | historical_db_lag | False | unproven | pass | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |

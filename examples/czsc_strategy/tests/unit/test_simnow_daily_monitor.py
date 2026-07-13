@@ -1312,6 +1312,68 @@ def test_promotion_decision_pass_valid_shows_counts_for_20d_true(tmp_path):
     assert "| True |" in text
 
 
+def test_20d_report_filters_before_observation_start():
+    records = [
+        {
+            "date": "2026-07-13",
+            "status": "halt",
+            "consistency": {"matched": False, "reason": "threshold_breach"},
+            "thresholds": {"status": "halt"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-07-14",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+
+    summary = build_20d_report(records, min_days=20, observation_start_date="2026-07-14")
+
+    assert summary["observation_start_date"] == "2026-07-14"
+    assert summary["excluded_before_start_count"] == 1
+    assert summary["observed_days"] == 1
+    assert summary["valid_observation_days"] == 1
+    assert summary["halt_days"] == 0
+    assert summary["latest_record_date"] == "2026-07-14"
+
+
+def test_promotion_decision_filters_before_observation_start():
+    records = [
+        {
+            "date": "2026-07-13",
+            "status": "halt",
+            "consistency": {"matched": False, "reason": "threshold_breach"},
+            "thresholds": {"status": "halt"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-07-14",
+            "status": "pass",
+            "consistency": {"matched": True},
+            "thresholds": {"status": "pass"},
+            "order_safety": {"status": "pass"},
+            "subscription_coverage": {"missing_symbols": []},
+            "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+            "valid_observation": True,
+        },
+    ]
+
+    summary = decide_promotion(records, min_days=20, observation_start_date="2026-07-14")
+
+    assert summary["observation_start_date"] == "2026-07-14"
+    assert summary["excluded_before_start_count"] == 1
+    assert summary["observed_days"] == 1
+    assert summary["valid_observation_days"] == 1
+    assert summary["halt_days"] == 0
+    assert summary["last_valid_observation_date"] == "2026-07-14"
+
+
 def test_promotion_decision_does_not_import_daily_monitor():
     import simnow_promotion_decision as promo_mod
 

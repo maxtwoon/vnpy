@@ -186,6 +186,7 @@ try {
         ".\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py",
         ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
         ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_observation_window.py",
         ".\examples\czsc_strategy\diagnostics\simnow_run_summary.py",
         ".\examples\czsc_strategy\diagnostics\simnow_daily_brief.py",
         ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py"

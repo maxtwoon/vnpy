@@ -106,8 +106,11 @@ examples/czsc_strategy/skill_build/reports/*.json
 examples/czsc_strategy/skill_build/sh000001_daily.csv
 examples/czsc_strategy/skill_build/llm_eval_config.json
 
-# Ignore entire diagnostics directory
-examples/czsc_strategy/diagnostics/
+# Ignore generated diagnostics artifacts, while allowing checked-in workflow code/config.
+examples/czsc_strategy/diagnostics/*
+!examples/czsc_strategy/diagnostics/
+!examples/czsc_strategy/diagnostics/simnow_observation_window.py
+!examples/czsc_strategy/diagnostics/simnow_observation_window.json
 
 # Skill evaluation report generated locally
 SKILL_audit_report.md

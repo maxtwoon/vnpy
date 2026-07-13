@@ -12,6 +12,7 @@ from simnow_ledger_summary import (  # noqa: E402
     build_ledger_summary,
     load_ledger,
 )
+from simnow_observation_window import filter_records_by_start  # noqa: E402
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -91,6 +92,7 @@ def test_empty_ledger_summary():
     assert summary["failed_days"] == 0
     assert summary["ready_to_expand"] is False
     assert "need_20_more_valid_observation_days" in summary["promotion_blockers"]
+    assert summary["next_action"] == "continue daily observation"
 
 
 def test_mixed_records_counts_and_blockers():
@@ -178,7 +180,7 @@ def test_next_action_mapping():
 
 def test_cli_writes_summary_json(tmp_path):
     ledger_path = tmp_path / "simnow_observation_ledger.jsonl"
-    _write_jsonl(ledger_path, [_pending_record("2026-06-20", "historical_db_lag")])
+    _write_jsonl(ledger_path, [_pending_record("2026-07-14", "historical_db_lag")])
     out_path = tmp_path / "simnow_ledger_summary.json"
 
     result = subprocess.run(
@@ -248,3 +250,32 @@ def test_consecutive_valid_days_stops_at_latest_invalid_record():
     summary = build_ledger_summary(records)
 
     assert summary["consecutive_valid_days"] == 0
+
+
+def test_filter_records_by_observation_start_keeps_history_out_of_new_cycle():
+    records = [
+        _valid_record("2026-07-12"),
+        _halt_record("2026-07-13", "threshold_breach"),
+        _valid_record("2026-07-14"),
+    ]
+
+    filtered = filter_records_by_start(records, "2026-07-14")
+
+    assert [row["date"] for row in filtered] == ["2026-07-14"]
+
+
+def test_ledger_summary_filters_before_observation_start():
+    records = [
+        _valid_record("2026-07-12"),
+        _halt_record("2026-07-13", "threshold_breach"),
+        _valid_record("2026-07-14"),
+    ]
+
+    summary = build_ledger_summary(records, observation_start_date="2026-07-14")
+
+    assert summary["observation_start_date"] == "2026-07-14"
+    assert summary["excluded_before_start_count"] == 2
+    assert summary["total_rows"] == 1
+    assert summary["valid_observation_days"] == 1
+    assert summary["halt_days"] == 0
+    assert summary["latest_date"] == "2026-07-14"

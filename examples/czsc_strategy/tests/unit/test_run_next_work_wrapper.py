@@ -268,6 +268,11 @@ def test_preflight_py_compile_includes_ledger_summary_script():
     assert "simnow_ledger_summary.py" in script_text
 
 
+def test_preflight_py_compile_includes_observation_window_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_observation_window.py" in script_text
+
+
 def test_preflight_py_compile_includes_strategy_surface_script():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "simnow_strategy_surface.py" in script_text

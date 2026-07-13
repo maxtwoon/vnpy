@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "observation_start_date": "2026-07-14",
+  "reason": "Restart the SimNow 20-day observation cycle from 2026-07-14.",
+  "previous_ledger_policy": "preserve_and_ignore_before_start"
+}

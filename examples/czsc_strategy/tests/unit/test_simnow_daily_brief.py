@@ -215,6 +215,55 @@ def test_render_daily_brief_includes_20d_progress():
     assert "promotion_blockers: `need_17_more_valid_observation_days`" in text
 
 
+def test_render_daily_brief_separates_environment_account_and_delayed_replay():
+    summary = _sample_run_summary("2026-07-13")
+    summary["environment_capture"] = {
+        "ticks": 4,
+        "contracts_count": 18023,
+        "accounts": 1,
+        "subscribed_count": 5,
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+    }
+    summary["account_contamination"] = {
+        "detected": True,
+        "orders": 0,
+        "trades": 0,
+        "active_positions": 1,
+        "position_symbols": ["sc2608"],
+        "note": "SimNow account activity is external audit evidence only; it is not strategy PnL.",
+    }
+    summary["delayed_replay"] = {
+        "available": False,
+        "status": "pending",
+        "valid_observation": False,
+        "reason": "historical_db_lag",
+        "latest_db_date": "2026-07-13",
+        "missing_or_lagged_symbols": ["RB888", "ZN888"],
+        "signals": 0,
+        "trades": 0,
+        "positions": 0,
+        "risk_source": "replay_only",
+    }
+
+    text = render_daily_brief(summary)
+
+    assert "## SimNow 环境采集" in text
+    assert "ticks: `4`" in text
+    assert "read_only: `true`" in text
+    assert "orders_sent_by_workflow: `0`" in text
+    assert "## 账户污染监控" in text
+    assert "account_contamination.detected: `true`" in text
+    assert "external_position_symbols: `sc2608`" in text
+    assert "不计入策略收益" in text
+    assert "## 盘后 DB 延迟回放" in text
+    assert "delayed_replay.available: `false`" in text
+    assert "missing_or_lagged_symbols: `RB888,ZN888`" in text
+    assert "risk_source: `replay_only`" in text
+    assert "9500" not in text
+    assert "账户浮盈" not in text
+
+
 def test_render_daily_brief_handles_missing_ledger_summary():
     summary = _sample_run_summary()
     summary["ledger_summary"] = {"available": False, "reason": "missing_ledger_summary"}

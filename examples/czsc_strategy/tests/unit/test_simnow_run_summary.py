@@ -97,6 +97,77 @@ def test_build_run_summary_from_minimal_artifacts(tmp_path):
     assert summary["promotion"]["top_blocking_actions"] == [{"reason": "kline_coverage_incomplete", "count": 1}]
 
 
+def test_build_run_summary_separates_environment_account_contamination_and_delayed_replay(tmp_path):
+    date = "2026-07-13"
+    capture = {
+        "meta": {"read_only": True, "orders_sent_by_workflow": 0},
+        "raw": {
+            "ticks": [{"dt": "2026-07-13 15:18:48", "symbol": "sc2608"}],
+            "contracts_count": 18023,
+            "accounts": [{"accountid": "246189", "balance": 20510820.0}],
+            "positions": [{"symbol": "sc2608", "direction": "多", "volume": 1, "price": 468.5, "pnl": 9500.0}],
+            "orders": [{"symbol": "sc2608", "direction": "多", "price": 437.8, "volume": 1}],
+            "trades": [{"symbol": "sc2608", "direction": "多", "price": 437.8, "volume": 1}],
+            "subscribed": [{"research_symbol": "SC888"}, {"research_symbol": "RB888"}],
+        },
+    }
+    replay = {
+        "signals": [{"symbol": "SC888"}],
+        "trades": [{"symbol": "SC888", "pnl_pct": 0.024}],
+        "positions": [{"symbol": "SC888", "gross_exposure": 0.06}],
+        "risk": {"daily_return_pct": 0.12, "gross_exposure": 0.06},
+        "meta": {
+            "replay_available": True,
+            "replay_unavailable_reason": "",
+            "latest_db_date": "2026-07-13",
+            "missing_or_lagged_symbols": [],
+        },
+    }
+    record = {
+        "status": "pass",
+        "valid_observation": True,
+        "consistency": {"matched": True, "reason": "delayed_replay_validated"},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "pass"},
+    }
+    files = _make_files(tmp_path)
+    _write_json(files["capture_json"], capture)
+    _write_json(files["replay_json"], replay)
+    _write_json(files["record_json"], record)
+
+    summary = build_run_summary(date, files)
+
+    assert summary["environment_capture"] == {
+        "ticks": 1,
+        "contracts_count": 18023,
+        "accounts": 1,
+        "subscribed_count": 2,
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+    }
+    assert summary["account_contamination"]["detected"] is True
+    assert summary["account_contamination"]["orders"] == 1
+    assert summary["account_contamination"]["trades"] == 1
+    assert summary["account_contamination"]["active_positions"] == 1
+    assert summary["account_contamination"]["position_symbols"] == ["sc2608"]
+    assert summary["account_contamination"]["note"] == "SimNow account activity is external audit evidence only; it is not strategy PnL."
+    assert summary["delayed_replay"] == {
+        "available": True,
+        "status": "pass",
+        "valid_observation": True,
+        "reason": "delayed_replay_validated",
+        "latest_db_date": "2026-07-13",
+        "missing_or_lagged_symbols": [],
+        "signals": 1,
+        "trades": 1,
+        "positions": 1,
+        "risk_source": "replay_only",
+    }
+    summary_text = json.dumps(summary, ensure_ascii=False)
+    assert "20510820" not in summary_text
+    assert "9500" not in summary_text
+
+
 def test_summary_does_not_leak_sensitive_capture_fields(tmp_path):
     capture = {
         "meta": {

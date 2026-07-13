@@ -81,11 +81,21 @@ The summary must expose enough information for an external automation platform t
 
 - whether the day is a valid observation (`record.valid_observation`);
 - the daily status and primary reason (`record.status`, `record.reason`);
+- SimNow environment capture status (`environment_capture`), including tick count, contract count, subscription count, read-only flag, and workflow order count;
+- account contamination status (`account_contamination`), including external orders/trades/active positions captured from the SimNow account;
+- delayed replay status (`delayed_replay`), including replay availability, DB lagged symbols, replay event counts, and replay-only risk source;
 - kline coverage gaps (`kline.missing_symbols`, `kline.short_symbols`);
 - risk threshold status (`record.threshold_status`);
 - promotion readiness (`promotion.ready_to_expand`, `promotion.valid_observation_days`, `promotion.promotion_blockers`, `promotion.top_blocking_actions`).
 - 20-day observation progress (`ledger_summary`) when available, including `valid_observation_days`, `consecutive_valid_days`, `ready_to_expand`, `promotion_blockers`, `reason_counts`, `latest_action`, and `next_action`.
 - automation-platform status (`automation_status`), exit code (`automation_exit_code`), reason (`automation_reason`), and recommended action (`automation_action`).
+
+Delayed replay accounting semantics:
+
+- The local historical DB is the only strategy market-data source for strategy PnL.
+- Strategy PnL comes only from delayed replay / the local virtual ledger.
+- SimNow account balance, floating PnL, raw orders, raw trades, and raw positions are audit evidence only and must not be used as strategy PnL.
+- A `valid` day means the delayed replay observation gates passed; it is not real SimNow order/trade reconciliation while the workflow remains read-only.
 
 Automation status semantics:
 
@@ -121,7 +131,7 @@ A ledger summary generator (`simnow_ledger_summary.py`) must produce a machine-r
 
 The ledger summary must expose:
 
-- `generated_at`, `min_days`, `total_rows`;
+- `generated_at`, `min_days`, `observation_start_date`, `excluded_before_start_count`, `total_rows`;
 - `valid_observation_days`, `pending_days`, `skipped_days`, `halt_days`, `failed_days`;
 - `latest_date`, `latest_valid_date`, `consecutive_valid_days` (trailing consecutive valid trading-day ledger rows; weekends/holidays do not break the streak);
 - `ready_to_expand` (true only when `valid_observation_days >= 20` and no pending/skipped/halt/failed days);
@@ -143,9 +153,12 @@ A formal `run_next_work.ps1 -LiveCapture` run must regenerate `simnow_ledger_sum
 
 ## 20-Day Promotion Gate
 
+The formal 20-day observation window is controlled by `simnow_observation_window.json`.
+Rows before `observation_start_date` remain in `simnow_observation_ledger.jsonl` as audit history, but must be excluded from ledger summary, daily observation report, and promotion decision statistics.
+
 The candidate can be considered for broader SimNow simulation only after:
 
-- at least 20 valid trading-day rows exist in `simnow_observation_ledger.jsonl`;
+- at least 20 valid trading-day rows exist on or after the configured `observation_start_date`;
 - `valid_observation_days >= 20` in both the daily observation report and promotion decision report;
 - every valid day has consistency status `matched`;
 - no hard safety gate is breached;
