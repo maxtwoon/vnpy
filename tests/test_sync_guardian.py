@@ -6,7 +6,6 @@ containing repository.
 """
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -62,6 +61,7 @@ def _write_synccheck_yml(
     deliverables_policy: bool = True,
     commands: dict[str, str] | None = None,
     diagnostics_banner_check: dict[str, Any] | None = None,
+    project_version_freshness: dict[str, Any] | None = None,
 ) -> None:
     policy_block = ""
     if deliverables_policy:
@@ -89,13 +89,33 @@ deliverables_policy:
             lines.append("  skip:")
             for s in diagnostics_banner_check["skip"]:
                 lines.append(f"    - {s}")
+        if "exempt_dirs" in diagnostics_banner_check:
+            lines.append("  exempt_dirs:")
+            for d in diagnostics_banner_check["exempt_dirs"]:
+                lines.append(f"    - {d}")
         banner_block = "\n" + "\n".join(lines) + "\n"
+    pvf_block = ""
+    if project_version_freshness:
+        lines = ["project_version_freshness:"]
+        if "project_root" in project_version_freshness:
+            lines.append(f"  project_root: {project_version_freshness['project_root']}")
+        if "config_file" in project_version_freshness:
+            lines.append(f"  config_file: {project_version_freshness['config_file']}")
+        if "watch_variables" in project_version_freshness:
+            lines.append("  watch_variables:")
+            for v in project_version_freshness["watch_variables"]:
+                lines.append(f"    - {v}")
+        if "version_file" in project_version_freshness:
+            lines.append(f"  version_file: {project_version_freshness['version_file']}")
+        if "changelog_file" in project_version_freshness:
+            lines.append(f"  changelog_file: {project_version_freshness['changelog_file']}")
+        pvf_block = "\n" + "\n".join(lines) + "\n"
     content = f"""version_source: "VERSION::"
 must_match: []
 changelog:
   file: CHANGELOG.md
 allow_history_notes: true
-{policy_block}{banner_block}handoff:
+{policy_block}{banner_block}{pvf_block}handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]
   owners:
@@ -387,6 +407,113 @@ def test_diagnostics_banner_check_passes_with_banner(fresh_repo: Path) -> None:
         encoding="utf-8",
     )
     _commit_all(repo, "add banner check config and bannered report")
+
+    result = _sync_check(repo)
+    assert result.returncode == 0, result.stderr
+
+
+def test_diagnostics_banner_skip_pattern_honors_config(fresh_repo: Path) -> None:
+    """The audit_issue_diagnostics_* prefix exemption must be config-driven, not hardcoded."""
+    repo = fresh_repo
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        diagnostics_banner_check={
+            "dir": "diagnostics",
+            "banner": "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->",
+            "skip": ["audit_issue_diagnostics_*.md"],
+        },
+    )
+    _write_handoff(repo, "design", "designer")
+    (repo / "diagnostics").mkdir()
+    audit = repo / "diagnostics" / "audit_issue_diagnostics_2026-07-14.md"
+    audit.write_text("# Audit\n\nNo banner here.\n", encoding="utf-8")
+    _commit_all(repo, "add config and unbannered audit file")
+
+    result = _sync_check(repo)
+    assert result.returncode == 0, result.stderr
+
+
+def test_diagnostics_banner_archive_exempt_honors_config(fresh_repo: Path) -> None:
+    """Files under diagnostics/archive/ must be skippable via exempt_dirs config."""
+    repo = fresh_repo
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        diagnostics_banner_check={
+            "dir": "diagnostics",
+            "banner": "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->",
+            "exempt_dirs": ["diagnostics/archive"],
+        },
+    )
+    _write_handoff(repo, "design", "designer")
+    (repo / "diagnostics" / "archive").mkdir(parents=True)
+    archived = repo / "diagnostics" / "archive" / "HANDOFF-A32-archived-2026-07-11.md"
+    archived.write_text("# Archived\n\nNo banner.\n", encoding="utf-8")
+    _commit_all(repo, "add config and archived file")
+
+    result = _sync_check(repo)
+    assert result.returncode == 0, result.stderr
+
+
+def _setup_project_version_freshness_repo(repo: Path) -> None:
+    """Configure a fresh repo with the A60 project_version_freshness gate."""
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        project_version_freshness={
+            "project_root": ".",
+            "config_file": "config.py",
+            "watch_variables": ["STRATEGY_CONFIG", "BACKTEST_CONFIG"],
+            "version_file": "VERSION",
+            "changelog_file": "CHANGELOG.md",
+        },
+    )
+    (repo / "config.py").write_text(
+        'STRATEGY_CONFIG = {"a": 1}\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    (repo / "VERSION").write_text("0.1.0\n", encoding="utf-8")
+    (repo / "CHANGELOG.md").write_text("# 0.1.0\n\nInitial.\n", encoding="utf-8")
+    _write_handoff(repo, "design", "designer")
+    _commit_all(repo, "add project version freshness config")
+
+
+def test_project_version_freshness_fails_when_config_changes_without_version_or_changelog(
+    fresh_repo: Path,
+) -> None:
+    """A commit that changes watched config keys without touching VERSION or CHANGELOG fails."""
+    repo = fresh_repo
+    _setup_project_version_freshness_repo(repo)
+
+    # Bad commit: change a top-level config key but leave VERSION/CHANGELOG alone.
+    (repo / "config.py").write_text(
+        'STRATEGY_CONFIG = {"a": 2}\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    _commit_all(repo, "change config key without versioning")
+
+    result = _sync_check(repo)
+    assert result.returncode != 0
+    assert "STRATEGY_CONFIG" in result.stderr
+    assert "VERSION" in result.stderr
+    assert "CHANGELOG.md" in result.stderr
+
+
+def test_project_version_freshness_passes_when_version_or_changelog_touched(
+    fresh_repo: Path,
+) -> None:
+    """The same config change passes when VERSION or CHANGELOG is touched in the same commit."""
+    repo = fresh_repo
+    _setup_project_version_freshness_repo(repo)
+
+    (repo / "config.py").write_text(
+        'STRATEGY_CONFIG = {"a": 2}\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    (repo / "VERSION").write_text("0.2.0\n", encoding="utf-8")
+    (repo / "CHANGELOG.md").write_text("# 0.2.0\n\nChanged a.\n", encoding="utf-8")
+    _commit_all(repo, "change config key and bump version")
 
     result = _sync_check(repo)
     assert result.returncode == 0, result.stderr

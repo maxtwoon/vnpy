@@ -24,6 +24,15 @@ deliverables_policy:
   # directory must appear in `git show --stat` for a dev-stage commit (i.e. was
   # `git add -f`'d), not merely exist on disk untracked.
 
+project_version_freshness:
+  project_root: examples/czsc_strategy
+  config_file: chan_strategy/config.py
+  watch_variables: [STRATEGY_CONFIG, BACKTEST_CONFIG]
+  version_file: VERSION
+  changelog_file: CHANGELOG.md
+  # gate_since is implicit: the commit that introduced this block into .synccheck.yml.
+  # Only commits after that point are checked, so older A52-A54 changes are not retroactively punished.
+
 diagnostics_banner_check:
   dirs:
     - examples/czsc_strategy/diagnostics
@@ -35,6 +44,10 @@ diagnostics_banner_check:
     - NEXT_WORK.md
     - simnow_daily_observation_workflow.md
     - simnow_connection_probe.md
+    - audit_issue_diagnostics_*.md
+  exempt_dirs:
+    # Archived historical HANDOFF snapshots, not live research/diagnostic reports.
+    - examples/czsc_strategy/diagnostics/archive
 
 handoff:
   file: HANDOFF.md

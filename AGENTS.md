@@ -488,7 +488,15 @@ This repository uses a root-level `HANDOFF.md` and `.synccheck.yml` to track mul
 * Run `python tools/sync_check.py` before handing work off so version, docs, and handoff state stay aligned
 * Treat `HANDOFF.md` as the single source of truth for cross-agent state
 * Use `tools/handoff.py` for routine stage transitions instead of editing `HANDOFF.md` by hand
+* `project_version_freshness` in `.synccheck.yml` (A60) guards the
+  `examples/czsc_strategy/VERSION`/`CHANGELOG.md` pair: any commit that changes a
+  top-level key in `chan_strategy/config.py`'s `STRATEGY_CONFIG`/`BACKTEST_CONFIG`
+  must also touch `VERSION` or `CHANGELOG.md`. The gate only inspects commits
+  after the block was introduced, so older changes are not retroactively punished.
 * `diagnostics_banner_check` in `.synccheck.yml` (A54) enforces that every
   `diagnostics/*.md` report carries the `RESEARCH-ONLY / NOT PROMOTION EVIDENCE`
-  banner. Use `examples/czsc_strategy/diagnostics/declassify_historical_reports.py`
-  to backfill missing banners.
+  banner. Exemptions (including `audit_issue_diagnostics_*.md` and the
+  `diagnostics/archive/` directory) are declared in `.synccheck.yml` via `skip`
+  glob patterns and `exempt_dirs`. Use
+  `examples/czsc_strategy/diagnostics/declassify_historical_reports.py` to
+  backfill missing banners.

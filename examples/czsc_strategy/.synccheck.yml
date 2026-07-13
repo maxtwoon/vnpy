@@ -17,6 +17,15 @@ deliverables_policy:
   # dev -> review 转换时，要求 HANDOFF.md deliverables 中至少有一项在 design->dev 之后被 git 跟踪更新；
   # 若 deliverable 位于 git-ignored 目录，必须出现在 dev-stage commit 的 git show --stat 中（即 git add -f）。
 
+project_version_freshness:
+  project_root: .
+  config_file: chan_strategy/config.py
+  watch_variables: [STRATEGY_CONFIG, BACKTEST_CONFIG]
+  version_file: VERSION
+  changelog_file: CHANGELOG.md
+  # gate_since is implicit: the commit that introduced this block into .synccheck.yml.
+  # Only commits after that point are checked, so older A52-A54 changes are not retroactively punished.
+
 diagnostics_banner_check:
   dir: diagnostics
   banner: "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->"
@@ -27,6 +36,10 @@ diagnostics_banner_check:
     - NEXT_WORK.md
     - simnow_daily_observation_workflow.md
     - simnow_connection_probe.md
+    - audit_issue_diagnostics_*.md
+  exempt_dirs:
+    # Archived historical HANDOFF snapshots, not live research/diagnostic reports.
+    - diagnostics/archive
 
 handoff:
   file: HANDOFF.md
