@@ -545,6 +545,9 @@ class PortfolioEngine:
                 flat_price = ev["flat_price"]
                 sign = pos["sign"]
                 gross_pnl = sign * (flat_price - pos["open_price"]) / pos["open_price"]
+                # Deduct round-trip costs so flatten pairs are net-of-cost, matching
+                # every other coordinated_pairs entry sourced from Position.
+                net_pnl = gross_pnl - (2 * self.commission_rate + self.slippage)
                 coordinated_pairs.append({
                     "symbol": symbol,
                     "strategy": strategy,
@@ -552,7 +555,7 @@ class PortfolioEngine:
                     "close_dt": dt,
                     "open_price": pos["open_price"],
                     "close_price": flat_price,
-                    "pnl_pct": gross_pnl,
+                    "pnl_pct": net_pnl,
                     "weight": pos["weight"],
                     "bars_held": None,
                     "reason": "portfolio_daily_loss_limit",
@@ -602,8 +605,16 @@ class PortfolioEngine:
 
     def run(self) -> dict[str, Any]:
         """Run the portfolio backtest and return the report."""
+        sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
+        portfolio_risk = STRATEGY_CONFIG.get("portfolio_risk", "off")
+        if sizing_model == "risk" and portfolio_risk == "on":
+            raise NotImplementedError(
+                "sizing_model='risk' with portfolio_risk='on' is not supported yet: "
+                "the coordinated portfolio replay uses weight-based accounting, which is "
+                "incompatible with the currency-based lots/margin accounting of risk sizing."
+            )
         symbol_results = self._run_per_symbol()
-        if STRATEGY_CONFIG.get("portfolio_risk", "off") == "off":
+        if portfolio_risk == "off":
             return self._build_off_report(symbol_results)
         return self._build_on_report(symbol_results)
 
