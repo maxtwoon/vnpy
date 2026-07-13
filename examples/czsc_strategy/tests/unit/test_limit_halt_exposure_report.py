@@ -89,7 +89,10 @@ def test_compute_trade_diagnostics_reconciles_counts():
         {"open_dt": trade_bars[0].dt, "close_dt": trade_bars[1].dt, "strategy": "一买多头"},
         {"open_dt": trade_bars[1].dt, "close_dt": trade_bars[1].dt, "strategy": "一买多头"},
     ]
-    diags = report._compute_trade_diagnostics(pairs, trade_bars, raw_bars, 0.05)
+    # AP888's steady-state limit_pct is 0.05; its registered widening window
+    # (2026-05-06) does not cover these 2024 test dates, so this exercises the
+    # A59 per-date lookup falling back to the steady-state value.
+    diags = report._compute_trade_diagnostics(pairs, trade_bars, raw_bars, "AP888")
     assert len(diags) == len(pairs)
 
     entry_at = sum(1 for d in diags if d.entry_at_limit)

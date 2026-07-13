@@ -29,6 +29,7 @@ from chan_strategy.limit_config import (  # noqa: E402
     SYMBOL_LIMIT_CONFIG,
     _bar_at_limit,
     _daily_prev_close_map,
+    _limit_pct_for_date,
     _trading_day_for_limit,
 )
 
@@ -109,9 +110,15 @@ def _compute_trade_diagnostics(
     pairs: list[dict[str, Any]],
     trade_bars: list[Any],
     raw_bars: list[Any],
-    limit_pct: float,
+    symbol: str,
 ) -> list[TradeLimitDiag]:
-    """Compute daily-limit and zero-volume diagnostics for every closed pair."""
+    """Compute daily-limit and zero-volume diagnostics for every closed pair.
+
+    A59: the effective limit percentage is looked up per trading day via
+    ``_limit_pct_for_date`` so registered temporary-widening windows (e.g.
+    AP888/RB888) are honored instead of always applying the steady-state
+    percentage.
+    """
     diagnostics: list[TradeLimitDiag] = []
     if not trade_bars or not raw_bars:
         return diagnostics
@@ -135,14 +142,17 @@ def _compute_trade_diagnostics(
         entry_prev_close, _ = prev_close_map.get(entry_date, (None, None))
         exit_prev_close, _ = prev_close_map.get(exit_date, (None, None))
 
+        entry_limit_pct = _limit_pct_for_date(symbol, entry_date)
+        exit_limit_pct = _limit_pct_for_date(symbol, exit_date)
+
         entry_tu, entry_tl, entry_upper, entry_lower = (
-            _bar_at_limit(entry_bar, entry_prev_close, limit_pct)
-            if entry_bar
+            _bar_at_limit(entry_bar, entry_prev_close, entry_limit_pct)
+            if entry_bar and entry_limit_pct is not None
             else (False, False, None, None)
         )
         exit_tu, exit_tl, exit_upper, exit_lower = (
-            _bar_at_limit(exit_bar, exit_prev_close, limit_pct)
-            if exit_bar
+            _bar_at_limit(exit_bar, exit_prev_close, exit_limit_pct)
+            if exit_bar and exit_limit_pct is not None
             else (False, False, None, None)
         )
         entry_at_limit = entry_tu or entry_tl
@@ -198,10 +208,10 @@ def _overall_metrics(
     pairs: list[dict[str, Any]],
     trade_bars: list[Any],
     raw_bars: list[Any],
-    limit_pct: float,
+    symbol: str,
 ) -> dict[str, Any]:
     """Extract per-symbol metrics and per-trade diagnostics."""
-    diagnostics = _compute_trade_diagnostics(pairs, trade_bars, raw_bars, limit_pct)
+    diagnostics = _compute_trade_diagnostics(pairs, trade_bars, raw_bars, symbol)
 
     trade_count = report.get("total_trades", len(pairs))
     entry_at = sum(1 for d in diagnostics if d.entry_at_limit)
@@ -267,9 +277,9 @@ def _run_symbol(
         "limit_pct": limit_cfg.get("limit_pct"),
         "limit_source": limit_cfg.get("source"),
         "limit_note": (
-            "First-cut steady-state contract percentage. "
-            "Exchange notices may temporarily widen limits for specific contracts or after limit-hit days; "
-            "those exceptions are not applied here."
+            "Steady-state contract percentage shown here as the symbol's default; per-trade "
+            "diagnostics below apply any A59-registered temporary-widening window for the "
+            "trade's actual trading day instead of always using this steady-state value."
         ),
         "error": None,
         "metrics": None,
@@ -294,14 +304,13 @@ def _run_symbol(
         result["metrics"] = _empty_metrics()
         return result
 
-    limit_pct = limit_cfg.get("limit_pct")
-    if limit_pct is None:
+    if limit_cfg.get("limit_pct") is None:
         result["error"] = "limit_percentage_unavailable"
         result["metrics"] = _empty_metrics()
         return result
 
     result["metrics"] = _overall_metrics(
-        report, pairs, trade_bars, raw_bars, limit_pct
+        report, pairs, trade_bars, raw_bars, symbol
     )
     return result
 

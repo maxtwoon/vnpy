@@ -1,19 +1,19 @@
 ---
 task: A59 - Limit-Band Basis Accuracy
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -200,8 +200,40 @@ diagnostics\run_next_work.ps1 -Preflight
 ==> Preflight complete; live SimNow capture was not requested
 ```
 
+## Round 2 fixes (claude-code, 2026-07-14, before triggering review)
+
+Independent due-diligence found two real gaps in kimi-code's otherwise solid implementation, both
+fixed in-line rather than sent back for a reject round (small, mechanical, clearly-scoped fixes):
+
+1. **`limit_halt_exposure_report.py` never actually applied the new time-varying limit
+   percentage.** `_bar_at_limit`'s directional upgrade and `_limit_pct_for_date`'s widening-window
+   lookup were both correctly added to `limit_config.py`, and `backtest_engine.py`'s live trading
+   path correctly calls `_limit_pct_for_date` per bar — but the diagnostic report script
+   (`_run_symbol`/`_overall_metrics`/`_compute_trade_diagnostics`) still read a single fixed
+   `limit_cfg.get("limit_pct")` once per symbol and used it for every trade regardless of date, so
+   the widening windows this task exists to register would still have produced the exact
+   false-positive touch tags the original audit finding described — the "corrected basis" the
+   design doc calls for was not actually reaching the report's output. Fixed by threading `symbol`
+   through those three functions instead of a fixed `limit_pct`, and calling
+   `_limit_pct_for_date(symbol, entry_date)`/`(symbol, exit_date)` per trade. Also updated the
+   stale `limit_note` text that claimed widening exceptions were "not applied here" (no longer
+   true). One existing test (`test_compute_trade_diagnostics_reconciles_counts`) called the old
+   `(..., limit_pct: float)` signature with a bare `0.05` — updated to call with `"AP888"` (whose
+   steady-state percentage is 0.05 and whose registered widening window doesn't cover the test's
+   2024 dates, so it still exercises the intended fallback path). Full suite re-run clean after
+   this fix: see Manual Verification above (586 passed includes this fix).
+2. **The new `settlement_close_gap_report.py`/`.md` evidence files were never `git add -f`'d.**
+   `examples/czsc_strategy/diagnostics/` is git-ignored; kimi-code's own commit (`27d590c6`) did not
+   force-add these two new files, so they existed on disk but were invisible to `git status` and
+   would not have shipped with the task. Force-added both in the round-2 commit.
+
+No other changes beyond these two fixes; the directional-touch semantics, trading-calendar reuse,
+widening-window registry values, and settlement-gap measurement/conclusion are all kimi-code's own
+work and were independently re-verified as correct, not altered.
+
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A59 (limit-band basis accuracy) promoted from post-remediation audit roadmap; handoff design->dev |
+| 2026-07-14 | kimi-code → codex | dev → review | A59 limit-band basis accuracy implemented |
