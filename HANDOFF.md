@@ -1,19 +1,19 @@
 ---
 task: A60 - Project-Level VERSION/CHANGELOG Gate + Banner-Exemption Config Cleanup
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -114,6 +114,20 @@ All acceptance commands run natively in the dev environment on 2026-07-14:
 
 ## Notes for the Next Agent
 
+(codex review rejection - 2026-07-14)
+
+1. `tools/sync_guardian/sync_check.py:644` still scans diagnostics with `d.glob("*.md")`, so
+   nested files under `diagnostics/archive/` are never visited. That means the new
+   `exempt_dirs` config is documented, but it is not what actually exempts archive files; they
+   remain silently skipped by the same non-recursive glob accident A60 was meant to resolve.
+   Fix by making the banner scan recursive (for example `rglob("*.md")`) and applying
+   `_is_path_exempt` to every candidate, so `exempt_dirs` is the active reason archived files are
+   skipped.
+2. Strengthen `tests/test_sync_guardian.py:437` so it proves the archive exemption is active:
+   the same unbannered archived markdown file should fail when `exempt_dirs` is absent or changed,
+   and pass when `diagnostics/archive` is configured. The current test would pass even if
+   `exempt_dirs` handling were removed, because the file is never scanned.
+
 (dev = kimi-code must read this before writing code)
 
 1. **Entry point:** `docs/design/a55-post-remediation-audit-roadmap.md` §"A60". Sixth and FINAL
@@ -187,3 +201,4 @@ All acceptance commands run natively in the dev environment on 2026-07-14:
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A60 (project-level VERSION/CHANGELOG gate + banner-exemption cleanup) promoted from post-remediation audit roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A60 project-level VERSION/CHANGELOG gate + banner-exemption cleanup implemented |
+| 2026-07-14 | codex → kimi-code | review → dev | 打回: Archive banner exemption is not actually exercised because diagnostics scan remains non-recursive |
