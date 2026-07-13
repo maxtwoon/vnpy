@@ -1,7 +1,7 @@
 ---
 task: A55 - Partial-TP Transaction-Cost Double-Scaling Fix
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-13
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -171,3 +171,4 @@ Scope changes:
 | 2026-07-13 | codex → claude-code | done → design | A55 promoted from the post-remediation re-audit roadmap draft after A54 reached done |
 | 2026-07-13 | claude-code → kimi-code | design → dev | A55 (partial-TP transaction-cost double-scaling fix) started |
 | 2026-07-13 | kimi-code → codex | dev → review | A55 partial-TP transaction-cost double-scaling fix implemented |
+| 2026-07-13 | codex → codex | review → done | A55 review passed: cost-rate fix and audit-log volume fix verified; sync gates and focused exit-model tests passed; full unit/preflight reruns hit documented WinError 5 tmp_path sandbox limitation, so used HANDOFF native counts 568 passed / preflight 155 passed for those items. |
