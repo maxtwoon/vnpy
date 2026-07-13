@@ -31,6 +31,7 @@ from chan_strategy.limit_config import (
     SYMBOL_LIMIT_CONFIG,
     _bar_at_limit,
     _daily_prev_close_map,
+    _limit_pct_for_date,
 )
 from chan_strategy.rollover_config import (
     _detect_transitions,
@@ -312,7 +313,6 @@ class BacktestEngine:
         limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
         limit_aware = limit_halt_model == "aware"
         prev_close_map = _daily_prev_close_map(trade_bars) if limit_aware else {}
-        limit_pct = None
         if limit_aware:
             symbol_key = _position_symbol_key(self.symbol)
             symbol_limit = SYMBOL_LIMIT_CONFIG.get(symbol_key)
@@ -322,19 +322,33 @@ class BacktestEngine:
                     f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
                     f"Add the symbol to limit_config.py or use limit_halt_model='off'."
                 )
-            limit_pct = symbol_limit.get("limit_pct")
 
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]
 
-            # A51: compute per-bar limit-band flags for entry/exit tagging.
-            entry_at_limit: bool | None = None
-            exit_at_limit: bool | None = None
-            if limit_aware and limit_pct is not None:
-                bar_date = bar.dt.date()
-                prev_close, _ = prev_close_map.get(bar_date, (None, None))
-                entry_at_limit, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
-                exit_at_limit, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
+            # A51: compute per-bar directional limit-band flags for entry/exit tagging.
+            entry_at_limit: tuple[bool, bool] | None = None
+            exit_at_limit: tuple[bool, bool] | None = None
+            if limit_aware:
+                # Local import avoids the backtest_engine <-> portfolio_engine cycle.
+                from chan_strategy.portfolio_engine import _trading_day
+
+                bar_trading_day = _trading_day(
+                    bar.dt, daily_agg="trading_calendar", night_session_start_hour=night_session_start_hour
+                )
+                limit_pct = _limit_pct_for_date(symbol_key, bar_trading_day)
+                if limit_pct is None:
+                    raise ValueError(
+                        f"limit_halt_model='aware' requires a SYMBOL_LIMIT_CONFIG entry for "
+                        f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
+                        f"Add the symbol to limit_config.py or use limit_halt_model='off'."
+                    )
+                prev_close, _ = prev_close_map.get(bar_trading_day, (None, None))
+                touched_upper, touched_lower, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
+                # Pass both directional touches down to the position layer; each
+                # position resolves the touch that matters for its own side.
+                entry_at_limit = (touched_upper, touched_lower)
+                exit_at_limit = (touched_upper, touched_lower)
 
             # Pre-update equity/margin for A40 risk-mode sizing (no lookahead).
             # Uses bar.open, the same delayed-fill execution price used by opens.

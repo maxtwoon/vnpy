@@ -28,8 +28,8 @@ from chan_strategy.config import SQLITE_DB_PATH  # noqa: E402
 from chan_strategy.limit_config import (  # noqa: E402
     SYMBOL_LIMIT_CONFIG,
     _bar_at_limit,
-    _bar_date,
     _daily_prev_close_map,
+    _trading_day_for_limit,
 )
 
 
@@ -129,22 +129,24 @@ def _compute_trade_diagnostics(
         entry_bar = trade_bars[entry_idx] if entry_idx is not None else None
         exit_bar = trade_bars[exit_idx] if exit_idx is not None else None
 
-        entry_date = _bar_date(entry_bar) if entry_bar else _bar_date(trade_bars[0])
-        exit_date = _bar_date(exit_bar) if exit_bar else entry_date
+        entry_date = _trading_day_for_limit(entry_bar.dt) if entry_bar else _trading_day_for_limit(trade_bars[0].dt)
+        exit_date = _trading_day_for_limit(exit_bar.dt) if exit_bar else entry_date
 
         entry_prev_close, _ = prev_close_map.get(entry_date, (None, None))
         exit_prev_close, _ = prev_close_map.get(exit_date, (None, None))
 
-        entry_at_limit, entry_upper, entry_lower = (
+        entry_tu, entry_tl, entry_upper, entry_lower = (
             _bar_at_limit(entry_bar, entry_prev_close, limit_pct)
             if entry_bar
-            else (False, None, None)
+            else (False, False, None, None)
         )
-        exit_at_limit, exit_upper, exit_lower = (
+        exit_tu, exit_tl, exit_upper, exit_lower = (
             _bar_at_limit(exit_bar, exit_prev_close, limit_pct)
             if exit_bar
-            else (False, None, None)
+            else (False, False, None, None)
         )
+        entry_at_limit = entry_tu or entry_tl
+        exit_at_limit = exit_tu or exit_tl
 
         zero_vol_entry = _zero_volume_near(trade_bars, entry_idx)
         zero_vol_exit = _zero_volume_near(trade_bars, exit_idx)

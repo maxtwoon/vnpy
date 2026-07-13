@@ -15,6 +15,38 @@ from czsc.objects import Direction
 from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG
 
 
+def _resolve_limit_flag(
+    flag: bool | tuple[bool, bool] | None,
+    side: int,
+    is_entry: bool,
+) -> bool:
+    """Translate a directional limit touch into the boolean relevant for ``side``.
+
+    :param flag: ``None`` (no touch), a plain bool (legacy callers), or a
+        ``(touched_upper, touched_lower)`` pair from ``_bar_at_limit``.
+    :param side: ``+1`` for long, ``-1`` for short.  ``0`` is treated as flat.
+    :param is_entry: ``True`` for open, ``False`` for close.
+
+    For an entry, the adverse/unexecutable limit is:
+      * long  -> upper (limit-up means you cannot buy favorably)
+      * short -> lower (limit-down means you cannot sell favorably)
+
+    For an exit, the adverse/unexecutable limit is:
+      * long  -> lower (limit-down means you cannot sell to close)
+      * short -> upper (limit-up means you cannot buy to cover)
+    """
+    if flag is None:
+        return False
+    if isinstance(flag, tuple):
+        touched_upper, touched_lower = flag
+        if side > 0:
+            return bool(touched_upper) if is_entry else bool(touched_lower)
+        if side < 0:
+            return bool(touched_lower) if is_entry else bool(touched_upper)
+        return False
+    return bool(flag)
+
+
 def _daily_trend_filter_signals(direction: str = "long", strict: bool = True) -> dict:
     """日线趋势过滤信号
 
@@ -627,12 +659,12 @@ class Position:
         :param total_open_margin: A40 risk-mode pre-open margin across all positions
         :param atr: A47 current ATR value for the structural_atr trailing stop.
                     Ignored when exit_model is ``"legacy"``.
-        :param entry_at_limit: A51 flag: the current execution bar is at/beyond the
-                               daily limit band for an entry fill.
-        :param exit_at_limit: A51 flag: the current bar is at/beyond the daily limit
-                              band for an exit fill.
+        :param entry_at_limit: A51 flag: ``(touched_upper, touched_lower)`` for the
+                               execution bar, or a legacy plain bool.
+        :param exit_at_limit: A51 flag: ``(touched_upper, touched_lower)`` for the
+                              current bar, or a legacy plain bool.
         """
-        self._pending_exit_at_limit = bool(exit_at_limit)
+        self._pending_exit_at_limit = _resolve_limit_flag(exit_at_limit, self.pos, is_entry=False)
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
 
@@ -918,7 +950,7 @@ class Position:
         self.trailing_active = False
         self._peak_price = price
         self._partial_tp_done = False
-        self._pending_entry_at_limit = bool(entry_at_limit)
+        self._pending_entry_at_limit = _resolve_limit_flag(entry_at_limit, 1, is_entry=True)
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, volume=self.volume, reason=reason))
 
     def _size_open(self, price: float, equity_at_entry: float | None,
@@ -1032,7 +1064,7 @@ class Position:
         self.trailing_active = False
         self._peak_price = price
         self._partial_tp_done = False
-        self._pending_entry_at_limit = bool(entry_at_limit)
+        self._pending_entry_at_limit = _resolve_limit_flag(entry_at_limit, -1, is_entry=True)
         self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, volume=self.volume, reason=reason))
 
     def _close_short(self, price: float, dt: datetime, reason: str = ""):

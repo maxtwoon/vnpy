@@ -4,14 +4,20 @@ RESEARCH-ONLY, not a trading recommendation.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
 from chan_strategy import backtest_engine as backtest_module
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import STRATEGY_CONFIG
-from chan_strategy.limit_config import SYMBOL_LIMIT_CONFIG, _bar_at_limit
+from chan_strategy.limit_config import (
+    SYMBOL_LIMIT_CONFIG,
+    _bar_at_limit,
+    _daily_prev_close_map,
+    _limit_pct_for_date,
+)
+from conftest import make_raw_bar
 from chan_strategy.positions import Event, Position
 
 
@@ -126,13 +132,157 @@ def test_bar_at_limit_uses_symbol_limit_config():
     at_limit_bar = _Bar(high=105.0, low=100.0)
     normal_bar = _Bar(high=104.9, low=100.0)
 
-    at_limit, upper, lower = _bar_at_limit(at_limit_bar, prev_close, limit_pct)
-    assert at_limit is True
+    touched_upper, touched_lower, upper, lower = _bar_at_limit(at_limit_bar, prev_close, limit_pct)
+    assert touched_upper is True
+    assert touched_lower is False
     assert upper == pytest.approx(105.0)
     assert lower == pytest.approx(95.0)
 
-    not_at_limit, _, _ = _bar_at_limit(normal_bar, prev_close, limit_pct)
-    assert not_at_limit is False
+    tu, tl, _, _ = _bar_at_limit(normal_bar, prev_close, limit_pct)
+    assert tu is False
+    assert tl is False
+
+
+def test_bar_at_limit_directional_separation():
+    """Upper and lower touches are reported independently."""
+    prev_close = 100.0
+    limit_pct = 0.05
+
+    class _Bar:
+        def __init__(self, high, low):
+            self.high = high
+            self.low = low
+
+    upper_touch = _Bar(high=105.0, low=100.0)
+    lower_touch = _Bar(high=100.0, low=95.0)
+    both_touch = _Bar(high=105.0, low=95.0)
+    no_touch = _Bar(high=104.9, low=95.1)
+
+    assert _bar_at_limit(upper_touch, prev_close, limit_pct)[:2] == (True, False)
+    assert _bar_at_limit(lower_touch, prev_close, limit_pct)[:2] == (False, True)
+    assert _bar_at_limit(both_touch, prev_close, limit_pct)[:2] == (True, True)
+    assert _bar_at_limit(no_touch, prev_close, limit_pct)[:2] == (False, False)
+
+
+def _run_position(name: str, opens: list, exits: list,
+                  open_signals: dict, close_signals: dict,
+                  entry_flag, exit_flag_open, exit_flag_close):
+    """Open then close a position and return the resulting pair."""
+    pos = Position(name=name, symbol="AP888", opens=opens, exits=exits)
+    pos.update(
+        open_signals, price=100, dt=datetime(2024, 1, 2, 9, 0),
+        execution_price=100,
+        entry_at_limit=entry_flag, exit_at_limit=exit_flag_open,
+    )
+    pos.update(
+        close_signals, price=101, dt=datetime(2024, 1, 2, 10, 0),
+        execution_price=101,
+        entry_at_limit=(False, False), exit_at_limit=exit_flag_close,
+    )
+    assert len(pos.pairs) == 1
+    return pos.pairs[0]
+
+
+def test_directional_limit_flag_maps_to_trade_side():
+    """Position.update resolves the directional touch relevant to its side."""
+    STRATEGY_CONFIG["limit_halt_model"] = "aware"
+
+    long_opens = [_event("open", "开多", [SIG_OPEN])]
+    long_exits = [_event("close", "平多", [SIG_CLOSE])]
+    short_opens = [_event("open", "开空", [SIG_SHORT_OPEN])]
+    short_exits = [_event("close", "平空", [SIG_SHORT_CLOSE])]
+
+    # Long entry: upper touch matters; lower touch does not.
+    pair = _run_position(
+        "一买多头", long_opens, long_exits,
+        _make_open_signals(), _make_close_signals(),
+        entry_flag=(True, False), exit_flag_open=(False, False), exit_flag_close=(False, False),
+    )
+    assert pair["is_entry_at_limit"] is True
+
+    pair = _run_position(
+        "一买多头", long_opens, long_exits,
+        _make_open_signals(), _make_close_signals(),
+        entry_flag=(False, True), exit_flag_open=(False, False), exit_flag_close=(False, False),
+    )
+    assert pair["is_entry_at_limit"] is False
+
+    # Short entry: lower touch matters; upper touch does not.
+    pair = _run_position(
+        "一卖空头", short_opens, short_exits,
+        _make_short_open_signals(), _make_short_close_signals(),
+        entry_flag=(False, True), exit_flag_open=(False, False), exit_flag_close=(False, False),
+    )
+    assert pair["is_entry_at_limit"] is True
+
+    pair = _run_position(
+        "一卖空头", short_opens, short_exits,
+        _make_short_open_signals(), _make_short_close_signals(),
+        entry_flag=(True, False), exit_flag_open=(False, False), exit_flag_close=(False, False),
+    )
+    assert pair["is_entry_at_limit"] is False
+
+    # Long exit: lower touch matters; upper touch does not.
+    pair = _run_position(
+        "一买多头", long_opens, long_exits,
+        _make_open_signals(), _make_close_signals(),
+        entry_flag=(False, False), exit_flag_open=(False, False), exit_flag_close=(False, True),
+    )
+    assert pair["is_exit_at_limit"] is True
+
+    pair = _run_position(
+        "一买多头", long_opens, long_exits,
+        _make_open_signals(), _make_close_signals(),
+        entry_flag=(False, False), exit_flag_open=(False, False), exit_flag_close=(True, False),
+    )
+    assert pair["is_exit_at_limit"] is False
+
+    # Short exit: upper touch matters; lower touch does not.
+    pair = _run_position(
+        "一卖空头", short_opens, short_exits,
+        _make_short_open_signals(), _make_short_close_signals(),
+        entry_flag=(False, False), exit_flag_open=(False, False), exit_flag_close=(True, False),
+    )
+    assert pair["is_exit_at_limit"] is True
+
+    pair = _run_position(
+        "一卖空头", short_opens, short_exits,
+        _make_short_open_signals(), _make_short_close_signals(),
+        entry_flag=(False, False), exit_flag_open=(False, False), exit_flag_close=(False, True),
+    )
+    assert pair["is_exit_at_limit"] is False
+
+
+def test_daily_prev_close_map_uses_trading_day_not_calendar_date():
+    """Night-session bars are bucketed into the next trading day (A39 reuse)."""
+    bars = [
+        # Day session for trading day 2024-01-02.
+        make_raw_bar(0, datetime(2024, 1, 2, 9, 0), open_=100.0, close=100.0),
+        # Night session for trading day 2024-01-03 (calendar date 2024-01-02, hour >= 20).
+        make_raw_bar(1, datetime(2024, 1, 2, 21, 0), open_=101.0, close=101.0),
+        # Day session for trading day 2024-01-03.
+        make_raw_bar(2, datetime(2024, 1, 3, 9, 0), open_=102.0, close=102.0),
+    ]
+    prev_map = _daily_prev_close_map(bars)
+
+    trading_day_2 = date(2024, 1, 2)
+    trading_day_3 = date(2024, 1, 3)
+
+    assert prev_map[trading_day_2] == (None, None)
+    # Trading day 3's previous close must come from trading day 2's day session,
+    # not from the same-evaluation-day night session.
+    assert prev_map[trading_day_3] == (100.0, trading_day_2)
+
+
+def test_temporary_widening_windows_override_steady_state():
+    """Registered widening windows override the steady-state limit percentage."""
+    assert _limit_pct_for_date("AP888", date(2026, 5, 5)) == 0.05
+    assert _limit_pct_for_date("AP888", date(2026, 5, 6)) == 0.08
+    assert _limit_pct_for_date("AP888", date(2026, 5, 7)) == 0.05
+
+    assert _limit_pct_for_date("RB888", date(2026, 5, 18)) == 0.03
+    assert _limit_pct_for_date("RB888", date(2026, 5, 19)) == 0.05
+    assert _limit_pct_for_date("RB888", date(2026, 5, 20)) == 0.03
 
 
 def _make_mock_signals(open_at_call: int = 8, close_at_call: int = 10):

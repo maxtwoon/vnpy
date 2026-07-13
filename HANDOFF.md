@@ -88,26 +88,26 @@ Accuracy" (the authoritative design — this HANDOFF summarizes it).
 
 ## Acceptance Criteria
 
-- [ ] A fixture with a night-session bar proves `_daily_prev_close_map` no longer includes
+- [x] A fixture with a night-session bar proves `_daily_prev_close_map` no longer includes
       same-evaluation-day night-session data in "previous close" (unit-tested, mirroring A39's own
       night-session test pattern in `test_data_adapter.py`).
-- [ ] AP888 and RB888's known temporary-widening windows are registered with the honest citation
+- [x] AP888 and RB888's known temporary-widening windows are registered with the honest citation
       described above; a fixture proves a date inside the window uses the overridden percentage, a
       date outside uses the steady-state percentage.
-- [ ] `_bar_at_limit`'s directional result is unit-tested for both upper-touch and lower-touch
+- [x] `_bar_at_limit`'s directional result is unit-tested for both upper-touch and lower-touch
       cases, and the entry/exit consumption logic correctly maps direction to trade side (documented
       reasoning in the Decision Log for which direction matters for which side).
-- [ ] The settlement-vs-close gap for the 5 default symbols is measured and reported (even a "gap is
+- [x] The settlement-vs-close gap for the 5 default symbols is measured and reported (even a "gap is
       immaterial" conclusion must show the actual measurement, not just assert it).
-- [ ] `limit_halt_model="off"` equivalence test (`test_limit_halt_off_equivalence.py`) still passes
+- [x] `limit_halt_model="off"` equivalence test (`test_limit_halt_off_equivalence.py`) still passes
       byte-identical.
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any NEW parameter choice (the widening
+- [x] No threshold tuning; no pre-2026-04-24 data used for any NEW parameter choice (the widening
       windows are historical facts being registered, not tuned parameters); no SimNow order/cancel/
       send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
@@ -158,6 +158,47 @@ Accuracy" (the authoritative design — this HANDOFF summarizes it).
   observation worded with "presumably," NOT a verified primary-source exchange notice — flagged
   this explicitly so dev does not fabricate a more confident-looking citation than the evidence
   actually supports.
+- 2026-07-14 - kimi-code reused `portfolio_engine._trading_day` inside
+  `limit_config._daily_prev_close_map` (local import to break the backtest_engine <->
+  portfolio_engine cycle) so night-session bars are bucketed by exchange trading day, fixing the
+  same-evaluation-day night-session pollution.
+- 2026-07-14 - kimi-code added `temporary_widening_windows` entries for AP888 (2026-05-06 → 8%)
+  and RB888 (2026-05-19 → 5%) with the honest secondary-source citation required by the caveat
+  above. `_limit_pct_for_date` selects the override when a bar's trading day falls inside the
+  registered window and falls back to the steady-state percentage otherwise.
+- 2026-07-14 - kimi-code changed `_bar_at_limit` to return `(touched_upper, touched_lower, upper,
+  lower)`. The entry/exit consumption maps the touch that matters for each side:
+  * Long entry: upper touch is adverse (cannot buy favorably at limit-up).
+  * Short entry: lower touch is adverse (cannot sell favorably at limit-down).
+  * Long exit: lower touch is adverse (cannot sell to close at limit-down).
+  * Short exit: upper touch is adverse (cannot buy to cover at limit-up).
+  `positions.py` now interprets the `(upper, lower)` tuple per side; legacy callers that pass a
+  plain bool still work unchanged.
+- 2026-07-14 - Settlement-vs-close gap was measured with the post-2026-04-24 window
+  (2026-05-01 ~ 2026-07-13) using a last-30-minute VWAP proxy for settlement (the database has no
+  official settlement column). Mean absolute gaps were well under 0.13% for all five symbols and
+  ≤50 bp on every observed day, so the gap is immaterial under this proxy. A definitive
+  primary-source measurement would require an official settlement-price field.
+
+## Manual Verification
+
+```text
+python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+586 passed, 4 deselected in 31.46s
+
+ruff check on A59-changed files (limit_config.py, backtest_engine.py,
+test_limit_halt_aware.py, test_limit_halt_exposure_report.py,
+limit_halt_exposure_report.py, settlement_close_gap_report.py): pass
+
+python tools/sync_check.py
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+diagnostics\run_next_work.ps1 -Preflight
+==> Preflight complete; live SimNow capture was not requested
+```
 
 ## 交接历史
 

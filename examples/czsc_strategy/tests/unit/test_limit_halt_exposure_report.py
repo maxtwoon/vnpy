@@ -32,19 +32,22 @@ def test_daily_prev_close_map():
 
 def test_bar_at_limit_flags_high_and_low():
     bar = make_raw_bar(0, datetime(2024, 1, 2, 9, 0), open_=100.0, close=101.0, high=105.0, low=99.0)
-    at_limit, upper, lower = report._bar_at_limit(bar, 100.0, 0.05)
+    touched_upper, touched_lower, upper, lower = report._bar_at_limit(bar, 100.0, 0.05)
     assert upper == 105.0
     assert lower == 95.0
-    assert at_limit is True
+    assert touched_upper is True
 
     bar2 = make_raw_bar(1, datetime(2024, 1, 2, 9, 0), open_=100.0, close=101.0, high=104.0, low=96.0)
-    assert report._bar_at_limit(bar2, 100.0, 0.05)[0] is False
+    tu, tl, _, _ = report._bar_at_limit(bar2, 100.0, 0.05)
+    assert tu is False
+    assert tl is False
 
 
 def test_bar_at_limit_without_prev_close():
     bar = make_raw_bar(0, datetime(2024, 1, 2, 9, 0), open_=100.0, close=101.0)
-    at_limit, upper, lower = report._bar_at_limit(bar, None, 0.05)
-    assert at_limit is False
+    touched_upper, touched_lower, upper, lower = report._bar_at_limit(bar, None, 0.05)
+    assert touched_upper is False
+    assert touched_lower is False
     assert upper is None
     assert lower is None
 
