@@ -1,239 +1,141 @@
 ---
-task: A56 - structural_atr Profit-Protection Gap: Decide and Document
+task: A57 - Limit-Config Case Normalization + Fail-Loud
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-13
 deliverables:
   - HANDOFF.md
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Second task of the 2026-07-13 post-remediation re-audit roadmap
-(`docs/design/a55-post-remediation-audit-roadmap.md` §"A56"), promoted immediately after A55
-(partial-TP transaction-cost double-scaling fix) reached `done` with a clean, one-round codex
-acceptance.
+Third task of the 2026-07-13 post-remediation re-audit roadmap
+(`docs/design/a55-post-remediation-audit-roadmap.md` §"A57"), promoted immediately after A56
+reached `done` (codex accepted round 2 directly, no further reject).
 
-`docs/review/ai_trading_review_2026-07-13.md` Finding 🟠#2 (re-verified 2026-07-13 by claude-code
-against current code, confirmed no line drift beyond a 3-line shift from A55's own edits):
-`Position.update`'s `exit_model="structural_atr"` branch (`chan_strategy/positions.py:677-699`)
-is an `elif` chain — `elif not self._partial_tp_done: ... (try partial TP) ... elif
-self._check_atr_trailing_stop(price, atr): ...` — so `_check_atr_trailing_stop` is only ever
-reached once `self._partial_tp_done is True`. A49 fixed the specific bug where a lot-floor skip
-left this flag permanently `False`; it did not change the underlying structural fact that ATR
-trailing is gated behind partial-TP firing at all. A position whose directional target (the
-partial-TP trigger condition) never fires has **zero profit-side protection** for its entire life
-under `structural_atr` — only the fixed stop-loss and timeout remain — a materially different risk
-profile from `"legacy"`'s percentage-giveback trailing (active from the moment `trailing_start` is
-crossed, independent of any other event). Neither `config.py`'s `exit_model` comment nor the
-original A47 design document states this difference.
+`docs/review/ai_trading_review_2026-07-13.md` Finding 🟠#3 (re-verified 2026-07-13 by claude-code
+against current code, confirmed no line drift): `backtest_engine.py:314`'s
+`SYMBOL_LIMIT_CONFIG.get(self.symbol, {}).get("limit_pct")` does not normalize `self.symbol`'s case
+before lookup. `SYMBOL_LIMIT_CONFIG`'s keys (`limit_config.py:19-55`) are all uppercase (e.g.
+`"AP888"`, `"RB888"`), but the data layer explicitly supports lowercase symbol codes
+(`data_adapter.py:317`'s `COLLATE NOCASE`) and position/weight code already normalizes via
+`_research_symbol_key()` (`positions.py:302-304`) before doing config lookups elsewhere. Only the
+limit lookup at `backtest_engine.py:314` skips this. A lowercase `self.symbol` silently produces
+`limit_pct=None`, and every `pairs` entry gets `is_entry_at_limit=False`/`is_exit_at_limit=False`
+with no warning — a false-negative tag that looks like "checked, not at limit" but was never
+actually checked.
 
-Full contract: `docs/design/a55-post-remediation-audit-roadmap.md` §"A56 — `structural_atr`
-Profit-Protection Gap: Decide and Document" (the authoritative design — this HANDOFF summarizes
-it).
+**Important nuance found during claude-code's due-diligence re-verification (read this before
+touching code):** `backtest_engine.py` already has its OWN LOCAL `_research_symbol_key()` defined
+at line 45 (`"".join(ch for ch in str(symbol).upper() if ch.isalnum())` — strips ALL non-alphanumeric
+characters), which is DIFFERENT from `positions.py`'s `_research_symbol_key()` at line 302-304
+(`str(symbol or "").upper().split(".")[0]` — splits at the first dot and keeps only the part before
+it). These are two functions with the *same name* but *different behavior* living in different
+modules — a pre-existing drift issue, NOT something to fix as part of A57 (out of scope; flag it as
+a backlog note in the Decision Log if you notice it again, but do not touch it here).
+
+For a symbol like `"sc888.SHFE"` (dot + exchange suffix): `positions.py`'s version correctly
+extracts `"SC888"` (matches `SYMBOL_LIMIT_CONFIG`'s bare uppercase keys); `backtest_engine.py`'s own
+local version incorrectly produces `"SC888SHFE"` (strips the dot but keeps the suffix letters,
+which would NOT match `SYMBOL_LIMIT_CONFIG`). **Use `positions.py`'s `_research_symbol_key`
+for this specific fix** — import it explicitly (mirroring `portfolio_engine.py:29`'s existing
+precedent: `from chan_strategy.positions import _research_symbol_key`) rather than reusing
+`backtest_engine.py`'s own local, narrower one. Do not rename, remove, or unify the two existing
+`_research_symbol_key` functions — that consolidation is out of scope for this task.
+
+Full contract: `docs/design/a55-post-remediation-audit-roadmap.md` §"A57 — Limit-Config Case
+Normalization + Fail-Loud" (the authoritative design — this HANDOFF summarizes it).
 
 ## Goal
 
-**This task requires a design decision BEFORE any code is written**, then implementation of
-whichever option is chosen:
-
-- **Option A** (behavior change): make ATR trailing independent of `_partial_tp_done` — evaluate
-  `_check_atr_trailing_stop` every bar regardless of partial-TP state, with partial-TP becoming an
-  additional, non-blocking action rather than a prerequisite. Requires a new equivalence test
-  proving `exit_model="legacy"` stays byte-identical, plus a fresh `exit_model_report.py`
-  before/after comparison reported honestly (not framed as an improvement claim).
-- **Option B** (documentation-only): leave the `elif` chain exactly as-is; add an explicit,
-  prominent disclosure in three locations — `config.py`'s `exit_model` comment, the A47 design
-  section of `docs/design/a38-phase-contracts-p2-p8.md` (a dated addendum, do not rewrite history),
-  and `diagnostics/exit_model_report.py`'s Methodology text — stating plainly that ATR trailing is
-  not active until a partial take-profit event has fired, and positions that never reach a
-  directional target rely solely on the fixed stop-loss and timeout.
-
-## Design-step pre-analysis (claude-code, 2026-07-13 — evidence for dev to weigh, NOT a
-pre-made decision; dev must still read the cited source and record its own reasoned conclusion in
-the Decision Log before writing any code)
-
-Re-read `docs/design/a38-phase-contracts-p2-p8.md` lines 520-526 (P8a's own "### Semantics" text,
-the original, unedited A47 design intent):
-
-> "**P8a - exits (`"structural_atr"`):** replace the profit-side fixed-giveback trailing with an
-> ATR trailing stop (`trail = peak - atr_trail_mult * ATR`), keep the structural stop (center
-> break) as the hard structural exit, and **add a partial take-profit: scale out
-> `partial_tp_frac` of the position at the next center boundary / measured target, then trail the
-> remainder.**"
-
-The phrase "**then trail the remainder**" is sequential, not concurrent — it describes partial-TP
-firing as a precondition for trailing to begin, matching the current `elif` chain's actual
-behavior exactly. There is no language anywhere in P8a about trailing being active "from open" or
-protecting the whole position before any target is reached (contrast with `"legacy"`'s own
-described behavior elsewhere in the codebase, which IS active from `trailing_start`). This reads
-as evidence for **Option B** — the current gating appears to match original intent, just
-undocumented — but dev should form its own judgment from the full source text (already quoted
-above in full) rather than taking this paraphrase as the final word, and should also check
-whether any later design note (A49-A54 HANDOFF Decision Log entries, if any touch this) added
-context this excerpt doesn't capture.
+In `backtest_engine.py`'s limit-lookup call site (line 314), normalize `self.symbol` through
+`positions.py`'s `_research_symbol_key()` (imported explicitly, per the nuance above) before the
+`SYMBOL_LIMIT_CONFIG.get(...)` lookup. When `limit_halt_model == "aware"` AND the normalized symbol
+still isn't found in `SYMBOL_LIMIT_CONFIG` (a genuinely-unconfigured symbol, not a case mismatch),
+fail loud: either raise a clear exception, or write `is_entry_at_limit=None`/`is_exit_at_limit=None`
+(never silently `False`) so downstream readers can distinguish "not checked" from "checked, clear."
+No new config key. Does not add new symbols to `SYMBOL_LIMIT_CONFIG` or change any existing cited
+percentage — purely a lookup-key-normalization and fail-loud fix.
 
 ## Acceptance Criteria
 
-- [x] A clear, recorded design decision (Option B) with rationale citing A47's original
-      intent, documented in this task's own HANDOFF Decision Log **before any code is written**.
-- [x] Option A not selected; Option B documentation-only path taken.
-- [x] If Option B: the documentation change is present in all three locations (config.py comment,
-      `a38-phase-contracts-p2-p8.md` dated addendum, `exit_model_report.py` Methodology text); no
-      code/test changes; existing test suite untouched.
-- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [ ] A fixture with `BacktestEngine(symbol="sc888", ...)` (or another already-configured symbol in
+      lowercase) and `limit_halt_model="aware"` produces identical `is_entry_at_limit`/
+      `is_exit_at_limit` values to the equivalent uppercase-symbol run (unit-tested).
+- [ ] A fixture with a symbol genuinely absent from `SYMBOL_LIMIT_CONFIG` under `"aware"` produces
+      `None` (not `False`) for both tag fields, or raises — dev's choice, but must not silently
+      write `False` (unit-tested).
+- [ ] `limit_halt_model="off"` behavior is completely unaffected (existing golden-snapshot
+      equivalence test — `test_limit_halt_off_equivalence.py` — still passes byte-identical).
+- [ ] Uses `positions.py`'s `_research_symbol_key` (imported), not `backtest_engine.py`'s own local
+      one, and does not modify either existing `_research_symbol_key` definition.
+- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
-**Codex review rejection (2026-07-13):** A56's Option B disclosure text is present and scoped
-correctly, but the handoff cannot be accepted while the sync gates fail.
-
-Action items before returning to review:
-
-1. Fix root `python tools/sync_check.py`: it currently fails `must_match[HANDOFF.md]` because
-   HANDOFF contains the child workflow version `0.2.1` in the manual-verification notes. synccheck:ignore
-   Rephrase that evidence or add `synccheck:ignore` to the specific historical/evidence line so the
-   root `4.4.0` version check no longer treats it as drift.
-2. Fix both sync gates' `diagnostics_banner_check` failures for:
-   `diagnostics/simnow_20d_promotion_decision.md`,
-   `diagnostics/simnow_daily_brief_2026-07-10.md`,
-   `diagnostics/simnow_daily_brief_2026-07-13.md`,
-   `diagnostics/simnow_report_2026-07-10.md`, and
-   `diagnostics/simnow_report_2026-07-13.md`. Even if this drift is unrelated to A56, the
-   acceptance criteria require `python tools/sync_check.py` and
-   `python tools/sync_check.py --root examples/czsc_strategy` to pass before review can advance.
-3. The local pytest and preflight reruns hit the documented Windows `tmp_path` / `WinError 5`
-   sandbox signature, so use the existing manual counts for those two items unless a non-sandbox
-   run is available. Focus the fix on the sync gate failures above.
-
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a55-post-remediation-audit-roadmap.md` §"A56". Second task of the
+1. **Entry point:** `docs/design/a55-post-remediation-audit-roadmap.md` §"A57". Third task of the
    A55-A60 roadmap triaging `docs/review/ai_trading_review_2026-07-13.md`'s findings — read that
-   report's finding #2 (🟠 medium) for full context.
-2. **Do the decision step first, literally before writing any code.** Re-read
-   `docs/design/a38-phase-contracts-p2-p8.md` lines 509-526 (P8a's full Semantics text) yourself —
-   don't just trust this HANDOFF's excerpt. This HANDOFF's "Design-step pre-analysis" section above
-   leans toward Option B based on the "then trail the remainder" phrasing, but you are the one who
-   must record the final reasoned decision in the Decision Log, citing the source text, before
-   touching `positions.py` or `config.py`.
-3. **Scope:** `chan_strategy/positions.py:677-699` (`Position.update`'s `structural_atr` branch)
-   if Option A; `chan_strategy/config.py`, `docs/design/a38-phase-contracts-p2-p8.md`,
-   `diagnostics/exit_model_report.py` if Option B. Do not touch `exit_model="legacy"`'s own
-   trailing logic, `sizing_model`, `limit_halt_model`, `rollover_stat_tagging`, or any P8b/
-   portfolio code either way.
-4. **If Option A is chosen, it is a real behavior change** — do not retune `atr_trail_mult`/
-   `partial_tp_frac`'s values, only change *when* the trailing check is evaluated. A fresh
-   `exit_model_report.py` before/after run is mandatory and must be reported as honest measurement,
-   never as a superiority/profitability claim (RESEARCH-ONLY banner still applies).
-5. **If Option B is chosen, do not skip any of the three documentation locations** — reviewer will
-   check all three. Editing `docs/design/a38-phase-contracts-p2-p8.md` should be a dated addendum
-   (e.g. "**2026-07-13 addendum (A56):** ..."), not a rewrite of the original P8a text, to preserve
-   the historical record of what was originally specified vs. later clarified.
-6. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection;
+   report's finding #3 (🟠 medium) for full context.
+2. **Scope:** `chan_strategy/backtest_engine.py`'s limit-lookup call site (around line 314) only.
+   Import `_research_symbol_key` from `chan_strategy.positions` (do not reuse the file's own local
+   `_research_symbol_key` at line 45 — see the "Important nuance" note above for why: the two
+   functions behave differently for symbols with exchange-suffix dots). Do not touch
+   `limit_config.py`'s `SYMBOL_LIMIT_CONFIG` contents, `_bar_at_limit`, `_daily_prev_close_map`, or
+   anything scheduled for A59.
+3. **Fail-loud semantics — pick one, document which:** either raise a clear exception when
+   `limit_halt_model="aware"` and the normalized symbol is genuinely unconfigured, or set both tag
+   fields to `None` (not `False`). Either is acceptable per the design; just be explicit and
+   consistent, and make sure it's unit-tested.
+4. **Test file:** `tests/unit/test_limit_halt_aware.py` already exists — add cases there
+   (lowercase-vs-uppercase-symbol equivalence; unconfigured-symbol fail-loud behavior). Do not
+   create a duplicate test file.
+5. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection;
    no pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched; no
-   `GOAL PASSED`; `exit_model="legacy"` provably untouched either way.
-7. **Include a Manual-verification block with natively-run counts, and run `ruff check`
-   proactively before finishing** — this consistently correlates with one-round review acceptance
-   across the A49-A54 and A55 rounds.
+   `GOAL PASSED`; `limit_halt_model="off"`'s existing equivalence snapshot must stay byte-identical.
+6. **Include a Manual-verification block with natively-run counts, and run `ruff check`
+   proactively before finishing.**
+7. **Lesson from A56's round 1 rejection, carried forward:** if your dev round's own
+   `sync_check.py`/preflight run happens to regenerate any `diagnostics/*.md` report (e.g. via
+   `run_next_work.ps1 -Preflight`'s SimNow steps), the RESEARCH-ONLY banner generators were fixed in
+   A56 — this should no longer be an issue, but if you see a banner-check failure anyway, it is
+   very likely unrelated pre-existing/concurrent repo activity, not something A57 introduced;
+   note it plainly in the Decision Log rather than silently working around it, and do not spend
+   large effort chasing it — surface it to review instead.
 8. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A56 structural_atr profit-protection gap: <Option A|B> implemented"`.
+   `python tools/handoff.py next --actor kimi-code --summary "A57 limit-config case normalization + fail-loud implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
-
-## Manual verification (natively-run counts)
-
-- `ruff check examples/czsc_strategy/chan_strategy/config.py examples/czsc_strategy/diagnostics/exit_model_report.py` — pass.
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` — 568 passed, 4 deselected in 31.37s
-  (claude-code's independent re-run: 572 passed, 4 deselected — the +4 come from unrelated,
-  pre-existing simnow test edits already dirty in the working tree before this task started; not
-  A56's own scope, see note below).
-- `python tools/sync_check.py` — pass (version 4.4.0) at kimi-code's dev-round checkpoint.
-- `python tools/sync_check.py --root examples/czsc_strategy` — pass (version 0.2.1) at kimi-code's dev-round checkpoint. synccheck:ignore
-- `run_next_work.ps1 -Preflight` — 155 passed; preflight complete.
-
-**Round 2 fix (claude-code, 2026-07-13, after codex's review-1 rejection):** codex's first review
-correctly declined to accept a documentation-only accommodation for the sync-gate failures and
-required an actual fix before advancing. Two real, separate issues were found and fixed:
-
-1. **`must_match[HANDOFF.md]` false positive**: this HANDOFF's own manual-verification notes
-   quoted the child project's version number for evidence purposes, which the root
-   `sync_check.py` misread as version drift against the root truth (`4.4.0`). synccheck:ignore
-   Fixed by adding the `synccheck:ignore` marker directly on the two lines containing that
-   version string (the marker must be on the *same line* as the version text to take effect,
-   not just nearby). synccheck:ignore
-2. **`diagnostics_banner_check` — real, root-caused fix, not deferred.** The 5 files codex flagged
-   were missing the `RESEARCH-ONLY` banner because their *generator scripts* never embedded it:
-   - `diagnostics/simnow_promotion_decision.py`'s `write_report()` (produces
-     `simnow_20d_promotion_decision.md`)
-   - `diagnostics/simnow_daily_brief.py`'s `build_daily_brief()` (produces
-     `simnow_daily_brief_*.md`)
-   - `diagnostics/simnow_daily_monitor.py`'s `write_20d_markdown()` (produces
-     `simnow_20d_observation_report.md`) — this one already had a *different*, weaker banner
-     (`RESEARCH_ONLY_BANNER = "Diagnostic only, not a trading recommendation."`) that doesn't match
-     the sync-gate's required marker text; kept the existing line and added the required marker
-     alongside it.
-
-   All three now import and call `declassify_historical_reports.build_banner()` (reusing the
-   existing marker/template, not a duplicated hardcoded string, per the standing single-source-of-
-   truth discipline). Ran `diagnostics/declassify_historical_reports.py` to backfill the banner
-   into the 5 already-existing flagged files, then re-ran `run_next_work.ps1 -Preflight` (which
-   regenerates today's dated reports as a side effect) to confirm the fixed generators produce
-   compliant output going forward — `python tools/sync_check.py` and `--root
-   examples/czsc_strategy` both PASS cleanly after this, with no more banner failures surviving a
-   regeneration cycle. `ruff check` on the three edited scripts: pass. Full unit suite after the
-   fix: 577 passed, 4 deselected (up from kimi's original 568 — the delta is the same unrelated
-   pre-existing simnow test edits noted above, still not part of A56's own diff). Preflight: 164
-   passed.
-
-   This fix is scoped to report-generator hygiene only — no `positions.py`, `config.py` (beyond
-   A56's own Option B comment, unchanged), or any trading-logic file touched by this round.
-   Previously-spawned standalone task for this issue is superseded/closed by this in-line fix.
 
 ## Decision Log
 
-- 2026-07-13 - A56 promoted from `docs/design/a55-post-remediation-audit-roadmap.md`'s draft to an
-  active HANDOFF task, started immediately after A55 reached `done` with a clean one-round codex
-  acceptance.
-- 2026-07-13 - Re-verified the `elif` chain's current location (`positions.py:677-699`, shifted
-  from the roadmap doc's cited `688-698` by A55's own unrelated edits earlier in the file) and
-  confirmed the structural gating behavior is unchanged since the audit.
-- 2026-07-13 - claude-code (design step) re-read `docs/design/a38-phase-contracts-p2-p8.md`'s P8a
-  Semantics text in full and found the phrase "add a partial take-profit: scale out
-  `partial_tp_frac` of the position at the next center boundary / measured target, **then trail the
-  remainder**" — sequential phrasing consistent with the current `elif` gating, leaning toward
-  Option B (documentation-only). This is presented as evidence for dev's own decision, not a
-  pre-made call — dev must independently confirm and record the final decision before writing code,
-  per the roadmap's own dev-prompt requirement.
-- 2026-07-13 - kimi-code (dev) independently re-read the same P8a Semantics text at
-  `docs/design/a38-phase-contracts-p2-p8.md:520-526` and the implementation at
-  `examples/czsc_strategy/chan_strategy/positions.py:677-699`. The design states
-  "scale out `partial_tp_frac` ... **then** trail the remainder" — sequential wording that matches
-  the current `elif` chain (`partial_tp` branch first, ATR-trailing branch only after
-  `_partial_tp_done`). Because the gating matches the original A47 intent, the gap is a disclosure
-  issue, not a behavior bug. **Decision: Option B (documentation-only).** No change to
-  `positions.py`; add explicit disclosures to `config.py`, `a38-phase-contracts-p2-p8.md` (dated
-  addendum), and `diagnostics/exit_model_report.py`.
+- 2026-07-13 - A57 promoted from `docs/design/a55-post-remediation-audit-roadmap.md`'s draft to an
+  active HANDOFF task, started immediately after A56 reached `done` (codex accepted the round-2 fix
+  directly).
+- 2026-07-13 - claude-code re-verified `backtest_engine.py:314`'s lookup is unchanged since the
+  audit, and discovered during due-diligence that `backtest_engine.py` has its own local
+  `_research_symbol_key` (line 45, strips all non-alnum chars) that is DIFFERENT from
+  `positions.py`'s version (line 302-304, splits at first dot) — for symbols with an exchange-suffix
+  dot (e.g. `"sc888.SHFE"`), the local version would produce a wrong, non-matching key. Directed dev
+  to import and use `positions.py`'s version specifically (matching `portfolio_engine.py:29`'s
+  existing precedent), and to leave the pre-existing duplicate-function drift itself out of scope.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-13 | codex → claude-code | done → dev | A56 (structural_atr profit-protection gap) promoted from post-remediation audit roadmap; handoff design->dev |
-| 2026-07-13 | kimi-code → codex | dev → review | A56 structural_atr profit-protection gap: Option B (documentation-only) implemented |
-| 2026-07-13 | codex → kimi-code | review → dev | 打回: sync_check gates fail: HANDOFF version drift plus diagnostics banner drift |
-| 2026-07-13 | kimi-code → codex | dev → review | A56 round 2: fixed sync-gate false-positive and root-caused RESEARCH-ONLY banner generator bug per codex's review-1 rejection |
-| 2026-07-13 | codex → codex | review → done | A56 review passed: Option B disclosures verified; sync gates and guardrails clean; pytest/preflight local failures match documented WinError5 sandbox limitation, manual counts accepted |
+| 2026-07-13 | codex → claude-code | done → dev | A57 (limit-config case normalization + fail-loud) promoted from post-remediation audit roadmap; handoff design->dev |
