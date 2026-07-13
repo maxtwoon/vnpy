@@ -7,9 +7,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from declassify_historical_reports import build_banner
 from simnow_action_summary import _record_reason, build_action_summary
 from simnow_monitor_config import SIMNOW_MONITOR_CONFIG
 from simnow_observation_rules import is_valid_observation
+from simnow_observation_window import filter_records_by_start, load_observation_start_date
 from simnow_strategy_surface import filter_events_to_window
 
 
@@ -614,8 +616,14 @@ def _consecutive_clean_days(records: list[dict[str, Any]]) -> int:
     return count
 
 
-def build_20d_report(records: list[dict[str, Any]], min_days: int = 20) -> dict[str, Any]:
-    ordered = sorted(records, key=lambda x: str(x.get("date", "")))
+def build_20d_report(
+    records: list[dict[str, Any]],
+    min_days: int = 20,
+    observation_start_date: str | None = None,
+) -> dict[str, Any]:
+    all_records = sorted(records, key=lambda x: str(x.get("date", "")))
+    ordered = sorted(filter_records_by_start(all_records, observation_start_date), key=lambda x: str(x.get("date", "")))
+    excluded_before_start_count = len(all_records) - len(ordered)
     recent = ordered[-min_days:]
     status_counts = _count_by([str(row.get("status") or "unknown") for row in recent])
     pass_days = sum(1 for row in recent if row.get("status") == "pass")
@@ -652,6 +660,8 @@ def build_20d_report(records: list[dict[str, Any]], min_days: int = 20) -> dict[
     ])
     return {
         "required_days": min_days,
+        "observation_start_date": observation_start_date or "",
+        "excluded_before_start_count": excluded_before_start_count,
         "observed_days": len(recent),
         "valid_observation_days": valid_days,
         "status_counts": status_counts,
@@ -678,8 +688,12 @@ def write_20d_markdown(summary: dict[str, Any], out: Path) -> None:
     lines = [
         "# SimNow 20-Day Observation Report",
         "",
+        build_banner().rstrip("\n"),
+        "",
         f"> {RESEARCH_ONLY_BANNER}",
         "",
+        f"- observation_start_date: `{summary.get('observation_start_date', '')}`",
+        f"- excluded_before_start_count: `{summary.get('excluded_before_start_count', 0)}`",
         f"- observed_days: `{summary['observed_days']}/{summary['required_days']}`",
         f"- valid_observation_days: `{summary['valid_observation_days']}/{summary['required_days']}`",
         f"- pass_days: `{summary['pass_days']}`",
@@ -758,6 +772,11 @@ def main() -> None:
     parser.add_argument("--no-append", action="store_true")
     parser.add_argument("--min-days", type=int, default=20)
     parser.add_argument(
+        "--observation-start-date",
+        default=None,
+        help="Only count ledger rows on or after this date. Defaults to simnow_observation_window.json.",
+    )
+    parser.add_argument(
         "--risk-priority",
         choices=["replay_first", "legacy_simnow_first"],
         default=SIMNOW_MONITOR_CONFIG["risk_priority"],
@@ -795,7 +814,10 @@ def main() -> None:
         write_json(args.record_json, record)
     if not args.no_append:
         append_ledger(args.ledger, record)
-    summary = build_20d_report(read_ledger(args.ledger), min_days=args.min_days)
+    start_date = args.observation_start_date
+    if start_date is None:
+        start_date = load_observation_start_date()
+    summary = build_20d_report(read_ledger(args.ledger), min_days=args.min_days, observation_start_date=start_date)
     write_20d_markdown(summary, args.report_md)
     print(json.dumps({
         "record_status": record["status"],

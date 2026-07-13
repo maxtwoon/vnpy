@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
+from declassify_historical_reports import build_banner
 from simnow_action_summary import action_recommendation
 
 
@@ -35,6 +37,11 @@ def _format_symbols(symbols: list[str] | None) -> str:
     if not symbols:
         return "无"
     return ",".join(str(s) for s in symbols)
+
+
+def _format_bool(value: Any) -> str:
+    """Format booleans as lowercase text for stable reports."""
+    return str(bool(value)).lower()
 
 
 def needs_user_action(summary: dict[str, Any]) -> bool:
@@ -137,6 +144,8 @@ def build_daily_brief(summary: dict[str, Any]) -> str:
     lines = [
         f"# SimNow 每日观察日报 - {date}",
         "",
+        build_banner().rstrip("\n"),
+        "",
         f"- automation_status: `{status}`",
         f"- automation_exit_code: `{exit_code}`",
         f"- automation_reason: `{reason or '无'}`",
@@ -148,6 +157,37 @@ def build_daily_brief(summary: dict[str, Any]) -> str:
         f"- promotion.valid_observation_days: `{valid_days}`",
         f"- promotion.ready_to_expand: `{str(ready_to_expand).lower()}`",
         f"- needs_user_action: `{str(needs_user_action(summary)).lower()}`",
+        "",
+        "## SimNow 环境采集",
+        "",
+        f"- ticks: `{_safe_get(summary, 'environment_capture', 'ticks', default=0)}`",
+        f"- contracts_count: `{_safe_get(summary, 'environment_capture', 'contracts_count', default=0)}`",
+        f"- accounts: `{_safe_get(summary, 'environment_capture', 'accounts', default=0)}`",
+        f"- subscribed_count: `{_safe_get(summary, 'environment_capture', 'subscribed_count', default=0)}`",
+        f"- read_only: `{_format_bool(_safe_get(summary, 'environment_capture', 'read_only', default=False))}`",
+        f"- orders_sent_by_workflow: `{_safe_get(summary, 'environment_capture', 'orders_sent_by_workflow', default=0)}`",
+        "",
+        "## 账户污染监控",
+        "",
+        f"- account_contamination.detected: `{_format_bool(_safe_get(summary, 'account_contamination', 'detected', default=False))}`",
+        f"- external_orders: `{_safe_get(summary, 'account_contamination', 'orders', default=0)}`",
+        f"- external_trades: `{_safe_get(summary, 'account_contamination', 'trades', default=0)}`",
+        f"- external_active_positions: `{_safe_get(summary, 'account_contamination', 'active_positions', default=0)}`",
+        f"- external_position_symbols: `{_format_symbols(_safe_get(summary, 'account_contamination', 'position_symbols', default=[]))}`",
+        "- note: `SimNow 账户活动仅作为外部污染审计证据，不计入策略收益`",
+        "",
+        "## 盘后 DB 延迟回放",
+        "",
+        f"- delayed_replay.available: `{_format_bool(_safe_get(summary, 'delayed_replay', 'available', default=False))}`",
+        f"- delayed_replay.status: `{_safe_get(summary, 'delayed_replay', 'status', default='') or '无'}`",
+        f"- delayed_replay.valid_observation: `{_format_bool(_safe_get(summary, 'delayed_replay', 'valid_observation', default=False))}`",
+        f"- delayed_replay.reason: `{_safe_get(summary, 'delayed_replay', 'reason', default='') or '无'}`",
+        f"- latest_db_date: `{_safe_get(summary, 'delayed_replay', 'latest_db_date', default='') or '无'}`",
+        f"- missing_or_lagged_symbols: `{_format_symbols(_safe_get(summary, 'delayed_replay', 'missing_or_lagged_symbols', default=[]))}`",
+        f"- replay_signals: `{_safe_get(summary, 'delayed_replay', 'signals', default=0)}`",
+        f"- replay_trades: `{_safe_get(summary, 'delayed_replay', 'trades', default=0)}`",
+        f"- replay_positions: `{_safe_get(summary, 'delayed_replay', 'positions', default=0)}`",
+        f"- risk_source: `{_safe_get(summary, 'delayed_replay', 'risk_source', default='replay_only')}`",
         "",
         "## 20 日进度",
         "",
@@ -183,6 +223,8 @@ render_daily_brief = build_daily_brief
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(
         description="Generate a fixed-format Chinese daily brief from a SimNow run summary JSON."
     )

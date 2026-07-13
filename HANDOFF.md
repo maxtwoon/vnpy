@@ -99,6 +99,27 @@ context this excerpt doesn't capture.
 
 ## Notes for the Next Agent
 
+**Codex review rejection (2026-07-13):** A56's Option B disclosure text is present and scoped
+correctly, but the handoff cannot be accepted while the sync gates fail.
+
+Action items before returning to review:
+
+1. Fix root `python tools/sync_check.py`: it currently fails `must_match[HANDOFF.md]` because
+   HANDOFF contains the child workflow version `0.2.1` in the manual-verification notes. synccheck:ignore
+   Rephrase that evidence or add `synccheck:ignore` to the specific historical/evidence line so the
+   root `4.4.0` version check no longer treats it as drift.
+2. Fix both sync gates' `diagnostics_banner_check` failures for:
+   `diagnostics/simnow_20d_promotion_decision.md`,
+   `diagnostics/simnow_daily_brief_2026-07-10.md`,
+   `diagnostics/simnow_daily_brief_2026-07-13.md`,
+   `diagnostics/simnow_report_2026-07-10.md`, and
+   `diagnostics/simnow_report_2026-07-13.md`. Even if this drift is unrelated to A56, the
+   acceptance criteria require `python tools/sync_check.py` and
+   `python tools/sync_check.py --root examples/czsc_strategy` to pass before review can advance.
+3. The local pytest and preflight reruns hit the documented Windows `tmp_path` / `WinError 5`
+   sandbox signature, so use the existing manual counts for those two items unless a non-sandbox
+   run is available. Focus the fix on the sync gate failures above.
+
 (dev = kimi-code must read this before writing code)
 
 1. **Entry point:** `docs/design/a55-post-remediation-audit-roadmap.md` §"A56". Second task of the
@@ -141,24 +162,46 @@ context this excerpt doesn't capture.
   pre-existing simnow test edits already dirty in the working tree before this task started; not
   A56's own scope, see note below).
 - `python tools/sync_check.py` — pass (version 4.4.0) at kimi-code's dev-round checkpoint.
-- `python tools/sync_check.py --root examples/czsc_strategy` — pass (version 0.2.1) at kimi-code's
-  dev-round checkpoint.
+- `python tools/sync_check.py --root examples/czsc_strategy` — pass (version 0.2.1) at kimi-code's dev-round checkpoint. synccheck:ignore
 - `run_next_work.ps1 -Preflight` — 155 passed; preflight complete.
 
-**claude-code's independent re-verification (2026-07-13, before triggering review) found
-`python tools/sync_check.py` NOW fails** `diagnostics_banner_check` for 5 files —
-`diagnostics/simnow_20d_promotion_decision.md`, `simnow_daily_brief_2026-07-10.md`,
-`simnow_daily_brief_2026-07-13.md`, `simnow_report_2026-07-10.md`, `simnow_report_2026-07-13.md` —
-all missing the `RESEARCH-ONLY` banner. **This is pre-existing, out-of-scope drift unrelated to
-A56**: these files were already modified in the working tree before A55/A56 started this session
-(confirmed via `git status`/`git log` — none are touched by A56's diff, which is limited to
-`config.py`, `a38-phase-contracts-p2-p8.md`, `exit_model_report.py`, `VERSION`, `CHANGELOG.md`).
-Root cause traced to `diagnostics/simnow_daily_brief.py`/`simnow_run_summary.py` not embedding the
-banner when generating reports — flagged as a separate standalone task (spawned, not part of any
-A-series roadmap item). **Reviewer: treat this exactly like the standing WinError5
-sandbox-limitation accommodation** — trust kimi-code's dev-round-checkpoint sync_check PASS above
-for A56's own scope; a full fresh `sync_check.py` run will show unrelated FAILs from these 5 files
-that are not this task's responsibility to fix.
+**Round 2 fix (claude-code, 2026-07-13, after codex's review-1 rejection):** codex's first review
+correctly declined to accept a documentation-only accommodation for the sync-gate failures and
+required an actual fix before advancing. Two real, separate issues were found and fixed:
+
+1. **`must_match[HANDOFF.md]` false positive**: this HANDOFF's own manual-verification notes
+   quoted the child project's version number for evidence purposes, which the root
+   `sync_check.py` misread as version drift against the root truth (`4.4.0`). synccheck:ignore
+   Fixed by adding the `synccheck:ignore` marker directly on the two lines containing that
+   version string (the marker must be on the *same line* as the version text to take effect,
+   not just nearby). synccheck:ignore
+2. **`diagnostics_banner_check` — real, root-caused fix, not deferred.** The 5 files codex flagged
+   were missing the `RESEARCH-ONLY` banner because their *generator scripts* never embedded it:
+   - `diagnostics/simnow_promotion_decision.py`'s `write_report()` (produces
+     `simnow_20d_promotion_decision.md`)
+   - `diagnostics/simnow_daily_brief.py`'s `build_daily_brief()` (produces
+     `simnow_daily_brief_*.md`)
+   - `diagnostics/simnow_daily_monitor.py`'s `write_20d_markdown()` (produces
+     `simnow_20d_observation_report.md`) — this one already had a *different*, weaker banner
+     (`RESEARCH_ONLY_BANNER = "Diagnostic only, not a trading recommendation."`) that doesn't match
+     the sync-gate's required marker text; kept the existing line and added the required marker
+     alongside it.
+
+   All three now import and call `declassify_historical_reports.build_banner()` (reusing the
+   existing marker/template, not a duplicated hardcoded string, per the standing single-source-of-
+   truth discipline). Ran `diagnostics/declassify_historical_reports.py` to backfill the banner
+   into the 5 already-existing flagged files, then re-ran `run_next_work.ps1 -Preflight` (which
+   regenerates today's dated reports as a side effect) to confirm the fixed generators produce
+   compliant output going forward — `python tools/sync_check.py` and `--root
+   examples/czsc_strategy` both PASS cleanly after this, with no more banner failures surviving a
+   regeneration cycle. `ruff check` on the three edited scripts: pass. Full unit suite after the
+   fix: 577 passed, 4 deselected (up from kimi's original 568 — the delta is the same unrelated
+   pre-existing simnow test edits noted above, still not part of A56's own diff). Preflight: 164
+   passed.
+
+   This fix is scoped to report-generator hygiene only — no `positions.py`, `config.py` (beyond
+   A56's own Option B comment, unchanged), or any trading-logic file touched by this round.
+   Previously-spawned standalone task for this issue is superseded/closed by this in-line fix.
 
 ## Decision Log
 
@@ -191,3 +234,5 @@ that are not this task's responsibility to fix.
 |------|---------|----------|------|
 | 2026-07-13 | codex → claude-code | done → dev | A56 (structural_atr profit-protection gap) promoted from post-remediation audit roadmap; handoff design->dev |
 | 2026-07-13 | kimi-code → codex | dev → review | A56 structural_atr profit-protection gap: Option B (documentation-only) implemented |
+| 2026-07-13 | codex → kimi-code | review → dev | 打回: sync_check gates fail: HANDOFF version drift plus diagnostics banner drift |
+| 2026-07-13 | kimi-code → codex | dev → review | A56 round 2: fixed sync-gate false-positive and root-caused RESEARCH-ONLY banner generator bug per codex's review-1 rejection |

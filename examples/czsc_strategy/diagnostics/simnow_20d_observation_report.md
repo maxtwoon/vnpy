@@ -12,50 +12,41 @@
 > - `decision_data_windows`: ['2026-04-24~present', 'SimNow observation']
 > - `note`: Future validation must use post-2026-04-24 incremental data and SimNow observation before any promotion claim can be considered.
 
+> Diagnostic only, not a trading recommendation.
 
-- observed_days: `4/20`
+- observation_start_date: `2026-07-14`
+- excluded_before_start_count: `12`
+- observed_days: `0/20`
 - valid_observation_days: `0/20`
 - pass_days: `0`
-- pending_days: `3`
-- skipped_days: `1`
+- pending_days: `0`
+- skipped_days: `0`
 - consistency_matched_days: `0`
 - warning_days: `0`
 - halt_days: `0`
-- latest_record_date: `2026-07-01`
+- latest_record_date: ``
 - last_valid_observation_date: ``
 - consecutive_clean_days: `0`
 - ready_to_expand: `False`
-- promotion_blockers: `need_20_more_valid_observation_days, pending_days_present, skipped_days_present, non_pass_days_present, consistency_not_fully_matched`
+- promotion_blockers: `need_20_more_valid_observation_days`
 
 ## Status Counts
 
 | status | days |
 |---|---:|
-| pending | 3 |
-| skipped | 1 |
 
 ## Pending / Skipped / Risk Reasons
 
 | reason | days |
 |---|---:|
-| ctp_disconnect_097_no_snapshot | 1 |
-| historical_db_lag | 2 |
-| kline_coverage_incomplete | 1 |
+| none | 0 |
 
 ## Action Summary
 
 | date | status | reason | severity | action | counts_for_20d |
 |---|---|---|---|---|---|
-| 2026-06-22 | pending | historical_db_lag | medium | 历史 DB 未覆盖当天；建议等待或执行 backfill。 | False |
-| 2026-06-27 | skipped | ctp_disconnect_097_no_snapshot | info | CTP 连接失败；建议检查 SimNow 服务、网络、账号状态。 | False |
-| 2026-06-29 | pending | historical_db_lag | medium | 历史 DB 未覆盖当天；建议等待或执行 backfill。 | False |
-| 2026-07-01 | pending | kline_coverage_incomplete | medium | 缺少 K 线品种：AP888；建议在活跃交易时段重新采集。 | False |
 
 ## Recent Records
 
 | date | valid | status | reason | consistency | threshold | order_safety | workflow_orders | raw_orders | raw_trades | subscription_missing | kline_missing | kline_short | gross | day_loss_abs | symbol_top1 | strategy_top1 |
 |---|---|---|---|---|---|---|---:|---:|---:|---|---|---|---:|---:|---:|---:|
-| 2026-06-22 | False | pending | historical_db_lag | False | pass |  | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
-| 2026-06-27 | False | skipped | ctp_disconnect_097_no_snapshot | False | pass |  | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
-| 2026-06-29 | False | pending | historical_db_lag | False | pass |  | 0 | 0 | 0 |  |  |  | 0.00% | 0.00% | 0.00% | 0.00% |
-| 2026-07-01 | False | pending | kline_coverage_incomplete | False | pass | unknown | 0 | 0 | 0 |  | AP888 | A888,RB888,SC888,ZN888 | 0.00% | 0.00% | 0.00% | 0.00% |

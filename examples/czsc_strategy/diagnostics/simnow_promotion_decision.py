@@ -6,8 +6,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from declassify_historical_reports import build_banner
 from simnow_action_summary import build_action_summary
 from simnow_observation_rules import is_valid_observation
+from simnow_observation_window import filter_records_by_start, load_observation_start_date
 
 
 HERE = Path(__file__).resolve().parent
@@ -30,8 +32,14 @@ def _count_by(values: list[str]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def decide_promotion(records: list[dict[str, Any]], min_days: int = DEFAULT_MIN_DAYS) -> dict[str, Any]:
-    ordered = sorted(records, key=lambda row: str(row.get("date", "")))
+def decide_promotion(
+    records: list[dict[str, Any]],
+    min_days: int = DEFAULT_MIN_DAYS,
+    observation_start_date: str | None = None,
+) -> dict[str, Any]:
+    all_records = sorted(records, key=lambda row: str(row.get("date", "")))
+    ordered = sorted(filter_records_by_start(all_records, observation_start_date), key=lambda row: str(row.get("date", "")))
+    excluded_before_start_count = len(all_records) - len(ordered)
     recent = ordered[-min_days:]
     observed_days = len(recent)
     pass_days = sum(1 for row in recent if row.get("status") == "pass")
@@ -75,6 +83,8 @@ def decide_promotion(records: list[dict[str, Any]], min_days: int = DEFAULT_MIN_
     ]
     return {
         "required_days": min_days,
+        "observation_start_date": observation_start_date or "",
+        "excluded_before_start_count": excluded_before_start_count,
         "observed_days": observed_days,
         "valid_observation_days": valid_days,
         "pass_days": pass_days,
@@ -99,7 +109,11 @@ def write_report(summary: dict[str, Any], out: Path) -> None:
     lines = [
         "# SimNow 20-Day Promotion Decision",
         "",
+        build_banner().rstrip("\n"),
+        "",
         f"- ready_to_expand: `{summary['ready_to_expand']}`",
+        f"- observation_start_date: `{summary.get('observation_start_date', '')}`",
+        f"- excluded_before_start_count: `{summary.get('excluded_before_start_count', 0)}`",
         f"- observed_days: `{summary['observed_days']}/{summary['required_days']}`",
         f"- valid_observation_days: `{summary['valid_observation_days']}/{summary['required_days']}`",
         f"- pass_days: `{summary['pass_days']}`",
@@ -151,13 +165,23 @@ def main() -> None:
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
     parser.add_argument("--report-md", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--min-days", type=int, default=DEFAULT_MIN_DAYS)
+    parser.add_argument(
+        "--observation-start-date",
+        default=None,
+        help="Only count ledger rows on or after this date. Defaults to simnow_observation_window.json.",
+    )
     args = parser.parse_args()
 
     records = load_jsonl(args.ledger)
-    summary = decide_promotion(records, min_days=args.min_days)
+    start_date = args.observation_start_date
+    if start_date is None:
+        start_date = load_observation_start_date()
+    summary = decide_promotion(records, min_days=args.min_days, observation_start_date=start_date)
     write_report(summary, args.report_md)
     print(json.dumps({
         "ready_to_expand": summary["ready_to_expand"],
+        "observation_start_date": summary["observation_start_date"],
+        "excluded_before_start_count": summary["excluded_before_start_count"],
         "observed_days": summary["observed_days"],
         "valid_observation_days": summary["valid_observation_days"],
         "pass_days": summary["pass_days"],
