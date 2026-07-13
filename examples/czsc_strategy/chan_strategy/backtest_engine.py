@@ -40,6 +40,7 @@ from chan_strategy.rollover_config import (
 )
 from chan_strategy.sell_signals import get_all_signals
 from chan_strategy.positions import ChanTimingStrategy
+from chan_strategy.positions import _research_symbol_key as _position_symbol_key
 
 
 def _research_symbol_key(symbol: str) -> str:
@@ -311,7 +312,17 @@ class BacktestEngine:
         limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
         limit_aware = limit_halt_model == "aware"
         prev_close_map = _daily_prev_close_map(trade_bars) if limit_aware else {}
-        limit_pct = SYMBOL_LIMIT_CONFIG.get(self.symbol, {}).get("limit_pct")
+        limit_pct = None
+        if limit_aware:
+            symbol_key = _position_symbol_key(self.symbol)
+            symbol_limit = SYMBOL_LIMIT_CONFIG.get(symbol_key)
+            if symbol_limit is None:
+                raise ValueError(
+                    f"limit_halt_model='aware' requires a SYMBOL_LIMIT_CONFIG entry for "
+                    f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
+                    f"Add the symbol to limit_config.py or use limit_halt_model='off'."
+                )
+            limit_pct = symbol_limit.get("limit_pct")
 
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]

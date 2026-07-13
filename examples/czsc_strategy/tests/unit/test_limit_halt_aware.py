@@ -226,3 +226,24 @@ def test_aware_does_not_change_trade_prices_or_count(synthetic_1m_bars, monkeypa
     for off_p, aware_p in zip(off_pairs, aware_pairs, strict=True):
         for key in numeric_keys:
             assert aware_p[key] == off_p[key], f"{key} differs between off and aware"
+
+
+def test_aware_lowercase_symbol_matches_uppercase(synthetic_1m_bars, monkeypatch):
+    """Lower-case configured symbol produces identical limit tags to upper-case."""
+    bars = synthetic_1m_bars(days=15, per_day=240, start=datetime(2024, 1, 2, 9, 0))
+
+    upper_pairs = _run_symbol(monkeypatch, bars, "AP888", "aware")
+    lower_pairs = _run_symbol(monkeypatch, bars, "ap888", "aware")
+
+    assert len(upper_pairs) == len(lower_pairs) > 0
+    for up, lp in zip(upper_pairs, lower_pairs, strict=True):
+        assert lp["is_entry_at_limit"] == up["is_entry_at_limit"]
+        assert lp["is_exit_at_limit"] == up["is_exit_at_limit"]
+
+
+def test_aware_unconfigured_symbol_fails_loud(synthetic_1m_bars, monkeypatch):
+    """A symbol genuinely absent from SYMBOL_LIMIT_CONFIG raises instead of silent False."""
+    bars = synthetic_1m_bars(days=15, per_day=240, start=datetime(2024, 1, 2, 9, 0))
+
+    with pytest.raises(ValueError, match="limit_halt_model='aware' requires a SYMBOL_LIMIT_CONFIG entry"):
+        _run_symbol(monkeypatch, bars, "UNKNOWN888", "aware")
