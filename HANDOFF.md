@@ -1,7 +1,7 @@
 ---
 task: A59 - Limit-Band Basis Accuracy
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-14
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -237,3 +237,4 @@ work and were independently re-verified as correct, not altered.
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A59 (limit-band basis accuracy) promoted from post-remediation audit roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A59 limit-band basis accuracy implemented |
+| 2026-07-14 | codex → codex | review → done | A59 review passed |
