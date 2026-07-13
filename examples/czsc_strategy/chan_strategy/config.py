@@ -113,6 +113,9 @@ STRATEGY_CONFIG = {
 
     # A47 exit-model overhaul (P8a). "legacy" keeps the fixed-percentage-giveback trailing stop;
     # "structural_atr" uses ATR trailing + partial take-profit at directional targets.
+    # IMPORTANT (A56, 2026-07-13): under "structural_atr" the ATR trailing stop is only evaluated
+    # AFTER a partial take-profit event has fired. Positions that never reach a directional target
+    # rely solely on the fixed stop-loss (above) and the timeout (below) for profit-side protection.
     "exit_model": "legacy",               # "legacy" (default, byte-identical) | "structural_atr"
     "atr_trail_mult": 3.0,                # ATR trailing-stop multiplier
     "partial_tp_frac": 0.5,               # fraction of position scaled out at the first directional target

@@ -34,6 +34,16 @@ WINDOW_START = "2026-04-24"
 WINDOW_END = "2026-07-09"
 POST_EXIT_HORIZON_BARS = 20
 
+METHODOLOGY = (
+    "Methodology — exit_model='legacy' uses a fixed-percentage-giveback trailing stop that becomes "
+    "active once trailing_start_bp is crossed. exit_model='structural_atr' uses a partial "
+    "take-profit at the first directional target, followed by an ATR trailing stop on the "
+    "remainder. Because the ATR trailing stop is evaluated only after a partial take-profit "
+    "event has fired, positions that never reach a directional target rely solely on the fixed "
+    "stop-loss and timeout for profit-side protection. This report compares the two models on "
+    "the same post-2026-04-24 window; no threshold tuning is performed."
+)
+
 
 @dataclass
 class ExitDiagnostics:
@@ -308,6 +318,7 @@ def _build_payload(
         "window": {"start_date": start_date, "end_date": end_date},
         "total_symbols": len(symbols),
         "symbols_attempted": list(symbols),
+        "methodology": METHODOLOGY,
         "totals": totals,
         "per_symbol": per_symbol,
     }
@@ -360,6 +371,7 @@ def _format_md(payload: dict[str, Any]) -> str:
             )
 
     lines.extend(["", "## Note", "", payload["note"], ""])
+    lines.extend(["## Methodology", "", payload.get("methodology", METHODOLOGY), ""])
     return "\n".join(lines)
 
 

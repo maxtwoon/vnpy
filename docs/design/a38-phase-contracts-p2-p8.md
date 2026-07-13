@@ -533,6 +533,16 @@ fixed stop-loss (P1) and timeout are unchanged. `"legacy"` reproduces the curren
 - daily loss limit: if a day's portfolio PnL <= `-daily_loss_limit_pct`, flatten and block new
   opens for the remainder of that trading day.
 
+### 2026-07-13 addendum (A56): `structural_atr` profit-protection gap — disclosure
+The P8a Semantics text above states that `"structural_atr"` will "scale out `partial_tp_frac` of
+the position at the next center boundary / measured target, **then trail the remainder**." The
+word "then" is intentional and sequential: the ATR trailing stop is evaluated **only after** a
+partial take-profit event has occurred. Positions that never reach a directional target therefore
+have no profit-side ATR-trailing protection; they remain protected only by the fixed stop-loss (P1)
+and the position timeout. This behavior differs materially from `"legacy"`, whose percentage-giveback
+trailing becomes active as soon as `trailing_start_bp` is crossed, independent of any other event.
+This addendum records the clarification; the original P8a specification text is preserved unchanged.
+
 ### No-lookahead & correctness
 ATR trailing and vol/weights use only bars up to the current one; the daily loss limit uses
 realized+unrealized equity known intraday, never future bars. The cross-symbol pass must align on
