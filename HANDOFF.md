@@ -1,7 +1,7 @@
 ---
 task: A58 - Gate-Combination Guards + Portfolio Flatten Cost Fix
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-14
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a55-post-remediation-audit-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -145,3 +145,4 @@ No new config key for either fix.
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A58 (gate-combination guards + portfolio flatten cost fix) promoted from post-remediation audit roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A58 gate-combination guard + portfolio flatten cost fix implemented |
+| 2026-07-14 | codex → codex | review → done | A58 review accepted: guard, flatten cost fix, sync gates, and manual sandbox-affected verification checked |
