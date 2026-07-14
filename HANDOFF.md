@@ -1,7 +1,7 @@
 ---
 task: A64 - Run-Summary promotion Sub-Section: Carry Window-Filter Metadata
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-14
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -131,3 +131,4 @@ Code changes: purely additive propagation of `observation_start_date` and `exclu
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A64 (run-summary promotion window metadata) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A64 run-summary promotion window metadata implemented |
+| 2026-07-14 | codex → codex | review → done | A64 review accepted: promotion window metadata propagation verified; sync gates and ruff pass; pytest/preflight sandbox failures match documented WinError 5 tmp_path limitation, using recorded native counts |
