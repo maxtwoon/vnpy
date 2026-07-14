@@ -7,6 +7,9 @@ param(
     [int]$CaptureTimeoutSeconds = 0,
     [int]$ReplayTimeoutSeconds = 1200,
     [int]$MinKlineBarsPerSymbol = 30,
+    [switch]$UpdateHistoricalDb,
+    [string]$HistoricalDbUpdateCommand = 'powershell.exe -ExecutionPolicy Bypass -File "D:\repo\ssquant\auto_update.ps1"',
+    [int]$HistoricalDbUpdateTimeoutSeconds = 14400,
     [string]$Date = "",
     [string]$OutDir = "",
     [string]$KlineDbPath = ""
@@ -150,6 +153,7 @@ $PromotionMd = Join-Path $OutDir "simnow_20d_promotion_decision.md"
 $RunSummaryJson = Join-Path $OutDir "simnow_run_summary_$Date.json"
 $DailyBriefMd = Join-Path $OutDir "simnow_daily_brief_$Date.md"
 $LedgerSummaryJson = Join-Path $OutDir "simnow_ledger_summary.json"
+$HistoricalDbUpdateJson = Join-Path $OutDir "simnow_historical_db_update_$Date.json"
 $ThresholdsJson = Join-Path $ScriptPath "simnow_risk_thresholds.json"
 $LedgerPath = Join-Path $ScriptPath "simnow_observation_ledger.jsonl"
 
@@ -226,6 +230,51 @@ if ($Preflight -and -not $LiveCapture) {
 }
 
 if ($LiveCapture) {
+    Write-Step "Run historical DB auto update"
+    $HistoricalDbUpdateStartedAt = (Get-Date).ToString("o")
+    if ($UpdateHistoricalDb) {
+        try {
+            Invoke-CheckedProcess `
+                -Label "Run historical DB auto update command" `
+                -FilePath "powershell" `
+                -Arguments @(
+                    "-NoProfile",
+                    "-ExecutionPolicy", "Bypass",
+                    "-Command", "$HistoricalDbUpdateCommand"
+                ) `
+                -TimeoutSeconds $HistoricalDbUpdateTimeoutSeconds
+            $HistoricalDbUpdatePayload = [ordered]@{
+                status = "passed"
+                exit_code = 0
+                command = $HistoricalDbUpdateCommand
+                started_at = $HistoricalDbUpdateStartedAt
+                ended_at = (Get-Date).ToString("o")
+            }
+            $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
+        } catch {
+            $HistoricalDbUpdatePayload = [ordered]@{
+                status = "failed"
+                exit_code = 1
+                command = $HistoricalDbUpdateCommand
+                started_at = $HistoricalDbUpdateStartedAt
+                ended_at = (Get-Date).ToString("o")
+                reason = "$_"
+            }
+            $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
+            throw "Historical DB auto update failed: $_"
+        }
+    } else {
+        $HistoricalDbUpdatePayload = [ordered]@{
+            status = "skipped"
+            exit_code = $null
+            command = $HistoricalDbUpdateCommand
+            started_at = $HistoricalDbUpdateStartedAt
+            ended_at = (Get-Date).ToString("o")
+            reason = "UpdateHistoricalDb switch not set"
+        }
+        $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
+    }
+
     Invoke-CheckedProcess `
         -Label "Run read-only SimNow capture" `
         -FilePath "python" `
@@ -320,7 +369,8 @@ if ($LiveCapture) {
         $AppendArgs += @("--kline-json", $KlineSummaryJson)
     }
     & python @AppendArgs
-    if ($LASTEXITCODE -ne 0) {
+    $MonitorExitCode = $LASTEXITCODE
+    if (($MonitorExitCode -ne 0) -and ($MonitorExitCode -ne 2)) {
         throw "Daily monitor append failed with exit code $LASTEXITCODE"
     }
 
@@ -347,7 +397,8 @@ if ($LiveCapture) {
         "--out-dir", $OutDir,
         "--out-json", $RunSummaryJson,
         "--ledger", $LedgerPath,
-        "--ledger-summary", $LedgerSummaryJson
+        "--ledger-summary", $LedgerSummaryJson,
+        "--historical-db-update", $HistoricalDbUpdateJson
     )
     & python @SummaryArgs
     if ($LASTEXITCODE -ne 0) {
@@ -380,6 +431,10 @@ if ($LiveCapture) {
     Write-Host "Run summary JSON: $RunSummaryJson"
     Write-Host "Daily brief MD: $DailyBriefMd"
     Write-Host "Ledger summary JSON: $LedgerSummaryJson"
+    Write-Host "Historical DB update JSON: $HistoricalDbUpdateJson"
+    if ($MonitorExitCode -eq 2) {
+        exit 30
+    }
     exit 0
 }
 

@@ -54,6 +54,7 @@ with 100% consistency between SimNow and replay event surfaces and no risk-thres
 | A31 | DONE | Audit issue diagnostics for H1/H2/H3/H4/M1 | `audit_issue_diagnostics.py` produces `audit_issue_diagnostics_YYYY-MM-DD.json` and `.md`; tests verify H1/H2/H3/H4/M1 detection and no trading calls or sensitive data leaks |
 | A32 | DONE | Wire real project inputs into audit issue diagnostics | `audit_issue_diagnostics.py` now auto-collects cost inputs from `chan_strategy` config/engine/position defaults, stop-loss pairs and signal records from diagnostics JSON, and continuous-contract evidence from diagnostics filenames; M1 and H2 are now quantified on real project data |
 | A34 | DONE | Restart formal 20-day observation window from 2026-07-14 | `simnow_observation_window.json` defines `observation_start_date=2026-07-14`; ledger summary, 20-day report, and promotion decision preserve older ledger rows but exclude them from the new 20-day progress |
+| A35 | DONE | Add optional historical DB auto-update to the read-only observation wrapper | `run_next_work.ps1 -LiveCapture -UpdateHistoricalDb` runs the configured DB update before capture, writes `simnow_historical_db_update_YYYY-MM-DD.json`, and run summary / daily brief expose `historical_db_update` status |
 
 ## Commands
 
@@ -67,6 +68,12 @@ Read-only live capture for a valid observation attempt:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30
+```
+
+Read-only live capture with the optional pre-capture historical replay DB update:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
 ```
 
 Short read-only smoke test that is not eligible for a valid daily observation:
@@ -127,3 +134,5 @@ python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py -
 - A33 upgrades SimNow observation semantics to read-only environment capture plus delayed replay accounting. `simnow_run_summary_YYYY-MM-DD.json` now separates `environment_capture`, `account_contamination`, and `delayed_replay`; strategy PnL comes only from delayed replay, and SimNow account activity is contamination/audit evidence only.
 
 - A34 restarts the formal 20-day observation cycle from `2026-07-14`. Existing ledger rows are preserved as audit evidence, but `simnow_ledger_summary.py`, `simnow_daily_monitor.py`, and `simnow_promotion_decision.py` count only rows on or after the configured `observation_start_date`.
+
+- A35 adds an optional historical replay DB update step to the formal wrapper. If `-UpdateHistoricalDb` is provided, the configured update command runs before SimNow capture and writes `simnow_historical_db_update_YYYY-MM-DD.json`; otherwise the artifact records `status=skipped`. The run summary and daily brief expose this status, but SimNow remains read-only and no account PnL is used as strategy PnL.

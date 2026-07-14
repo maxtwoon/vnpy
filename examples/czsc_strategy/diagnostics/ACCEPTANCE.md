@@ -117,6 +117,18 @@ The summary must never contain account IDs, passwords, auth codes, API keys, or 
 
 The run summary JSON embeds a safe aggregate copy of `simnow_ledger_summary.json` under `ledger_summary`. When the ledger summary file is missing, `ledger_summary.available` must be `false` and the summary must still be valid. External automation consumers may therefore read only `simnow_run_summary_YYYY-MM-DD.json` for both the daily conclusion and 20-day progress.
 
+## Historical DB Update Artifact
+
+The formal wrapper supports an optional pre-capture historical replay DB update through `run_next_work.ps1 -LiveCapture -UpdateHistoricalDb`. This step is read-only with respect to SimNow and must run before the SimNow capture when enabled.
+
+Every formal `-LiveCapture` run must write `simnow_historical_db_update_YYYY-MM-DD.json`:
+
+- when `-UpdateHistoricalDb` is set and the update command succeeds, the artifact must report `status=passed`, `exit_code=0`, and `started_at` / `ended_at`;
+- when `-UpdateHistoricalDb` is not set, the artifact must report `status=skipped` and explain that the switch was not set;
+- when the update command fails, the wrapper must write the failure artifact and stop before the SimNow capture; that run must not count as a valid observation day.
+
+`simnow_run_summary_YYYY-MM-DD.json` must include a safe `historical_db_update` section with at least `status`, `exit_code`, `started_at`, and `ended_at`. The daily brief must include the same historical DB update status for human review. The update command must not contain secrets, and the run summary sensitive-data scanner must still reject passwords, auth codes, API keys, account IDs, or masked broker settings.
+
 ## External Automation Consumers
 
 External automation consumers must treat `simnow_run_summary_YYYY-MM-DD.json` as the single machine-readable source of truth for both daily status and 20-day progress.

@@ -154,6 +154,7 @@ def build_strategy_surface_from_captured_session(capture: dict[str, Any]) -> dic
     captured = capture.get("captured") or {}
     orders = captured.get("orders") or []
     owned_symbols = _workflow_owned_symbols(capture)
+    window_start, window_end = capture_window(capture.get("meta") or {})
 
     raw_trades = list(captured.get("trades") or [])
     raw_positions = list(captured.get("positions") or [])
@@ -175,6 +176,8 @@ def build_strategy_surface_from_captured_session(capture: dict[str, Any]) -> dic
         "meta": {
             "source": "captured_session",
             "trade_date": "",
+            "window_start": window_start,
+            "window_end": window_end,
             "captured_orders_count": len(orders),
             "filtered_trades_count": len(filtered_trades),
             "filtered_positions_count": len(filtered_positions),

@@ -153,6 +153,8 @@ def test_enrich_capture_json_auto_prefers_captured_session_when_data_present(tmp
     assert enriched["trades"][0]["strategy"] == "simnow_trade"
     assert len(enriched["positions"]) == 1
     assert enriched["positions"][0]["strategy"] == "simnow_position"
+    assert enriched["meta"]["strategy_surface"]["window_start"] == "2026-07-07T09:14:59+08:00"
+    assert enriched["meta"]["strategy_surface"]["window_end"] == "2026-07-07T09:19:59+08:00"
 
 
 def test_enrich_capture_json_auto_falls_back_to_windowed_replay_when_no_captured_data(tmp_path):
@@ -337,3 +339,18 @@ def test_build_strategy_surface_workflow_owned_events_unaffected():
     assert surface["meta"]["filtered_trades_count"] == 0
     assert surface["meta"]["filtered_positions_count"] == 0
     assert surface["meta"]["filtered_symbols"] == []
+
+
+def test_build_strategy_surface_from_captured_session_includes_capture_window():
+    capture = _capture_payload()
+    capture["captured"] = {
+        "trades": [_captured_trade()],
+        "positions": [_captured_position()],
+        "orders": [],
+    }
+
+    surface = build_strategy_surface_from_captured_session(capture)
+
+    assert surface["meta"]["source"] == "captured_session"
+    assert surface["meta"]["window_start"] == "2026-07-07T09:14:59+08:00"
+    assert surface["meta"]["window_end"] == "2026-07-07T09:19:59+08:00"

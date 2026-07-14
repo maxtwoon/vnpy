@@ -260,6 +260,23 @@ def test_render_daily_brief_separates_environment_account_and_delayed_replay():
     assert "delayed_replay.available: `false`" in text
     assert "missing_or_lagged_symbols: `RB888,ZN888`" in text
     assert "risk_source: `replay_only`" in text
+
+
+def test_render_daily_brief_includes_historical_db_update_status():
+    summary = _sample_run_summary()
+    summary["historical_db_update"] = {
+        "status": "passed",
+        "exit_code": 0,
+        "started_at": "2026-07-14T01:00:00+08:00",
+        "ended_at": "2026-07-14T04:20:00+08:00",
+    }
+
+    text = render_daily_brief(summary)
+
+    assert "## 历史 DB 更新" in text
+    assert "historical_db_update.status: `passed`" in text
+    assert "historical_db_update.exit_code: `0`" in text
+    assert "2026-07-14T01:00:00+08:00" in text
     assert "9500" not in text
     assert "账户浮盈" not in text
 

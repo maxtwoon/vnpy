@@ -3636,3 +3636,260 @@ Restart the formal SimNow 20-day observation cycle from tomorrow (`2026-07-14`) 
 
 - Added failing tests first for ledger filtering, 20-day report filtering, promotion decision filtering, and wrapper compile coverage.
 - Targeted tests passed for `test_simnow_ledger_summary.py`, `test_simnow_daily_monitor.py`, `test_simnow_run_summary.py`, and `test_run_next_work_wrapper.py`.
+
+## A35 - Optional Historical DB Auto-Update Before Read-Only Observation
+
+### Goal
+
+Allow the formal SimNow observation wrapper to run the local historical replay DB updater before capture when explicitly requested, while keeping the SimNow workflow read-only and auditable.
+
+### Changes
+
+- `run_next_work.ps1` now accepts `-UpdateHistoricalDb`, `-HistoricalDbUpdateCommand`, and `-HistoricalDbUpdateTimeoutSeconds`.
+- Formal `-LiveCapture` runs always write `simnow_historical_db_update_YYYY-MM-DD.json`.
+- When `-UpdateHistoricalDb` is set, the configured update command runs before SimNow capture; when it is omitted, the artifact records `status=skipped`.
+- `simnow_run_summary.py` embeds a safe `historical_db_update` section.
+- `simnow_daily_brief.py` renders the historical DB update status for human review.
+- `AUTOMATION_PROMPT.md`, `ACCEPTANCE.md`, and `NEXT_WORK.md` document the optional update switch, artifact, and report fields.
+
+### Verification
+
+- Added failing tests first for wrapper wiring, run summary fields, daily brief rendering, and automation/acceptance documentation.
+- Targeted tests passed for `test_run_next_work_wrapper.py`, `test_simnow_run_summary.py`, `test_simnow_daily_brief.py`, and `test_simnow_docs.py`.
+
+## 2026-07-14 Daily Observation Acceptance Run
+
+### Goal
+
+Execute the SimNow daily observation workflow for the new formal window start date (`2026-07-14`), keep the workflow read-only, and record whether the day counts toward the restarted 20-day ledger.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `186 passed`.
+
+Rejected by design:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The wrapper rejected the command because `300 < 30 * 60`.
+- This remains the documented formal-observation guard, not a code failure.
+
+Passed smoke capture, halted at monitor stage:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+Follow-up read-only summary regeneration:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+python .\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --report-md .\examples\czsc_strategy\diagnostics\simnow_20d_promotion_decision.md
+python .\examples\czsc_strategy\diagnostics\simnow_run_summary.py --date 2026-07-14 --out-dir .\examples\czsc_strategy\diagnostics --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --ledger-summary .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json --out-json .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-14.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07-14 --run-summary .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-14.json --out-dir .\examples\czsc_strategy\diagnostics --out-md .\examples\czsc_strategy\diagnostics\simnow_daily_brief_2026-07-14.md
+```
+
+### Outcomes
+
+- Generated/refreshed today's artifacts:
+  - `simnow_export_2026-07-14.json`
+  - `simnow_replay_2026-07-14.json`
+  - `simnow_record_2026-07-14.json`
+  - `simnow_report_2026-07-14.md`
+  - `simnow_historical_db_update_2026-07-14.json`
+  - `simnow_ledger_summary.json`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_run_summary_2026-07-14.json`
+  - `simnow_daily_brief_2026-07-14.md`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17643`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=4`
+  - `accounts=1`
+  - `positions=3`
+  - `orders=4`
+  - `trades=4`
+- The observed `orders/trades/positions` were account contamination evidence, not workflow orders:
+  - `account_contamination.detected=true`
+  - `external_orders=4`
+  - `external_trades=4`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Same-day replay was available and used as the only strategy risk source:
+  - `latest_db_date=2026-07-14`
+  - `risk_source=replay_only`
+- Formal day result:
+  - `record.status=halt`
+  - `record.reason=event_surface_mismatch`
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+- The stop condition was not workflow order safety; it was a combination of:
+  - replay-vs-live `event_surface_mismatch`
+  - replay risk threshold halt on `consecutive_loss_abs_pct`
+  - replay warning rows on `drawdown_abs_pct` and `consecutive_loss_days`
+- 20-day ledger progress after the restarted window entry:
+  - `observation_start_date=2026-07-14`
+  - `excluded_before_start_count=12`
+  - `observed_days=1`
+  - `valid_observation_days=0`
+  - `halt_days=1`
+
+### Notes
+
+- The initial 300-second formal command requested by automation cannot count as a valid observation because the wrapper still enforces the documented `1800`-second minimum unless `-SkipKlineUpdate` is used.
+- The smoke rerun remained read-only and produced usable evidence, but the day is a halted audit row rather than a valid observation day.
+- `simnow_historical_db_update_2026-07-14.json` shows `status=skipped` because `-UpdateHistoricalDb` was not requested.
+
+### Next Action
+
+Do not continue automated daily observation until the user reviews today's `halt` row. Focus manual review on:
+
+- why the live strategy surface still mismatched replay on `2026-07-14`; and
+- whether the replay-based `consecutive_loss_abs_pct` halt threshold should block the restarted observation window immediately.
+
+## 2026-07-14 Execution Fixes
+
+### Goal
+
+Fix the execution/reporting defects discovered during the first `2026-07-14` observation run:
+
+- captured-session strategy surfaces did not carry the capture window, so replay comparisons used the full day instead of the observed interval;
+- `halt` rows exposed `consistency.reason` before threshold breaches, hiding the actual stop condition in machine-readable summaries;
+- the wrapper stopped at the monitor step on `halt`, which prevented automatic summary/brief generation.
+
+### Changes
+
+- Updated `simnow_strategy_surface.py`.
+  - `build_strategy_surface_from_captured_session()` now includes `window_start` and `window_end` from the capture metadata.
+- Updated `simnow_action_summary.py`.
+  - `_record_reason()` now prefers threshold halt metrics for `halt` rows, while preserving `workflow_order_safety_breach` for order-safety halts.
+- Updated `run_next_work.ps1`.
+  - The wrapper now treats `simnow_daily_monitor.py` exit code `2` as a handled `halt` outcome instead of an immediate failure.
+  - `ledger_summary`, promotion decision, `run_summary`, and `daily_brief` generation now continue after a handled `halt`.
+  - The wrapper exits `30` after summary generation when monitor status is `halt`.
+- Added/updated regression tests for:
+  - captured-session window propagation;
+  - `halt` reason priority;
+  - wrapper summary generation after monitor `halt`.
+
+### Verification
+
+Passed focused regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q -k "captured_session_includes_capture_window or prefers_threshold_breach_over_consistency_reason or halt_monitor_does_not_stop_summary_generation or auto_prefers_captured_session_when_data_present"
+```
+
+Results:
+
+- `4 passed`.
+
+Passed broader workflow-adjacent regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted unit suites passed: `139 passed`.
+- Workflow preflight passed: `189 passed`.
+
+### Next Action
+
+Re-run the daily read-only observation workflow and verify whether the repaired comparison/reporting path changes the observed outcome.
+
+## 2026-07-14 Daily Observation Rerun After Fixes
+
+### Goal
+
+Re-run the read-only SimNow observation flow after the execution fixes and record the updated daily result for the restarted observation window.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `189 passed`.
+
+Executed smoke rerun:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+Follow-up read-only summary regeneration:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+python .\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --report-md .\examples\czsc_strategy\diagnostics\simnow_20d_promotion_decision.md
+python .\examples\czsc_strategy\diagnostics\simnow_run_summary.py --date 2026-07-14 --out-dir .\examples\czsc_strategy\diagnostics --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --ledger-summary .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json --historical-db-update .\examples\czsc_strategy\diagnostics\simnow_historical_db_update_2026-07-14.json --out-json .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-14.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07-14 --run-summary .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-14.json --out-md .\examples\czsc_strategy\diagnostics\simnow_daily_brief_2026-07-14.md
+```
+
+### Outcomes
+
+- The repaired strategy-surface path no longer produced the earlier `halt/event_surface_mismatch` result on this rerun.
+- The actual rerun started at about `2026-07-14 18:16 +08:00`, outside an active data window, so the capture produced no valid snapshot:
+  - `ticks=0`
+  - `contracts_count=0`
+  - `accounts=0`
+  - `positions=0`
+  - `orders=0`
+  - `trades=0`
+- Read-only safety still passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- No account contamination was observed:
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=0`
+- Formal day result after the rerun:
+  - `record.status=skipped`
+  - `skip_reason=ctp_disconnect_097_no_snapshot`
+  - `automation_status=skipped`
+  - `automation_exit_code=10`
+- Replay was still available for the day (`latest_db_date=2026-07-14`), but the skipped capture does not count toward the 20-day gate.
+- 20-day progress after the rerun:
+  - `observation_start_date=2026-07-14`
+  - `observed_days=1`
+  - `valid_observation_days=0`
+  - `skipped_days=1`
+  - `halt_days=0`
+
+### Notes
+
+- This rerun happened during a no-data / disconnected window, so the result is a legitimate `skipped` observation row, not a code failure.
+- The automation client call itself timed out before the session completed, but the local daily artifacts were written and then refreshed manually from the current ledger/record state.
+
+### Next Action
+
+Run the next read-only observation during a valid session window. The repaired code path is now ready to observe whether a real active-session capture still produces any replay mismatch or threshold halt.

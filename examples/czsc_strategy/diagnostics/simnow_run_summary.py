@@ -68,6 +68,7 @@ def default_artifact_paths(date: str, out_dir: Path) -> dict[str, Path]:
         "capture_json": out_dir / f"simnow_export_{date}.json",
         "kline_json": out_dir / f"simnow_kline_update_{date}.json",
         "replay_json": out_dir / f"simnow_replay_{date}.json",
+        "historical_db_update_json": out_dir / f"simnow_historical_db_update_{date}.json",
         "record_json": out_dir / f"simnow_record_{date}.json",
         "observation_report_md": out_dir / f"simnow_report_{date}.md",
         "promotion_report_md": out_dir / "simnow_20d_promotion_decision.md",
@@ -135,6 +136,25 @@ def extract_kline_summary(kline: dict[str, Any]) -> dict[str, Any]:
         "missing_symbols": list(kline.get("missing_symbols") or []),
         "short_symbols": list(kline.get("short_symbols") or []),
         "min_bars_per_symbol": kline.get("min_bars_per_symbol"),
+    }
+
+
+def extract_historical_db_update_summary(update: dict[str, Any]) -> dict[str, Any]:
+    """Summarize the optional pre-observation historical DB update step."""
+    if not update:
+        return {
+            "status": "skipped",
+            "exit_code": None,
+            "command": "",
+            "started_at": "",
+            "ended_at": "",
+        }
+    return {
+        "status": str(update.get("status") or "unknown"),
+        "exit_code": update.get("exit_code"),
+        "command": str(update.get("command") or ""),
+        "started_at": str(update.get("started_at") or ""),
+        "ended_at": str(update.get("ended_at") or ""),
     }
 
 
@@ -241,6 +261,7 @@ def build_run_summary(
     """
     capture = load_json(files.get("capture_json"))
     kline = load_json(files.get("kline_json"))
+    historical_db_update = load_json(files.get("historical_db_update_json"))
     replay = load_json(files.get("replay_json"))
     record = load_json(files.get("record_json"))
     promotion = promotion_summary or {}
@@ -257,6 +278,7 @@ def build_run_summary(
         "capture": extract_capture_summary(capture),
         "environment_capture": extract_environment_capture(capture),
         "account_contamination": extract_account_contamination(capture),
+        "historical_db_update": extract_historical_db_update_summary(historical_db_update),
         "kline": extract_kline_summary(kline),
         "record": extract_record_summary(record),
         "delayed_replay": extract_delayed_replay_summary(replay, record),
@@ -318,9 +340,12 @@ def main() -> None:
     parser.add_argument("--out-json", type=Path, help="Path to write the summary JSON.")
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER, help="Formal observation ledger.")
     parser.add_argument("--ledger-summary", type=Path, help="Path to simnow_ledger_summary.json.")
+    parser.add_argument("--historical-db-update", type=Path, help="Path to simnow_historical_db_update_YYYY-MM-DD.json.")
     args = parser.parse_args()
 
     files = default_artifact_paths(args.date, args.out_dir)
+    if args.historical_db_update:
+        files["historical_db_update_json"] = args.historical_db_update
     ledger_records = load_jsonl(args.ledger)
     start_date = load_observation_start_date()
     promotion_summary = decide_promotion(ledger_records, observation_start_date=start_date)

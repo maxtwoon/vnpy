@@ -355,3 +355,53 @@ def test_run_summary_script_receives_ledger_summary_argument():
     summary_block = script_text[step_index:step_index + 700]
     assert "--ledger-summary" in summary_block
     assert "$LedgerSummaryJson" in summary_block
+
+
+def test_halt_monitor_does_not_stop_summary_generation():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    monitor_index = script_text.index("Upsert daily record into formal ledger")
+    ledger_index = script_text.index("Generate ledger summary")
+    summary_index = script_text.index("Generate run summary")
+    brief_index = script_text.index("Generate daily brief")
+    halt_guard_index = script_text.index("if ($MonitorExitCode -eq 2)")
+
+    assert halt_guard_index > brief_index
+    assert ledger_index > monitor_index
+    assert summary_index > ledger_index
+    assert brief_index > summary_index
+
+
+def test_historical_db_update_parameters_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "[switch]$UpdateHistoricalDb" in script_text
+    assert "[string]$HistoricalDbUpdateCommand" in script_text
+    assert "[int]$HistoricalDbUpdateTimeoutSeconds" in script_text
+
+
+def test_historical_db_update_json_variable_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "$HistoricalDbUpdateJson = Join-Path $OutDir" in script_text
+
+
+def test_historical_db_update_runs_before_capture_when_enabled():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    update_index = script_text.index("Run historical DB auto update")
+    capture_index = script_text.index("Run read-only SimNow capture")
+    assert update_index < capture_index
+
+
+def test_historical_db_update_is_optional_and_skipped_by_default():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    update_index = script_text.index("Run historical DB auto update")
+    update_block = script_text[update_index:update_index + 1800]
+    assert "if ($UpdateHistoricalDb)" in update_block
+    assert "$HistoricalDbUpdateJson" in update_block
+    assert "skipped" in update_block
+
+
+def test_run_summary_receives_historical_db_update_argument():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    step_index = script_text.index("Generate run summary")
+    summary_block = script_text[step_index:step_index + 900]
+    assert "--historical-db-update" in summary_block
+    assert "$HistoricalDbUpdateJson" in summary_block

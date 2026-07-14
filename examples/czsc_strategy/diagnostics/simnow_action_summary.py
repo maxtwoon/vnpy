@@ -9,6 +9,21 @@ def _record_reason(row: dict[str, Any]) -> str:
     """Extract the primary reason for a daily record's status."""
     if row.get("skip_reason"):
         return str(row["skip_reason"])
+    if str(row.get("status") or "") == "halt":
+        thresholds = row.get("thresholds") or {}
+        if thresholds.get("status") == "halt":
+            bad = [
+                str(item.get("metric"))
+                for item in thresholds.get("rows", [])
+                if item.get("level") == "halt"
+            ]
+            if bad:
+                return ",".join(bad)
+        safety = row.get("order_safety") or {}
+        if safety.get("status") == "halt":
+            consistency = row.get("consistency") or {}
+            if consistency.get("reason"):
+                return str(consistency["reason"])
     consistency = row.get("consistency") or {}
     if consistency.get("reason"):
         return str(consistency["reason"])

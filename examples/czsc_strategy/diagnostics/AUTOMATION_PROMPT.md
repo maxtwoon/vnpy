@@ -39,12 +39,25 @@
    powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30
    ```
 
+   If the historical replay DB is updated by this workflow, use the optional
+   pre-capture update switch:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+   ```
+
+   If the historical DB update is already handled by an external scheduled
+   task, omit `-UpdateHistoricalDb`. In both cases the workflow must write
+   `simnow_historical_db_update_YYYY-MM-DD.json`; its status is `passed` when
+   the optional update succeeds and `skipped` when the switch is not set.
+
 4. 检查 `run_next_work.ps1 -LiveCapture` 是否正常退出，并确认以下两个**核心工件**已生成：
    - `examples\czsc_strategy\diagnostics\simnow_run_summary_YYYY-MM-DD.json`（唯一机器判定来源）
    - `examples\czsc_strategy\diagnostics\simnow_daily_brief_YYYY-MM-DD.md`（人类可读日报来源）
 
    以下工件仅用于排障或复核，**不得作为最终状态判定来源**：
    - `simnow_export_YYYY-MM-DD.json`
+   - `simnow_historical_db_update_YYYY-MM-DD.json`
    - `simnow_kline_update_YYYY-MM-DD.json`
    - `simnow_replay_YYYY-MM-DD.json`
    - `simnow_record_YYYY-MM-DD.json`
@@ -95,6 +108,10 @@
     - `automation_exit_code`
     - `automation_reason`
     - `automation_action`
+    - `historical_db_update.status`
+    - `historical_db_update.exit_code`
+    - `historical_db_update.started_at`
+    - `historical_db_update.ended_at`
     - `ledger_summary.valid_observation_days`
     - `ledger_summary.consecutive_valid_days`
     - `ledger_summary.ready_to_expand`

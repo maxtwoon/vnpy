@@ -97,6 +97,38 @@ def test_build_run_summary_from_minimal_artifacts(tmp_path):
     assert summary["promotion"]["top_blocking_actions"] == [{"reason": "kline_coverage_incomplete", "count": 1}]
 
 
+def test_build_run_summary_includes_historical_db_update_status(tmp_path):
+    date = "2026-07-14"
+    files = _make_files(tmp_path)
+    files["historical_db_update_json"] = tmp_path / "historical_update.json"
+    _write_json(files["historical_db_update_json"], {
+        "status": "passed",
+        "exit_code": 0,
+        "command": "D:\\repo\\ssquant\\auto_update.bat",
+        "started_at": "2026-07-14T01:00:00+08:00",
+        "ended_at": "2026-07-14T04:20:00+08:00",
+    })
+
+    summary = build_run_summary(date, files)
+
+    assert summary["historical_db_update"] == {
+        "status": "passed",
+        "exit_code": 0,
+        "command": "D:\\repo\\ssquant\\auto_update.bat",
+        "started_at": "2026-07-14T01:00:00+08:00",
+        "ended_at": "2026-07-14T04:20:00+08:00",
+    }
+
+
+def test_build_run_summary_defaults_missing_historical_db_update_to_skipped(tmp_path):
+    files = _make_files(tmp_path)
+
+    summary = build_run_summary("2026-07-14", files)
+
+    assert summary["historical_db_update"]["status"] == "skipped"
+    assert summary["historical_db_update"]["exit_code"] is None
+
+
 def test_build_run_summary_promotion_carries_window_filter_metadata(tmp_path):
     date = "2026-07-01"
     capture = {

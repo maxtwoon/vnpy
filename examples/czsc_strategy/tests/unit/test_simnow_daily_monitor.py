@@ -1104,6 +1104,33 @@ def test_action_recommendation_halt_threshold_breach_lists_metrics():
     assert "阈值" in rec["action"]
 
 
+def test_action_recommendation_halt_prefers_threshold_breach_over_consistency_reason():
+    simnow, replay = _valid_simnow_and_replay()
+    record = make_record(
+        "2026-07-14",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        risk={
+            "daily_return_pct": -0.10,
+            "drawdown_pct": -0.20,
+            "gross_exposure": 0.35,
+            "net_exposure": 0.10,
+            "both_long_short_symbols": 0,
+            "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.01},
+            "symbol_concentration": {"top1_abs_share": 0.20},
+            "strategy_concentration": {"top1_abs_share": 0.20},
+        },
+    )
+    record["consistency"]["reason"] = "event_surface_mismatch"
+
+    rec = action_recommendation(record)
+
+    assert rec["status"] == "halt"
+    assert rec["reason"] == "gross_exposure"
+    assert "gross_exposure" in rec["action"]
+
+
 def test_build_action_summary_returns_one_row_per_record():
     records = [
         make_record(
