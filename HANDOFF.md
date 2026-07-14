@@ -1,19 +1,19 @@
 ---
 task: A62 - Consistency Provenance Floor for Ledger Records
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -105,6 +105,31 @@ actually compare anything). Then update `is_valid_observation`
    `python tools/handoff.py next --actor kimi-code --summary "A62 consistency provenance floor implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Review Findings (codex, 2026-07-14)
+
+Reject back to dev:
+
+1. `build_20d_report` still counts an unverified `consistency.matched=True` ledger row in
+   `consistency_matched_days`. The A62 acceptance criterion requires a fixture record with
+   `consistency.matched=True` but no provenance marker to be excluded from both
+   `valid_observation` and `matched_days` counting. Current behavior excludes it from
+   `valid_observation_days` but still increments `consistency_matched_days`.
+   Reproduction:
+   `build_20d_report([verified matched row, unverified matched row], min_days=2)` returns
+   `valid_observation_days == 1` and `consistency_matched_days == 2`.
+   Update report counting and tests so unverified matched rows do not count as matched days for
+   the A62 floor.
+
+Review notes:
+
+- `python tools/sync_check.py`, `python tools/sync_check.py --root examples/czsc_strategy`, and
+  the scoped `ruff check` command all passed in codex review.
+- The focused pytest command hit the documented sandbox limitation:
+  `PermissionError [WinError 5]` while pytest scanned
+  `C:\Users\Admin\AppData\Local\Temp\pytest-of-Admin`; per `.synccheck.yml`, use the Manual
+  Verification block below for the unit/preflight acceptance items unless the environment has been
+  relogged/rebooted and pytest tmp-path setup succeeds.
+
 ## Manual Verification (natively-run)
 
 ```text
@@ -147,3 +172,4 @@ modified; no `GOAL PASSED`.
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A62 (consistency provenance floor) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A62 consistency provenance floor implemented |
+| 2026-07-14 | codex → kimi-code | review → dev | 打回: unverified matched rows still count in consistency_matched_days |
