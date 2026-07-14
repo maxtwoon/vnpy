@@ -10,7 +10,7 @@ from typing import Any
 from declassify_historical_reports import build_banner
 from simnow_action_summary import _record_reason, build_action_summary
 from simnow_monitor_config import SIMNOW_MONITOR_CONFIG
-from simnow_observation_rules import is_valid_observation
+from simnow_observation_rules import is_valid_observation, valid_observation_reason
 from simnow_observation_window import filter_records_by_start, load_observation_start_date
 from simnow_strategy_surface import filter_events_to_window
 
@@ -300,11 +300,13 @@ def compare_simnow_replay(
     """
     if source is None:
         source = simnow.get("meta", {}).get("strategy_surface", {}).get("source") or "windowed_strategy_replay"
+    verified = consistency_source_mode == "require_captured" and source == "captured_session"
     if consistency_source_mode == "require_captured" and source != "captured_session":
         return {
             "status": "unavailable",
             "reason": "no_captured_session_data_only_replay_derived",
             "details": {},
+            "verified": False,
         }
     replay = _windowed_replay(simnow, replay)
     replay_meta = replay.get("meta") or {}
@@ -319,11 +321,13 @@ def compare_simnow_replay(
                 "matched": True,
                 "details": _empty_matched_details(simnow, replay),
                 "reason": "no_actionable_events_on_either_side",
+                "verified": verified,
             }
         return {
             "matched": False,
             "details": {},
             "reason": reason,
+            "verified": verified,
         }
     # If the live capture recorded no events and the replay has no trades,
     # there is nothing actionable to compare. Position/signal snapshots are
@@ -333,6 +337,7 @@ def compare_simnow_replay(
             "matched": True,
             "details": _empty_matched_details(simnow, replay),
             "reason": "no_actionable_events_on_either_side",
+            "verified": verified,
         }
     categories = ["signals", "trades", "positions"]
     details = {}
@@ -352,7 +357,7 @@ def compare_simnow_replay(
             "extra_in_simnow": [list(x) for x in extra],
         }
     reason = "" if all_match else "event_surface_mismatch"
-    return {"matched": all_match, "details": details, "reason": reason}
+    return {"matched": all_match, "details": details, "reason": reason, "verified": verified}
 
 
 def attribution_watch(record: dict[str, Any]) -> dict[str, Any]:
@@ -562,6 +567,7 @@ def make_record(
     else:
         record["status"] = "pass" if consistency.get("matched") else "pending"
     record["valid_observation"] = is_valid_observation(record)
+    record["valid_observation_reason"] = valid_observation_reason(record) or ""
     return record
 
 

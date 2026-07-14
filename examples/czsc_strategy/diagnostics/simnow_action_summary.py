@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from simnow_observation_rules import REASON_CONSISTENCY_PROVENANCE_UNVERIFIED
+
 
 def _record_reason(row: dict[str, Any]) -> str:
     """Extract the primary reason for a daily record's status."""
@@ -29,6 +31,8 @@ def _pass_gaps(record: dict[str, Any]) -> list[str]:
     consistency = record.get("consistency") or {}
     if not consistency.get("matched"):
         gaps.append("consistency not matched")
+    elif consistency.get("verified") is not True:
+        gaps.append(REASON_CONSISTENCY_PROVENANCE_UNVERIFIED)
     thresholds = record.get("thresholds") or {}
     if thresholds.get("status") != "pass":
         gaps.append(f"thresholds {thresholds.get('status')}")

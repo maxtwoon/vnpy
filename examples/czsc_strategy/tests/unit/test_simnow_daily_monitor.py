@@ -21,6 +21,11 @@ from simnow_daily_monitor import (  # noqa: E402
     upsert_ledger,
     write_20d_markdown,
 )
+from simnow_observation_rules import (  # noqa: E402
+    REASON_CONSISTENCY_PROVENANCE_UNVERIFIED,
+    is_valid_observation,
+    valid_observation_reason,
+)
 from simnow_promotion_decision import decide_promotion, write_report  # noqa: E402
 
 
@@ -596,7 +601,7 @@ def test_20d_report_requires_twenty_clean_days():
         {
             "date": f"2026-06-{day:02d}",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -616,7 +621,7 @@ def test_20d_report_tracks_pending_skipped_reasons_and_clean_streak(tmp_path):
         {
             "date": "2026-06-17",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -641,7 +646,7 @@ def test_20d_report_tracks_pending_skipped_reasons_and_clean_streak(tmp_path):
         {
             "date": "2026-06-22",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -690,7 +695,7 @@ def test_promotion_decision_reports_ready_only_when_all_days_pass():
         {
             "date": f"2026-06-{day:02d}",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -711,7 +716,7 @@ def test_promotion_decision_reports_blockers_and_writes_markdown(tmp_path):
         {
             "date": "2026-06-19",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1159,7 +1164,7 @@ def test_write_20d_markdown_carries_research_only_banner(tmp_path):
         {
             "date": "2026-06-27",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1224,7 +1229,7 @@ def test_promotion_decision_report_includes_action_summary_with_reason_actions(t
         {
             "date": "2026-06-20",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1271,7 +1276,7 @@ def test_promotion_decision_summary_includes_valid_days_and_blocking_actions():
         {
             "date": "2026-06-20",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1293,7 +1298,7 @@ def test_promotion_decision_pass_valid_shows_counts_for_20d_true(tmp_path):
         {
             "date": "2026-06-20",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1324,7 +1329,7 @@ def test_20d_report_filters_before_observation_start():
         {
             "date": "2026-07-14",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1355,7 +1360,7 @@ def test_promotion_decision_filters_before_observation_start():
         {
             "date": "2026-07-14",
             "status": "pass",
-            "consistency": {"matched": True},
+            "consistency": {"matched": True, "verified": True},
             "thresholds": {"status": "pass"},
             "order_safety": {"status": "pass"},
             "subscription_coverage": {"missing_symbols": []},
@@ -1442,3 +1447,135 @@ def test_compare_simnow_replay_still_mismatches_when_replay_has_trades():
     }
     result = compare_simnow_replay(simnow, replay)
     assert result["matched"] is False
+
+
+# A62 — Consistency provenance floor tests
+
+
+def _valid_record_fixture(date: str, verified: bool = True) -> dict[str, Any]:
+    return {
+        "date": date,
+        "status": "pass",
+        "valid_observation": True,
+        "consistency": {"matched": True, "verified": verified},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "pass"},
+        "subscription_coverage": {"missing_symbols": []},
+        "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+    }
+
+
+def test_compare_simnow_replay_sets_verified_marker_on_all_return_paths():
+    events = {
+        "signals": [{"dt": "2026-07-01 10:00", "symbol": "AP888", "strategy": "二买多头", "operate": "LO"}],
+        "trades": [{"dt": "2026-07-01 10:00", "symbol": "AP888", "strategy": "二买多头", "operate": "LO"}],
+        "positions": [{"dt": "2026-07-01 10:00", "symbol": "AP888", "strategy": "二买多头", "operate": "HOLD"}],
+    }
+
+    # 1. require_captured + not captured_session -> unavailable, verified=False
+    unavailable = compare_simnow_replay(
+        {"meta": {"strategy_surface": {"source": "windowed_strategy_replay"}}, "signals": [], "trades": [], "positions": []},
+        {"signals": [], "trades": [], "positions": [], "meta": {"replay_available": True}},
+        consistency_source_mode="require_captured",
+    )
+    assert unavailable["status"] == "unavailable"
+    assert unavailable["verified"] is False
+
+    # 2. require_captured + captured_session + match -> verified=True
+    matched = compare_simnow_replay(
+        {"meta": {"strategy_surface": {"source": "captured_session"}}, **events},
+        {"meta": {"replay_available": True}, **events},
+        consistency_source_mode="require_captured",
+    )
+    assert matched["matched"] is True
+    assert matched["verified"] is True
+
+    # 3. require_captured + captured_session + mismatch -> verified=True
+    mismatched = compare_simnow_replay(
+        {"meta": {"strategy_surface": {"source": "captured_session"}}, "signals": [], "trades": [], "positions": []},
+        {"meta": {"replay_available": True}, **events},
+        consistency_source_mode="require_captured",
+    )
+    assert mismatched["matched"] is False
+    assert mismatched["verified"] is True
+
+    # 4. replay_derived_allowed + match -> verified=False
+    legacy = compare_simnow_replay(
+        {"meta": {"strategy_surface": {"source": "windowed_strategy_replay"}}, **events},
+        {"meta": {"replay_available": True}, **events},
+        consistency_source_mode="replay_derived_allowed",
+    )
+    assert legacy["matched"] is True
+    assert legacy["verified"] is False
+
+
+def test_is_valid_observation_rejects_matched_without_verified_marker():
+    unverified = _valid_record_fixture("2026-07-01", verified=False)
+    assert is_valid_observation(unverified) is False
+    assert valid_observation_reason(unverified) == REASON_CONSISTENCY_PROVENANCE_UNVERIFIED
+
+
+def test_is_valid_observation_rejects_matched_with_missing_verified_key():
+    legacy = {
+        "date": "2026-07-01",
+        "status": "pass",
+        "consistency": {"matched": True},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "pass"},
+        "subscription_coverage": {"missing_symbols": []},
+        "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+    }
+    assert is_valid_observation(legacy) is False
+    assert valid_observation_reason(legacy) == REASON_CONSISTENCY_PROVENANCE_UNVERIFIED
+
+
+def test_make_record_produces_verified_consistency_for_captured_session_match():
+    simnow = _events()
+    simnow["meta"] = {
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+        "workflow_order_actions": [],
+        "strategy_surface": {"source": "captured_session"},
+    }
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [],
+        "subscribed": [{"research_symbol": "AP888"}],
+    }
+    simnow["meta"]["contract_map"] = {"AP888": {"enabled": True}}
+    replay = _events()
+    replay["meta"] = {"replay_available": True}
+
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        kline={
+            "expected_symbols": ["AP888"],
+            "symbols": ["AP888"],
+            "missing_symbols": [],
+            "short_symbols": [],
+            "min_bars_per_symbol": 30,
+        },
+    )
+
+    assert record["consistency"]["matched"] is True
+    assert record["consistency"]["verified"] is True
+    assert record["valid_observation"] is True
+    assert record["valid_observation_reason"] == ""
+
+
+def test_20d_report_excludes_unverified_matched_record():
+    records = [
+        _valid_record_fixture("2026-06-20", verified=True),
+        _valid_record_fixture("2026-06-21", verified=False),
+    ]
+    summary = build_20d_report(records, min_days=2)
+    assert summary["valid_observation_days"] == 1
+    assert summary["consistency_matched_days"] == 2
+    assert summary["last_valid_observation_date"] == "2026-06-20"
+    assert summary["ready_to_expand"] is False

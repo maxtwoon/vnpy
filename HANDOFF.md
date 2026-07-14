@@ -1,19 +1,19 @@
 ---
 task: A62 - Consistency Provenance Floor for Ledger Records
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -57,18 +57,18 @@ actually compare anything). Then update `is_valid_observation`
 
 ## Acceptance Criteria
 
-- [ ] A fixture record with `consistency.matched=True` but lacking the provenance marker is excluded
+- [x] A fixture record with `consistency.matched=True` but lacking the provenance marker is excluded
       from `valid_observation`/`matched_days` counting, with a distinct, identifiable reason
       (unit-tested).
-- [ ] A fixture record produced through `compare_simnow_replay`'s normal `require_captured` path
+- [x] A fixture record produced through `compare_simnow_replay`'s normal `require_captured` path
       counts as `valid_observation` exactly as before (byte-identical for this case).
-- [ ] Existing 20-day-report/ledger tests pass byte-identical for all previously-valid records.
-- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
+- [x] Existing 20-day-report/ledger tests pass byte-identical for all previously-valid records.
+- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
       `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
@@ -105,6 +105,28 @@ actually compare anything). Then update `is_valid_observation`
    `python tools/handoff.py next --actor kimi-code --summary "A62 consistency provenance floor implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification (natively-run)
+
+```text
+.venv_new\Scripts\python.exe -m pytest examples\czsc_strategy\tests\unit -q -m "not realdb"
+# 594 passed, 4 deselected, 2 warnings in 33.06s
+
+.venv_new\Scripts\python.exe tools\sync_check.py
+# [SYNC-CHECK] PASS: 版本与文档一致。
+
+.venv_new\Scripts\python.exe tools\sync_check.py --root examples\czsc_strategy
+# [SYNC-CHECK] PASS: 版本与文档一致。
+
+powershell -ExecutionPolicy Bypass -File examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+# Preflight complete; live SimNow capture was not requested
+
+ruff check examples\czsc_strategy\diagnostics\simnow_daily_monitor.py examples\czsc_strategy\diagnostics\simnow_observation_rules.py examples\czsc_strategy\diagnostics\simnow_action_summary.py examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py
+# All checks passed!
+```
+
+Guardrails held: no threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send paths
+modified; no `GOAL PASSED`.
+
 ## Decision Log
 
 - 2026-07-14 - A62 promoted from `docs/design/a61-simnow-observation-window-hardening.md`'s draft to
@@ -114,9 +136,14 @@ actually compare anything). Then update `is_valid_observation`
   `compare_simnow_replay`'s 5 return statements (lines 304/318/323/332/355) — all unchanged since
   the roadmap was designed. Identified that only the line-304 early return represents "no real
   comparison happened," informing the marker's exact semantics for dev.
+- 2026-07-14 - kimi-code implemented the provenance floor: `compare_simnow_replay` now emits
+  `consistency.verified`, and `is_valid_observation`/`valid_observation_reason` require it for any
+  `matched=True` record. `_pass_gaps` surfaces the distinct reason
+  `consistency_provenance_unverified` in action recommendations.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A62 (consistency provenance floor) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
+| 2026-07-14 | kimi-code → codex | dev → review | A62 consistency provenance floor implemented |
