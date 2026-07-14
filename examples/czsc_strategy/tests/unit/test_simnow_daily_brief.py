@@ -271,3 +271,43 @@ def test_render_daily_brief_handles_missing_ledger_summary():
     text = render_daily_brief(summary)
 
     assert "ledger_summary 不可用" in text
+
+
+def test_render_daily_brief_includes_window_fields():
+    summary = _sample_run_summary()
+    summary["ledger_summary"] = {
+        "available": True,
+        "min_days": 20,
+        "valid_observation_days": 3,
+        "consecutive_valid_days": 2,
+        "ready_to_expand": False,
+        "observation_start_date": "2026-04-14",
+        "excluded_before_start_count": 12,
+        "next_action": "continue_observation",
+        "promotion_blockers": ["need_17_more_valid_observation_days"],
+    }
+
+    text = render_daily_brief(summary)
+
+    assert "observation_start_date: `2026-04-14`" in text
+    assert "excluded_before_start_count: `12`" in text
+    assert "next_action: `continue_observation`" in text
+
+
+def test_render_daily_brief_missing_window_fields_no_crash():
+    summary = _sample_run_summary()
+    summary["ledger_summary"] = {
+        "available": True,
+        "min_days": 20,
+        "valid_observation_days": 3,
+        "consecutive_valid_days": 2,
+        "ready_to_expand": False,
+        "promotion_blockers": [],
+    }
+
+    text = render_daily_brief(summary)
+
+    assert "## 20 日进度" in text
+    assert "observation_start_date: `无`" in text
+    assert "excluded_before_start_count: `无`" in text
+    assert "next_action: `无`" in text

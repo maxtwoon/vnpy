@@ -199,6 +199,13 @@ def build_daily_brief(summary: dict[str, Any]) -> str:
         lines.append(f"- valid_observation_days: `{ledger_summary.get('valid_observation_days', 0)}/{min_days}`")
         lines.append(f"- consecutive_valid_days: `{ledger_summary.get('consecutive_valid_days', 0)}`")
         lines.append(f"- ready_to_expand: `{str(ledger_summary.get('ready_to_expand', False)).lower()}`")
+        observation_start_date = ledger_summary.get("observation_start_date") or "无"
+        excluded_before_start_count = ledger_summary.get("excluded_before_start_count")
+        excluded_before_start_count = excluded_before_start_count if excluded_before_start_count is not None else "无"
+        next_action = ledger_summary.get("next_action") or "无"
+        lines.append(f"- observation_start_date: `{observation_start_date}`")
+        lines.append(f"- excluded_before_start_count: `{excluded_before_start_count}`")
+        lines.append(f"- next_action: `{next_action}`")
         blockers = ledger_summary.get("promotion_blockers") or []
         lines.append(f"- promotion_blockers: `{','.join(str(b) for b in blockers) or '无'}`")
     else:
