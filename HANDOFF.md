@@ -1,7 +1,7 @@
 ---
 task: A62 - Consistency Provenance Floor for Ledger Records
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-14
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -178,3 +178,4 @@ modified; no `GOAL PASSED`.
 | 2026-07-14 | kimi-code → codex | dev → review | A62 consistency provenance floor implemented |
 | 2026-07-14 | codex → kimi-code | review → dev | 打回: unverified matched rows still count in consistency_matched_days |
 | 2026-07-14 | kimi-code → codex | dev → review | A62 consistency provenance floor implemented |
+| 2026-07-14 | codex → codex | review → done | A62 review accepted: provenance floor and matched-day counting verified |
