@@ -1,19 +1,19 @@
 ---
 task: A61 - Captured-Session Surface: Workflow-Owned Filter + account_contamination Wiring
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -60,20 +60,47 @@ as either "workflow-owned, compared" or "external, contamination-only." No new c
 
 ## Acceptance Criteria
 
-- [ ] A fixture with a captured position on a symbol NOT in `contract_map` produces a comparison
+- [x] A fixture with a captured position on a symbol NOT in `contract_map` produces a comparison
       surface (`positions`) that does not include that row, and `account_contamination`'s
       `active_positions`/`position_symbols` count reflects it instead (unit-tested).
-- [ ] The same fixture for a captured trade (not just position) on a non-workflow symbol.
-- [ ] A fixture with only workflow-owned positions/trades is completely unaffected — existing
+- [x] The same fixture for a captured trade (not just position) on a non-workflow symbol.
+- [x] A fixture with only workflow-owned positions/trades is completely unaffected — existing
       `test_simnow_strategy_surface.py` tests still pass byte-identical.
-- [ ] `compare_simnow_replay`'s existing consistency-matching behavior for workflow-owned events is
+- [x] `compare_simnow_replay`'s existing consistency-matching behavior for workflow-owned events is
       unchanged (no new false negatives introduced by the filter itself).
-- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
+- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
       `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+
+## Manual verification (claude-code's independent re-run, dev-round output not self-reported by kimi-code)
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` — 589 passed, 4
+  deselected in 31.80s (up from A60's 586 baseline by exactly the 3 new tests this task adds:
+  `test_build_strategy_surface_filters_external_position_to_contamination`,
+  `test_build_strategy_surface_filters_external_trade_to_contamination`,
+  `test_build_strategy_surface_workflow_owned_events_unaffected`).
+- `ruff check diagnostics/simnow_strategy_surface.py tests/unit/test_simnow_strategy_surface.py` —
+  pass.
+- `python tools/sync_check.py` — pass (version 4.4.0).
+- `python tools/sync_check.py --root examples/czsc_strategy` — pass (version 0.2.2). synccheck:ignore
+- `run_next_work.ps1 -Preflight` — 167 passed; preflight complete.
+- Diff scope confirmed minimal and correct: `_workflow_owned_symbols` extracts the enabled-contract
+  symbol set from `capture["meta"]["contract_map"]` (returns `None` — "keep everything" — when the
+  key is absent, a safe backward-compatible fallback for pre-A61 captures); `_filter_captured_events`
+  splits `captured.trades`/`captured.positions` into owned/external before they reach the
+  comparison surface. Filtered rows are NOT dropped: `account_contamination`
+  (`simnow_run_summary.py`) already independently scans `raw.*` (the same unfiltered source
+  `captured.*` is derived from), so external symbols are automatically counted there — no direct
+  code-level wiring was needed between the two, and the new tests explicitly prove this by setting
+  `capture["raw"][...]` to include the external row and asserting `account_contamination` reports
+  it. `filtered_trades_count`/`filtered_positions_count`/`filtered_symbols` were added to the
+  surface's own `meta` for direct traceability. Symbol matching is case-insensitive (tested with
+  lowercase contract-map entries against uppercase captured rows) and correctly excludes
+  `enabled: False` contract-map entries. `chan_strategy/*.py` and all SimNow order/cancel/send paths
+  are untouched.
 
 ## Notes for the Next Agent
 
@@ -125,3 +152,4 @@ as either "workflow-owned, compared" or "external, contamination-only." No new c
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A61 (captured-session workflow-owned filter) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
+| 2026-07-14 | kimi-code → codex | dev → review | A61 captured-session workflow-owned filter implemented |

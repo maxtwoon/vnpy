@@ -4,7 +4,8 @@ import argparse
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from export_simnow_replay_snapshot import build_snapshot
 from chan_strategy.config import SQLITE_DB_PATH
@@ -76,6 +77,59 @@ def build_strategy_surface_from_capture(
     }
 
 
+def _workflow_owned_symbols(capture: dict[str, Any]) -> set[str] | None:
+    """Return the uppercase trading symbols owned by this workflow.
+
+    The capture payload stores the workflow's contract map under
+    ``capture["meta"]["contract_map"]`` (built by ``load_contract_map`` in
+    ``simnow_daily_capture.py``). Only enabled entries whose ``symbol`` field is
+    populated are considered.
+
+    Returns ``None`` when the contract map key is absent, which signals the
+    caller to keep all captured events (backward-compatible fallback for
+    fixtures/captures that pre-date this filter). An explicitly empty contract
+    map returns an empty set, meaning every captured event is treated as
+    external.
+    """
+    meta = capture.get("meta") or {}
+    if "contract_map" not in meta:
+        return None
+    contract_map = meta["contract_map"] or {}
+    symbols: set[str] = set()
+    for item in contract_map.values():
+        if not isinstance(item, dict):
+            continue
+        if not item.get("enabled", True):
+            continue
+        symbol = str(item.get("symbol") or "").strip()
+        if symbol:
+            symbols.add(symbol.upper())
+    return symbols
+
+
+def _is_workflow_owned_event(row: dict[str, Any], owned_symbols: set[str] | None) -> bool:
+    """Return True when the captured row's symbol belongs to the workflow."""
+    if owned_symbols is None:
+        return True
+    symbol = str(row.get("symbol") or "").strip().upper()
+    return symbol in owned_symbols
+
+
+def _filter_captured_events(
+    rows: list[dict[str, Any]],
+    owned_symbols: set[str] | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split captured rows into (workflow-owned, filtered-out)."""
+    owned: list[dict[str, Any]] = []
+    external: list[dict[str, Any]] = []
+    for row in rows:
+        if _is_workflow_owned_event(row, owned_symbols):
+            owned.append(row)
+        else:
+            external.append(row)
+    return owned, external
+
+
 def _has_captured_session_data(capture: dict[str, Any]) -> bool:
     """Return True when the capture contains real session trades or positions."""
     captured = capture.get("captured") or {}
@@ -90,11 +144,30 @@ def build_strategy_surface_from_captured_session(capture: dict[str, Any]) -> dic
     real CTP callbacks recorded during the live session. The returned surface
     carries ``meta.source == "captured_session"`` so downstream callers can
     distinguish authoritative captured data from replay-derived references.
+
+    Trades and positions are filtered to workflow-owned symbols (taken from
+    ``capture["meta"]["contract_map"]``). Filtered-out rows remain available
+    in ``raw.*`` and are summarized in ``meta.filtered_*`` so that every
+    captured event is accounted for as either "workflow-owned, compared" or
+    "external, contamination-only."
     """
     captured = capture.get("captured") or {}
-    trades = [_trade_event_from_capture(row) for row in captured.get("trades") or []]
-    positions = [_position_event_from_capture(row) for row in captured.get("positions") or []]
     orders = captured.get("orders") or []
+    owned_symbols = _workflow_owned_symbols(capture)
+
+    raw_trades = list(captured.get("trades") or [])
+    raw_positions = list(captured.get("positions") or [])
+    owned_trades, filtered_trades = _filter_captured_events(raw_trades, owned_symbols)
+    owned_positions, filtered_positions = _filter_captured_events(raw_positions, owned_symbols)
+
+    trades = [_trade_event_from_capture(row) for row in owned_trades]
+    positions = [_position_event_from_capture(row) for row in owned_positions]
+    filtered_symbols = sorted({
+        str(row.get("symbol") or "").upper()
+        for row in filtered_trades + filtered_positions
+        if row.get("symbol")
+    })
+
     return {
         "signals": [],
         "trades": trades,
@@ -103,6 +176,9 @@ def build_strategy_surface_from_captured_session(capture: dict[str, Any]) -> dic
             "source": "captured_session",
             "trade_date": "",
             "captured_orders_count": len(orders),
+            "filtered_trades_count": len(filtered_trades),
+            "filtered_positions_count": len(filtered_positions),
+            "filtered_symbols": filtered_symbols,
         },
     }
 
