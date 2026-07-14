@@ -636,7 +636,12 @@ def build_20d_report(
     valid_days = sum(1 for row in recent if is_valid_observation(row))
     pending_days = sum(1 for row in recent if row.get("status") == "pending")
     skipped_days = sum(1 for row in recent if row.get("status") == "skipped")
-    matched_days = sum(1 for row in recent if row.get("consistency", {}).get("matched"))
+    matched_days = sum(
+        1
+        for row in recent
+        if row.get("consistency", {}).get("matched") is True
+        and row.get("consistency", {}).get("verified") is True
+    )
     halt_days = sum(
         1
         for row in recent

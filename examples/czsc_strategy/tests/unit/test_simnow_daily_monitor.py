@@ -1576,6 +1576,7 @@ def test_20d_report_excludes_unverified_matched_record():
     ]
     summary = build_20d_report(records, min_days=2)
     assert summary["valid_observation_days"] == 1
-    assert summary["consistency_matched_days"] == 2
+    assert summary["consistency_matched_days"] == 1
     assert summary["last_valid_observation_date"] == "2026-06-20"
     assert summary["ready_to_expand"] is False
+    assert "consistency_not_fully_matched" in summary["promotion_blockers"]

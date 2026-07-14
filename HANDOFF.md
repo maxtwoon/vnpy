@@ -1,19 +1,19 @@
 ---
 task: A62 - Consistency Provenance Floor for Ledger Records
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -134,7 +134,7 @@ Review notes:
 
 ```text
 .venv_new\Scripts\python.exe -m pytest examples\czsc_strategy\tests\unit -q -m "not realdb"
-# 594 passed, 4 deselected, 2 warnings in 33.06s
+# 594 passed, 4 deselected, 2 warnings in 31.50s
 
 .venv_new\Scripts\python.exe tools\sync_check.py
 # [SYNC-CHECK] PASS: 版本与文档一致。
@@ -165,6 +165,10 @@ modified; no `GOAL PASSED`.
   `consistency.verified`, and `is_valid_observation`/`valid_observation_reason` require it for any
   `matched=True` record. `_pass_gaps` surfaces the distinct reason
   `consistency_provenance_unverified` in action recommendations.
+- 2026-07-14 - codex review rejected the first dev round because `build_20d_report` still counted
+  unverified `consistency.matched=True` rows in `consistency_matched_days`. kimi-code fixed
+  `build_20d_report` to require `consistency.verified is True` for the matched-day count and
+  updated `test_20d_report_excludes_unverified_matched_record` accordingly.
 
 ## 交接历史
 
@@ -173,3 +177,4 @@ modified; no `GOAL PASSED`.
 | 2026-07-14 | codex → claude-code | done → dev | A62 (consistency provenance floor) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A62 consistency provenance floor implemented |
 | 2026-07-14 | codex → kimi-code | review → dev | 打回: unverified matched rows still count in consistency_matched_days |
+| 2026-07-14 | kimi-code → codex | dev → review | A62 consistency provenance floor implemented |
