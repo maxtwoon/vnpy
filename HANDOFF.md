@@ -1,7 +1,7 @@
 ---
 task: A61 - Captured-Session Surface: Workflow-Owned Filter + account_contamination Wiring
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-14
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -153,3 +153,4 @@ as either "workflow-owned, compared" or "external, contamination-only." No new c
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A61 (captured-session workflow-owned filter) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
 | 2026-07-14 | kimi-code → codex | dev → review | A61 captured-session workflow-owned filter implemented |
+| 2026-07-14 | codex → codex | review → done | A61 review passed |
