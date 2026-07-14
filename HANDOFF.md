@@ -1,19 +1,19 @@
 ---
 task: A64 - Run-Summary promotion Sub-Section: Carry Window-Filter Metadata
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-14
 deliverables:
   - HANDOFF.md
   - docs/design/a61-simnow-observation-window-hardening.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -55,16 +55,16 @@ from an already-available dict).
 
 ## Acceptance Criteria
 
-- [ ] A fixture `promotion_summary` (i.e. what `decide_promotion` would return) with
+- [x] A fixture `promotion_summary` (i.e. what `decide_promotion` would return) with
       `observation_start_date`/`excluded_before_start_count` set produces a `build_run_summary`
       output whose `"promotion"` sub-section also carries them (unit-tested).
-- [ ] Existing run-summary tests pass byte-identical for their existing assertions.
-- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
+- [x] Existing run-summary tests pass byte-identical for their existing assertions.
+- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
       `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
@@ -100,6 +100,18 @@ from an already-available dict).
    Transactional gate — fix and retry if it blocks; no `--no-gate`. **This is the last task in the
    roadmap** — after this reaches `done`, the entire A61-A64 wave is complete.
 
+## Manual Verification (dev — natively-run counts)
+
+All acceptance commands run from `D:\repo\vnpy` on 2026-07-14 by kimi-code:
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **598 passed, 4 deselected**.
+- `python tools/sync_check.py` → **PASS** (root gate version 4.4.0 consistent).
+- `python tools/sync_check.py --root examples/czsc_strategy` → **PASS** (czsc_strategy sub-project gate consistent).
+- `powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → **Preflight complete; live SimNow capture was not requested** (176 passed in preflight unit-test subset).
+- `ruff check examples/czsc_strategy/diagnostics/simnow_run_summary.py examples/czsc_strategy/tests/unit/test_simnow_run_summary.py` → **All checks passed!**
+
+Code changes: purely additive propagation of `observation_start_date` and `excluded_before_start_count` into `build_run_summary`'s `"promotion"` sub-section; no thresholds, no pre-2026-04-24 data, no SimNow order/cancel/send paths touched, no `GOAL PASSED`.
+
 ## Decision Log
 
 - 2026-07-14 - A64 promoted from `docs/design/a61-simnow-observation-window-hardening.md`'s draft to
@@ -118,3 +130,4 @@ from an already-available dict).
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-14 | codex → claude-code | done → dev | A64 (run-summary promotion window metadata) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
+| 2026-07-14 | kimi-code → codex | dev → review | A64 run-summary promotion window metadata implemented |

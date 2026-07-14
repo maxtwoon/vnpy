@@ -264,6 +264,8 @@ def build_run_summary(
             "ready_to_expand": bool(promotion.get("ready_to_expand")),
             "valid_observation_days": int(promotion.get("valid_observation_days", 0)),
             "observed_days": int(promotion.get("observed_days", 0)),
+            "observation_start_date": promotion.get("observation_start_date", ""),
+            "excluded_before_start_count": int(promotion.get("excluded_before_start_count", 0)),
             "promotion_blockers": list(promotion.get("promotion_blockers") or []),
             "top_blocking_actions": list(promotion.get("top_blocking_actions") or []),
         },

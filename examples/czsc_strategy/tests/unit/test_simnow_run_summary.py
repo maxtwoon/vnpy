@@ -97,6 +97,100 @@ def test_build_run_summary_from_minimal_artifacts(tmp_path):
     assert summary["promotion"]["top_blocking_actions"] == [{"reason": "kline_coverage_incomplete", "count": 1}]
 
 
+def test_build_run_summary_promotion_carries_window_filter_metadata(tmp_path):
+    date = "2026-07-01"
+    capture = {
+        "meta": {"read_only": True, "orders_sent_by_workflow": 0},
+        "raw": {
+            "ticks": [],
+            "contracts_count": 1,
+            "accounts": [],
+            "positions": [],
+            "orders": [],
+            "trades": [],
+            "subscribed": [],
+        },
+    }
+    record = {
+        "date": date,
+        "status": "pass",
+        "valid_observation": True,
+        "consistency": {"matched": True, "reason": "delayed_replay_validated"},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "pass"},
+    }
+    promotion = {
+        "ready_to_expand": False,
+        "valid_observation_days": 5,
+        "observed_days": 7,
+        "observation_start_date": "2026-04-24",
+        "excluded_before_start_count": 3,
+        "promotion_blockers": ["need_15_more_valid_observation_days"],
+        "top_blocking_actions": [],
+    }
+    files = {
+        "capture_json": tmp_path / "capture.json",
+        "kline_json": tmp_path / "kline.json",
+        "replay_json": tmp_path / "replay.json",
+        "record_json": tmp_path / "record.json",
+        "observation_report_md": tmp_path / "report.md",
+        "promotion_report_md": tmp_path / "promotion.md",
+    }
+    _write_json(files["capture_json"], capture)
+    _write_json(files["record_json"], record)
+
+    summary = build_run_summary(date, files, promotion_summary=promotion)
+
+    assert summary["promotion"]["observation_start_date"] == "2026-04-24"
+    assert summary["promotion"]["excluded_before_start_count"] == 3
+
+
+def test_build_run_summary_promotion_window_defaults_when_missing(tmp_path):
+    date = "2026-07-01"
+    capture = {
+        "meta": {"read_only": True, "orders_sent_by_workflow": 0},
+        "raw": {
+            "ticks": [],
+            "contracts_count": 1,
+            "accounts": [],
+            "positions": [],
+            "orders": [],
+            "trades": [],
+            "subscribed": [],
+        },
+    }
+    record = {
+        "date": date,
+        "status": "pass",
+        "valid_observation": True,
+        "consistency": {"matched": True, "reason": "delayed_replay_validated"},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "pass"},
+    }
+    promotion = {
+        "ready_to_expand": False,
+        "valid_observation_days": 5,
+        "observed_days": 7,
+        "promotion_blockers": ["need_15_more_valid_observation_days"],
+        "top_blocking_actions": [],
+    }
+    files = {
+        "capture_json": tmp_path / "capture.json",
+        "kline_json": tmp_path / "kline.json",
+        "replay_json": tmp_path / "replay.json",
+        "record_json": tmp_path / "record.json",
+        "observation_report_md": tmp_path / "report.md",
+        "promotion_report_md": tmp_path / "promotion.md",
+    }
+    _write_json(files["capture_json"], capture)
+    _write_json(files["record_json"], record)
+
+    summary = build_run_summary(date, files, promotion_summary=promotion)
+
+    assert summary["promotion"]["observation_start_date"] == ""
+    assert summary["promotion"]["excluded_before_start_count"] == 0
+
+
 def test_build_run_summary_separates_environment_account_contamination_and_delayed_replay(tmp_path):
     date = "2026-07-13"
     capture = {
