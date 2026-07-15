@@ -84,6 +84,16 @@ assertions should change.
 
 (dev = kimi-code must read this before writing code)
 
+### Review rejection from codex on 2026-07-16
+
+The A77 text changes themselves are scoped correctly, but the review cannot accept the broad
+unit-test/preflight evidence after sandbox reruns hit the documented `WinError 5` tmp_path
+limitation. `HANDOFF.md` records claude-code's independent verification in the Decision Log, but it
+does not contain the required Manual-verification block with native pass/fail counts for the
+sandbox-limited unit-test and preflight acceptance items. Add that explicit block, including the
+native counts for `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` and
+`run_next_work.ps1 -Preflight`, then rerun the normal gates and transition back to review.
+
 1. **Entry point:** `docs/design/a76-fourth-audit-remediation-roadmap.md` §"A77". Second of three
    A76-A78 tasks. This is the smallest/lowest-risk task in the roadmap — pure documentation.
 2. **Scope:** `README.md`, and the three named docstrings in `diagnostics/cost_sensitivity_report.py`,
@@ -101,6 +111,27 @@ assertions should change.
 6. Finish with the acceptance commands, then
    `python tools/handoff.py next --actor kimi-code --summary "A77 documentation drift fixes implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
+
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 700 passed, 4 deselected
+
+ruff check examples/czsc_strategy/diagnostics/backtest_matrix_report.py \
+           examples/czsc_strategy/diagnostics/cost_sensitivity_report.py \
+           examples/czsc_strategy/diagnostics/risk_param_sensitivity_report.py
+# All checks passed
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete
+```
 
 ## Decision Log
 
@@ -126,3 +157,5 @@ assertions should change.
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A77 (documentation drift fixes) promoted from fourth third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A77 documentation drift fixes implemented |
+| 2026-07-16 | codex → kimi-code | review → dev | 打回: Missing required Manual-verification block for sandbox-limited pytest/preflight evidence |
+| 2026-07-16 | kimi-code → codex | dev → review | A77 documentation drift fixes implemented (Manual Verification block added) |
