@@ -1,19 +1,19 @@
 ---
 task: A67 - Limit/Halt Unexecutable-Fill Backtest Mode
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -77,28 +77,28 @@ defaulted to without comparison.
 
 ## Acceptance Criteria
 
-- [ ] `limit_halt_model="off"` and `"aware"` remain byte-identical to current behavior (existing
+- [x] `limit_halt_model="off"` and `"aware"` remain byte-identical to current behavior (existing
       equivalence/tagging tests untouched, snapshot-verified).
-- [ ] A recorded design decision (reject vs. defer) with rationale in the Decision Log, BEFORE any
+- [x] A recorded design decision (reject vs. defer) with rationale in the Decision Log, BEFORE any
       code is written.
-- [ ] `limit_halt_model="enforce"` gates BOTH entries (`Operate.LO`/`SO`) and exits — covering all
+- [x] `limit_halt_model="enforce"` gates BOTH entries (`Operate.LO`/`SO`) and exits — covering all
       seven exit call sites enumerated above (signal-close, legacy trailing/fixed-stop/timeout,
       structural_atr fixed-stop/timeout/ATR-trailing). A shared helper function is strongly
       preferred over duplicating the same gating check at all seven call sites.
-- [ ] Unit-tested: a fixture bar at the limit band produces a rejected/deferred fill (position state
+- [x] Unit-tested: a fixture bar at the limit band produces a rejected/deferred fill (position state
       correctly unchanged for reject, or correctly retried for defer) — for BOTH an entry and an
       exit case, with NO lookahead (a fixture proving the decision uses only current-and-prior-bar
       information, never a future bar).
-- [ ] A comparison report (RESEARCH-ONLY banner, reusing `declassify_historical_reports.
+- [x] A comparison report (RESEARCH-ONLY banner, reusing `declassify_historical_reports.
       build_banner()`) quantifies how much `"enforce"` changes reported trade counts/PnL relative to
       `"aware"` on the post-2026-04-24 window — reported as honest measurement, not a superiority
       claim.
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
@@ -143,6 +143,42 @@ defaulted to without comparison.
     `python tools/handoff.py next --actor kimi-code --summary "A67 limit/halt enforce mode implemented"`.
     Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification
+
+Natively-run counts (Windows, Python 3.14, repo `D:\repo\vnpy`):
+
+```text
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+625 passed, 4 deselected in 28.97s
+
+$ python -m pytest examples/czsc_strategy/tests/unit/test_limit_halt_enforce.py -q -m "not realdb"
+12 passed in 0.11s
+
+$ python tools/sync_check.py
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ powershell -ExecutionPolicy Bypass -File diagnostics/run_next_work.ps1 -Preflight
+==> Preflight complete; live SimNow capture was not requested
+189 passed in 16.08s
+
+$ ruff check examples/czsc_strategy/tests/unit/test_limit_halt_enforce.py examples/czsc_strategy/diagnostics/limit_halt_enforce_report.py examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/chan_strategy/config.py
+All checks passed!
+
+$ ruff check examples/czsc_strategy/chan_strategy/positions.py
+29 pre-existing typing-annotation lints (no new issues introduced by this change).
+```
+
+Comparison report generated:
+- `examples/czsc_strategy/diagnostics/limit_halt_enforce_report_2026-07-15.md`
+- `examples/czsc_strategy/diagnostics/limit_halt_enforce_report_2026-07-15.json`
+
+On the post-2026-04-24 window the report shows zero rejected fills because no tested symbol
+actually hit its daily limit band during the window — this is honest measurement, not a claim of
+no effect.
+
 ## Decision Log
 
 - 2026-07-15 - A67 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
@@ -155,9 +191,26 @@ defaulted to without comparison.
   (not a one-shot edge-triggered event), meaning a rejected entry fill is NOT necessarily a
   permanently lost trade — this evidence leans toward recommending "reject" over "defer" for
   simplicity, but the final choice and its justification are dev's own design decision to record.
+- 2026-07-15 - dev (kimi-code) design decision: implement `limit_halt_model="enforce"` as a
+  **reject-this-bar** model, not a cross-bar deferral queue. Rationale: (1) reject keeps `Position`
+  fully stateless across bars — no pending-fill object, no priority-interaction risk with stop-loss/
+  timeout/signal-close, and no multi-bar persistence edge cases; (2) the audit's primary concern is
+  quantifying the impact of unexecutable fills, and a reject model provides a clean, conservative
+  lower bound; (3) `_get_operate` already re-evaluates classification every bar, so a skipped entry
+  naturally retries on the next bar if the signal persists, approximating much of deferral's value
+  without the complexity; (4) exit gating is straightforward: any exit triggered on a limit/halt bar
+  is simply skipped for that bar, and because the same stop/timeout/signal condition is re-evaluated
+  each bar, the next fillable bar will catch it. Partial take-profit (`_scale_out`) remains out of
+  scope per the task boundary. Rejected fills are recorded with `fill_rejected_at_limit=True` on the
+  `Position.pairs` entry that eventually closes, preserving an audit trail without changing trade
+  counts/prices for non-rejected fills. Deferral was rejected for this round because introducing a
+  persistent order object across bars would require new state, new priority rules (stop-loss vs
+  pending entry), and substantially broader unit-test coverage; it is explicitly noted as a possible
+  follow-up, not this task.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A67 (limit/halt enforce mode) promoted from third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A67 limit/halt enforce mode implemented |

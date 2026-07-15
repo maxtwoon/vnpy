@@ -635,6 +635,28 @@ class Position:
         self._pending_entry_at_limit: bool = False  # entry bar limit flag for the open position
         self._pending_exit_at_limit: bool = False  # exit bar limit flag for the current bar
 
+        # A67 enforce-mode rejection audit trail (set when a fill is skipped this bar)
+        self._pending_fill_rejected_at_limit: bool = False
+
+    def _reject_fill_at_limit(
+        self,
+        flag: bool | tuple[bool, bool] | None,
+        side: int,
+        is_entry: bool,
+    ) -> bool:
+        """Return True if this fill should be skipped under ``limit_halt_model='enforce'``.
+
+        When the fill is blocked, the rejection is recorded on the position so the
+        eventual closed pair can carry an audit trail.  ``off`` and ``aware`` never
+        block fills through this helper.
+        """
+        if STRATEGY_CONFIG.get("limit_halt_model", "off") != "enforce":
+            return False
+        blocked = _resolve_limit_flag(flag, side, is_entry)
+        if blocked:
+            self._pending_fill_rejected_at_limit = True
+        return blocked
+
     def update(self, signals_dict: dict, price: float, dt: datetime,
                bar_count: int = 1, execution_price: float = None,
                bar_high: float = None, bar_low: float = None,
@@ -668,14 +690,19 @@ class Position:
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
 
+        # A67: gate entries and exits when the fill direction is unexecutable at the limit band.
         if operate == Operate.LO and self.pos == 0:
-            self._open_long(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
+            if not self._reject_fill_at_limit(entry_at_limit, 1, is_entry=True):
+                self._open_long(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
         elif operate == Operate.LC and self.pos > 0:
-            self._close_long(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
+            if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                self._close_long(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
         elif operate == Operate.SO and self.pos == 0:
-            self._open_short(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
+            if not self._reject_fill_at_limit(entry_at_limit, -1, is_entry=True):
+                self._open_short(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
         elif operate == Operate.SC and self.pos < 0:
-            self._close_short(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
+            if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                self._close_short(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
 
         # 更新K线计数和移动止损
         if self.pos != 0:
@@ -689,46 +716,52 @@ class Position:
                 # 历史基线路径：百分比回撤移动止损 > 固定止损 > 超时
                 # 信号平仓已在上面处理，保持最高优先级。
                 if self._check_trailing_stop(price):
-                    if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                        self._close_long(price, dt, "移动止损")
-                    elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                        self._close_short(price, dt, "移动止损")
+                    if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                        if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                            self._close_long(price, dt, "移动止损")
+                        elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                            self._close_short(price, dt, "移动止损")
                 # 检查固定止损 - close 模型用收盘价，intrabar 模型用当根 low/high 触价
                 elif self._stop_triggered(price, bar_high, bar_low):
                     stop_fill = self._stop_fill(price, bar_high, bar_low)
-                    if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                        self._close_long(stop_fill, dt, "止损")
-                    elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                        self._close_short(stop_fill, dt, "止损")
+                    if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                        if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                            self._close_long(stop_fill, dt, "止损")
+                        elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                            self._close_short(stop_fill, dt, "止损")
                 # 检查超时 - 风控立即执行
                 elif self.bars_since_open >= self.timeout:
-                    if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
-                        self._close_long(price, dt, "超时")
-                    elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
-                        self._close_short(price, dt, "超时")
+                    if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                        if self.pos > 0:  # pragma: no branch - pos direction is mutually exclusive after trigger
+                            self._close_long(price, dt, "超时")
+                        elif self.pos < 0:  # pragma: no branch - complementary side of the triggered position
+                            self._close_short(price, dt, "超时")
             else:
                 # A47 structural_atr: 结构止损/信号平仓已在上面处理；
                 # 风险侧：固定止损 > 超时；盈利侧：部分止盈 > ATR trailing。
                 if self._stop_triggered(price, bar_high, bar_low):
                     stop_fill = self._stop_fill(price, bar_high, bar_low)
-                    if self.pos > 0:  # pragma: no branch
-                        self._close_long(stop_fill, dt, "止损")
-                    elif self.pos < 0:  # pragma: no branch
-                        self._close_short(stop_fill, dt, "止损")
+                    if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                        if self.pos > 0:  # pragma: no branch
+                            self._close_long(stop_fill, dt, "止损")
+                        elif self.pos < 0:  # pragma: no branch
+                            self._close_short(stop_fill, dt, "止损")
                 elif self.bars_since_open >= self.timeout:
-                    if self.pos > 0:  # pragma: no branch
-                        self._close_long(price, dt, "超时")
-                    elif self.pos < 0:  # pragma: no branch
-                        self._close_short(price, dt, "超时")
+                    if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                        if self.pos > 0:  # pragma: no branch
+                            self._close_long(price, dt, "超时")
+                        elif self.pos < 0:  # pragma: no branch
+                            self._close_short(price, dt, "超时")
                 elif not self._partial_tp_done:
                     partial_event = self._get_partial_tp_event(signals_dict)
                     if partial_event:
                         self._scale_out(price, dt, f"部分止盈-{partial_event.name}")
                 elif self._check_atr_trailing_stop(price, atr):
-                    if self.pos > 0:  # pragma: no branch
-                        self._close_long(price, dt, "ATR移动止损")
-                    elif self.pos < 0:  # pragma: no branch
-                        self._close_short(price, dt, "ATR移动止损")
+                    if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                        if self.pos > 0:  # pragma: no branch
+                            self._close_long(price, dt, "ATR移动止损")
+                        elif self.pos < 0:  # pragma: no branch
+                            self._close_short(price, dt, "ATR移动止损")
 
     def _get_operate(self, signals_dict: dict, price: float, dt: datetime) -> Tuple[Optional[Operate], str]:
         """获取当前应执行的操作"""
@@ -919,9 +952,12 @@ class Position:
             "reason_code": normalize_exit_reason(reason),
             "is_partial_tp": True,
         }
-        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        if limit_halt_model in ("aware", "enforce"):
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
+        if limit_halt_model == "enforce":
+            pair["fill_rejected_at_limit"] = self._pending_fill_rejected_at_limit
         self.pairs.append(pair)
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LC if self.pos > 0 else Operate.SC,
                                        price=price, volume=scale_volume, reason=reason))
@@ -1022,9 +1058,12 @@ class Position:
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
         }
-        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        if limit_halt_model in ("aware", "enforce"):
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
+        if limit_halt_model == "enforce":
+            pair["fill_rejected_at_limit"] = self._pending_fill_rejected_at_limit
         self.pairs.append(pair)
         # Append the closing trade record BEFORE resetting state so the logged
         # volume reflects the actual closed lots instead of the default 1
@@ -1041,6 +1080,7 @@ class Position:
         self._partial_tp_done = False
         self._pending_entry_at_limit = False
         self._pending_exit_at_limit = False
+        self._pending_fill_rejected_at_limit = False
 
     def _open_short(self, price: float, dt: datetime, reason: str = "开空",
                     equity_at_entry: float | None = None,
@@ -1088,9 +1128,12 @@ class Position:
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
         }
-        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        if limit_halt_model in ("aware", "enforce"):
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
+        if limit_halt_model == "enforce":
+            pair["fill_rejected_at_limit"] = self._pending_fill_rejected_at_limit
         self.pairs.append(pair)
         # Append the closing trade record BEFORE resetting state so the logged
         # volume reflects the actual closed lots instead of the default 1
@@ -1107,6 +1150,7 @@ class Position:
         self._partial_tp_done = False
         self._pending_entry_at_limit = False
         self._pending_exit_at_limit = False
+        self._pending_fill_rejected_at_limit = False
 
     def evaluate(self) -> dict:
         """评估策略绩效"""
@@ -1872,10 +1916,10 @@ class ChanTimingStrategy:
         :param entry_at_limit: A51 flag passed to each Position for entry tagging.
         :param exit_at_limit: A51 flag passed to each Position for exit tagging.
         """
-        # A51: only forward limit flags under "aware" to keep off-mode
-        # Position.update signatures backward-compatible.
+        # A51/A67: forward limit flags under "aware" and "enforce"; "off" keeps
+        # the legacy Position.update call signature byte-identical.
         limit_kwargs: dict = {}
-        if STRATEGY_CONFIG.get("limit_halt_model", "off") == "aware":
+        if STRATEGY_CONFIG.get("limit_halt_model", "off") in ("aware", "enforce"):
             limit_kwargs["entry_at_limit"] = entry_at_limit
             limit_kwargs["exit_at_limit"] = exit_at_limit
 

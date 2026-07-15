@@ -1,0 +1,220 @@
+{
+  "disclaimer": "<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->\n\n> ⚠️ **RESEARCH ONLY — NOT PROMOTION EVIDENCE**\n>\n> This report was produced using the historical out-of-sample window `2022-01-01~2026-04-24`, which was repeatedly used for parameter selection. High-precision weights such as `0.847` and any bare `GOAL PASSED` rows are gate-fitting signatures, not evidence of a robust trading discovery. This artifact is retained as negative / contaminated evidence only.\n>\n> - `is_promotion_evidence`: False\n> - `research_only`: True\n> - `used_data_windows`: `[\"2022-01-01~2026-04-24\"]`\n> - `decision_data_windows`: ['2026-04-24~present', 'SimNow observation']\n> - `note`: Future validation must use post-2026-04-24 incremental data and SimNow observation before any promotion claim can be considered.\n\n",
+  "generated_at": "2026-07-15T12:30:15.602790",
+  "limit_halt_model": "off vs aware vs enforce",
+  "note": "This report is evidence only and is not used to select or tune parameters. No threshold tuning is performed from this report in-task. Window chosen as the most recent continuous post-2026-04-24 period available.",
+  "window": {
+    "start_date": "2026-04-24",
+    "end_date": "2026-07-09"
+  },
+  "total_symbols": 5,
+  "symbols_attempted": [
+    "AP888",
+    "RB888",
+    "SC888",
+    "A888",
+    "ZN888"
+  ],
+  "methodology": "Methodology — each backtest is run with the same strategy configuration and the same post-2026-04-24 price window, varying only ``limit_halt_model``. ``off`` is the legacy baseline with no limit/halt tagging. ``aware`` tags fills that occur at the directionally-relevant daily limit band but does not block them. ``enforce`` rejects fills that occur at the unexecutable limit band (long entry at upper limit, long exit at lower limit, short entry at lower limit, short exit at upper limit) and retries on the next bar. The comparison is reported as honest measurement, not as evidence that any mode is superior.",
+  "totals": {
+    "off": {
+      "trade_count": 2,
+      "win_count": 0,
+      "loss_count": 0,
+      "total_return_pct": -0.900528094142472
+    },
+    "aware": {
+      "trade_count": 2,
+      "win_count": 0,
+      "loss_count": 0,
+      "total_return_pct": -0.900528094142472
+    },
+    "enforce": {
+      "trade_count": 2,
+      "win_count": 0,
+      "loss_count": 0,
+      "total_return_pct": -0.900528094142472
+    }
+  },
+  "per_symbol": [
+    {
+      "symbol": "AP888",
+      "off": {
+        "trade_count": 2,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": -0.900528094142472,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 1.1802067542718984,
+        "sharpe_ratio": -2.692929803361513
+      },
+      "aware": {
+        "trade_count": 2,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": -0.900528094142472,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 1.1802067542718984,
+        "sharpe_ratio": -2.692929803361513
+      },
+      "enforce": {
+        "trade_count": 2,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": -0.900528094142472,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 1.1802067542718984,
+        "sharpe_ratio": -2.692929803361513
+      },
+      "error": null,
+      "off_rejected_count": 0,
+      "aware_rejected_count": 0,
+      "enforce_rejected_count": 0
+    },
+    {
+      "symbol": "RB888",
+      "off": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0
+      },
+      "aware": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0
+      },
+      "enforce": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0
+      },
+      "error": "off_error: 交易周期数据不足: 需要至少110根30分钟K线，实际98根; aware_error: 交易周期数据不足: 需要至少110根30分钟K线，实际98根; enforce_error: 交易周期数据不足: 需要至少110根30分钟K线，实际98根"
+    },
+    {
+      "symbol": "SC888",
+      "off": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0
+      },
+      "aware": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0
+      },
+      "enforce": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0
+      },
+      "error": null,
+      "off_rejected_count": 0,
+      "aware_rejected_count": 0,
+      "enforce_rejected_count": 0
+    },
+    {
+      "symbol": "A888",
+      "off": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0
+      },
+      "aware": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0
+      },
+      "enforce": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0.0,
+        "sharpe_ratio": 0.0
+      },
+      "error": "off_error: 交易周期数据不足: 需要至少110根30分钟K线，实际86根; aware_error: 交易周期数据不足: 需要至少110根30分钟K线，实际86根; enforce_error: 交易周期数据不足: 需要至少110根30分钟K线，实际86根"
+    },
+    {
+      "symbol": "ZN888",
+      "off": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0
+      },
+      "aware": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0
+      },
+      "enforce": {
+        "trade_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "total_return_pct": 0,
+        "win_rate": 0,
+        "profit_factor": 0.0,
+        "max_drawdown_pct": 0,
+        "sharpe_ratio": 0
+      },
+      "error": null,
+      "off_rejected_count": 0,
+      "aware_rejected_count": 0,
+      "enforce_rejected_count": 0
+    }
+  ]
+}

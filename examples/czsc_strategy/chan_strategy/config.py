@@ -124,10 +124,14 @@ STRATEGY_CONFIG = {
     # "on" enables a backtest-only cross-symbol coordinator above per-symbol engines.
     "portfolio_risk": "off",              # "off" (legacy, default) | "on"
 
-    # A51 limit-up/down/halt fill tagging (P9). "off" is the legacy byte-identical default;
+    # A51/A67 limit-up/down/halt fill behavior. "off" is the legacy byte-identical default;
     # "aware" adds ``is_entry_at_limit`` / ``is_exit_at_limit`` boolean fields to each
-    # ``Position.pairs`` entry without changing fills, prices or trade counts.
-    "limit_halt_model": "off",            # "off" (legacy, default) | "aware"
+    # ``Position.pairs`` entry without changing fills, prices or trade counts;
+    # "enforce" rejects fills that occur at an unexecutable limit/halt band for that side
+    # (long entry at upper limit, long exit at lower limit, etc.) and records the rejection
+    # via ``fill_rejected_at_limit``.  "enforce" is a research-only opt-in mode and does not
+    # model exchange queue position or partial fills.
+    "limit_halt_model": "off",            # "off" (legacy, default) | "aware" | "enforce"
 
     # A52 rollover-window stat tagging (P10). "off" is the legacy byte-identical default;
     # "on" adds an ``is_rollover_window`` boolean field to each ``Position.pairs`` entry

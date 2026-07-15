@@ -2,6 +2,16 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.4 — 2026-07-15
+
+- A67 新增 `limit_halt_model="enforce"`（涨跌停/停牌不可成交回测模式）。
+  - 新增第三个可选值 `"enforce"`：当某笔开仓/平仓在方向性不利的涨跌停带内时，本 bar 拒绝该次成交（`self.pos` 不变），并在最终成交的 `Position.pairs` 记录上追加 `fill_rejected_at_limit` 审计字段。
+  - 覆盖全部开平仓入口：信号开仓/平仓、`exit_model="legacy"` 的移动止损/固定止损/超时、`exit_model="structural_atr"` 的固定止损/超时/ATR 移动止损（共 7 处平仓判定点 + 2 处开仓判定点），统一通过 `Position._reject_fill_at_limit()` 辅助方法拦截，避免重复逻辑。
+  - 设计决策（记录于 HANDOFF Decision Log）：采用"本 bar 拒绝"而非"跨 bar 排队递延"模型——`_get_operate()` 每根 bar 都会重新评估缠论结构分类，因此被拒绝的信号在结构未变化时会在下一 bar 自然重试，无需引入跨 bar 状态机。
+  - `limit_halt_model="off"` / `"aware"` 的行为、字段与既有等价性测试完全字节级不变；`"enforce"` 是新增的纯 opt-in 研究模式。
+  - 新增 `diagnostics/limit_halt_enforce_report.py`，对比 `off`/`aware`/`enforce` 三种模式在同一 post-2026-04-24 窗口下的成交笔数与收益差异（RESEARCH-ONLY，诚实测量，不作为任何模式更优的证据）。
+  - 不改动任何 SimNow 下单/撤单路径，不涉及参数调优。
+
 ## 0.2.3 — 2026-07-15
 
 - A66 重写 `README.md` 以反映当前策略实现。

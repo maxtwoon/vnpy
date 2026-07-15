@@ -309,16 +309,16 @@ class BacktestEngine:
         sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
         risk_mode = sizing_model == "risk"
 
-        # A51: pre-compute daily previous-close map for limit-band tagging.
+        # A51/A67: pre-compute daily previous-close map for limit-band tagging/gating.
         limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
-        limit_aware = limit_halt_model == "aware"
-        prev_close_map = _daily_prev_close_map(trade_bars) if limit_aware else {}
-        if limit_aware:
+        limit_active = limit_halt_model in ("aware", "enforce")
+        prev_close_map = _daily_prev_close_map(trade_bars) if limit_active else {}
+        if limit_active:
             symbol_key = _position_symbol_key(self.symbol)
             symbol_limit = SYMBOL_LIMIT_CONFIG.get(symbol_key)
             if symbol_limit is None:
                 raise ValueError(
-                    f"limit_halt_model='aware' requires a SYMBOL_LIMIT_CONFIG entry for "
+                    f"limit_halt_model='{limit_halt_model}' requires a SYMBOL_LIMIT_CONFIG entry for "
                     f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
                     f"Add the symbol to limit_config.py or use limit_halt_model='off'."
                 )
@@ -326,10 +326,10 @@ class BacktestEngine:
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]
 
-            # A51: compute per-bar directional limit-band flags for entry/exit tagging.
+            # A51/A67: compute per-bar directional limit-band flags for entry/exit tagging/gating.
             entry_at_limit: tuple[bool, bool] | None = None
             exit_at_limit: tuple[bool, bool] | None = None
-            if limit_aware:
+            if limit_active:
                 # Local import avoids the backtest_engine <-> portfolio_engine cycle.
                 from chan_strategy.portfolio_engine import _trading_day
 
@@ -339,7 +339,7 @@ class BacktestEngine:
                 limit_pct = _limit_pct_for_date(symbol_key, bar_trading_day)
                 if limit_pct is None:
                     raise ValueError(
-                        f"limit_halt_model='aware' requires a SYMBOL_LIMIT_CONFIG entry for "
+                        f"limit_halt_model='{limit_halt_model}' requires a SYMBOL_LIMIT_CONFIG entry for "
                         f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
                         f"Add the symbol to limit_config.py or use limit_halt_model='off'."
                     )
@@ -366,9 +366,9 @@ class BacktestEngine:
                 "equity_at_entry": equity_at_entry,
                 "total_open_margin": total_open_margin,
             }
-            # A51 flags are only injected under "aware" to preserve the default
-            # off-mode call signature (keeps legacy tests/fake strategies valid).
-            if limit_aware:
+            # A51/A67 flags are injected under "aware" and "enforce"; "off" keeps
+            # the legacy call signature unchanged.
+            if limit_active:
                 update_kwargs["entry_at_limit"] = entry_at_limit
                 update_kwargs["exit_at_limit"] = exit_at_limit
 
