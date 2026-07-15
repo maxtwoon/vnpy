@@ -1,149 +1,133 @@
 ---
-task: A74 - Formal-Evaluation Entry Point Defaulting to risk+enforce
+task: A75 - Legacy Signal-Path Import Hygiene Guard Test
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a73-third-audit-remediation-roadmap.md
-  - examples/czsc_strategy/chan_strategy/backtest_engine.py
-  - examples/czsc_strategy/run_formal_evaluation.py
-  - examples/czsc_strategy/tests/unit/test_formal_evaluation.py
-  - examples/czsc_strategy/VERSION
-  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Second of three tasks (A73-A75) from the third third-party audit remediation roadmap
-(`docs/design/a73-third-audit-remediation-roadmap.md`), promoted after A73 reached `done` (codex
-accepted on the first review round).
+Third and FINAL task of the third third-party audit remediation roadmap
+(`docs/design/a73-third-audit-remediation-roadmap.md`), promoted after A74 reached `done` (codex
+accepted on the first review round). Completing this task finishes the entire A73-A75 roadmap.
 
-The audit (67/100) found that the default `sizing_model="research"` + `limit_halt_model="off"`
-means the default backtest path doesn't reflect real contract-multiplier/margin-constrained P&L or
-limit/halt fill rejection, and recommended defaulting "formal evaluation" to `risk`+`enforce`.
-**We are NOT changing `chan_strategy/config.py`'s `STRATEGY_CONFIG` default dict values** — that
-would violate this entire project's "gated config defaults to byte-identical legacy behavior" house
-style and would require re-auditing every existing equivalence-snapshot test that assumes
-`research`/`off` defaults. Instead: add a new, explicit "formal evaluation" entry point that
-overrides these two knobs only within its own run, leaving every existing caller's behavior
-untouched.
+A72 (done in the second roadmap) already renamed `chan_strategy/signals.py`'s `get_all_signals()`
+to `get_legacy_signals()` and added a thin `DeprecationWarning`-emitting wrapper at the old name.
+The third audit still flagged residual risk: the legacy implementation physically still lives in
+`chan_strategy/signals.py`, so future code could still accidentally import the deprecated wrapper.
+The audit suggested either physically relocating it or adding an import-guard test; the design doc
+(§"A75") already picked the guard-test option as more cost-effective.
 
-**Full contract**: `docs/design/a73-third-audit-remediation-roadmap.md` §"A74" (this HANDOFF
+**claude-code's own pre-promotion research (2026-07-15)**: re-ran a repo-wide grep for
+`get_all_signals`/`get_legacy_signals` references. The result set is much broader than the two
+"real callers" originally named by earlier audits — it includes many `tests/unit/*.py` files that
+import `sell_signals.get_all_signals` (the PRODUCTION function, a legitimate reference, not a
+violation) as well as `chan_strategy/signals.py`/`sell_signals.py`/`validation.py`/`__init__.py`
+themselves. **This task's guard test must distinguish "imports the production
+`sell_signals.get_all_signals`" (fine) from "imports the deprecated `chan_strategy.signals`
+module's `get_all_signals` directly, without going through the `get_legacy_signals as
+get_all_signals` rename pattern A72 established" (the thing to flag)** — dev must design the
+detection carefully, not just grep for the string `get_all_signals` everywhere.
+
+**Full contract**: `docs/design/a73-third-audit-remediation-roadmap.md` §"A75" (this HANDOFF
 summarizes it — read the full Rationale/Semantics there before writing code).
 
 ## Goal
 
-Add a new, explicit entry point for "formal evaluation" that runs with `sizing_model="risk"` and
-`limit_halt_model="enforce"` by default, without touching `STRATEGY_CONFIG`'s actual default dict
-values in `config.py`.
-
-**Important technical fact, verified by claude-code before writing this HANDOFF**:
-`BacktestEngine` reads `sizing_model`/`limit_halt_model`/`portfolio_risk` directly from the
-module-level `STRATEGY_CONFIG` dict at multiple points at runtime (`backtest_engine.py:342`,
-`:346`, `:669-671`, `:699` — confirmed via direct grep) — **there is no per-instance constructor
-parameter to override these**. This means the override mechanism must be a temporary mutation of
-the shared `STRATEGY_CONFIG` dict itself (save old values → set new values → restore old
-values in a `finally` block, e.g. a context manager), not a constructor argument. Any implementation
-that tries to pass these as `BacktestEngine(...)` kwargs will not work without also modifying
-`BacktestEngine.__init__`/`generate_report` to accept overrides — if dev judges that constructor-
-parameter threading is actually cleaner than a save/restore context manager, that's an acceptable
-alternative, but it touches more of `BacktestEngine`'s surface and must be justified in the Decision
-Log; the context-manager approach is recommended as the smaller, safer diff.
-
-The specific form of the new entry point (a CLI flag on `run_chan_backtest.py`, e.g.
-`--formal-eval`, or a new standalone script e.g. `run_formal_evaluation.py`) is dev's call — record
-the choice and reasoning in the Decision Log.
+Add a guard test (e.g. `tests/unit/test_signal_path_hygiene.py`) that statically scans
+production/execution-path files (excluding `chan_strategy/signals.py` itself and test files that
+deliberately exercise the legacy implementation) and fails if any of them contain
+`from chan_strategy.signals import get_all_signals` as a **direct, unrenamed** import — i.e. NOT
+matching the already-accepted `from chan_strategy.signals import get_legacy_signals as
+get_all_signals` pattern A72 introduced in `skill_build/build_mapping.py` and
+`skill_build/scripts/analyze_symbol.py`'s `except ImportError` fallback branches.
 
 ## Acceptance Criteria
 
-- [x] A new, explicit entry point exists that runs backtests with `sizing_model="risk"` and
-      `limit_halt_model="enforce"` active, WITHOUT modifying `STRATEGY_CONFIG`'s default dict
-      values in `config.py`.
-- [x] The override mechanism is verified to fully restore the original config values afterward,
-      even if the backtest run raises an exception (e.g. via `try/finally` or a context manager) —
-      a test must prove this (run the new entry point, then assert `STRATEGY_CONFIG["sizing_model"]`
-      /`STRATEGY_CONFIG["limit_halt_model"]` are back to their pre-call values, including after a
-      simulated failure).
-- [x] The new entry point's output includes A70's `mode_label` field, and it correctly reflects the
-      non-default state (i.e. NOT `"RESEARCH_BASELINE"`) when running through this path.
-- [x] Every existing caller of `BacktestEngine`/`run_chan_backtest.py`/existing `diagnostics/*.py`
-      scripts that does NOT use the new entry point has completely unchanged behavior — all existing
-      tests pass unmodified, with no changes to their assertions.
-- [x] New unit tests cover: the new entry point produces `risk`+`enforce` behavior; config is fully
-      restored after both success and failure; `mode_label` is correct.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] New guard test implemented that detects "direct unrenamed" imports of
+      `chan_strategy.signals.get_all_signals` across the scanned file set, and asserts none exist
+      today (the test should currently PASS, proving the codebase is currently clean).
+- [ ] The guard correctly EXCLUDES: `chan_strategy/signals.py` itself (defines the deprecated
+      name, doesn't "import" it); the already-accepted `get_legacy_signals as get_all_signals`
+      rename pattern in `skill_build/build_mapping.py`/`skill_build/scripts/analyze_symbol.py`;
+      test files that deliberately test the legacy implementation directly via `get_legacy_signals`
+      (post-A72, these should already be using the new name, not the deprecated one — verify this
+      is still true).
+- [ ] A reverse/self-test proves the guard's detection logic actually works: construct a minimal
+      violating example (e.g. a string of source text containing the banned import pattern) and
+      assert the guard's scanning function flags it — do NOT insert an actual violating import into
+      real production code just to test the detector; test the detector function directly against
+      a synthetic string/fixture.
+- [ ] No changes to `chan_strategy/signals.py`, `sell_signals.py`, or any signal-calculation logic.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/diagnostics/`) passes.
-- [x] VERSION/CHANGELOG bumped.
-
-## Manual Verification (natively-run counts)
-
-- `python -m ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/run_formal_evaluation.py examples/czsc_strategy/tests/unit/test_formal_evaluation.py` — All checks passed.
-- `python -m pytest examples/czsc_strategy/tests/unit/test_formal_evaluation.py -q -m "not realdb"` — 6 passed.
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` — 683 passed, 4 deselected.
-- `python tools/sync_check.py` — PASS.
-- `python tools/sync_check.py --root examples/czsc_strategy` — PASS.
-- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` — Preflight complete; 191 SimNow workflow unit tests passed.
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [ ] VERSION/CHANGELOG bumped (new enforced hygiene rule is a user-visible addition).
 
 ## Notes for the Next Agent
 
-(review = codex must read this before reviewing)
+(dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a73-third-audit-remediation-roadmap.md` §"A74". Second of three
-   A73-A75 tasks.
-2. **Scope of changes:** `chan_strategy/backtest_engine.py` adds `formal_evaluation_config()` and
-   `run_formal_evaluation()`; `run_formal_evaluation.py` is the standalone CLI entry point;
-   `tests/unit/test_formal_evaluation.py` covers the new behavior. `config.py` defaults are
-   untouched.
-3. **Guardrails checked:** no `STRATEGY_CONFIG`/`BACKTEST_CONFIG` default dict values changed;
-   no threshold tuning; no SimNow order/cancel/send paths touched; no `GOAL PASSED`.
-4. **Before committing, run `git status --short`** and confirm only A74-scoped files are staged
-   (the unrelated SimNow-observation files remain modified in the working tree and must not be
-   committed with this task).
+1. **Entry point:** `docs/design/a73-third-audit-remediation-roadmap.md` §"A75". Third and FINAL
+   task of the A73-A75 roadmap — completing this closes out the entire third audit remediation
+   wave.
+2. **Read claude-code's pre-promotion research above carefully** — the naive approach of grepping
+   for the literal string `get_all_signals` will produce a huge false-positive list (many test
+   files legitimately import `sell_signals.get_all_signals`, the production function). Your
+   detector must specifically target imports FROM `chan_strategy.signals` (or
+   `chan_strategy/signals.py`, however you resolve module paths) of the name `get_all_signals`
+   that are NOT renamed to something else (i.e. no `as get_legacy_signals` or similar) — a plain
+   AST-based scan of `ImportFrom` nodes is more reliable than regex here, but a well-anchored regex
+   is also acceptable if it correctly handles the `as` rename case.
+3. **Scope:** new test file(s) under `tests/unit/`. Do not touch `chan_strategy/signals.py`,
+   `sell_signals.py`, `skill_build/*.py`, or any signal-calculation logic — this task only adds a
+   detection/guard test, it does not change any existing import.
+4. **Do not touch the unrelated files currently sitting modified in the working tree**
+   (`diagnostics/ACCEPTANCE.md`, `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`, `WORK_LOG.md`,
+   `run_next_work.ps1`, `simnow_20d_promotion_decision.md`,
+   `tests/unit/test_run_next_work_wrapper.py`, `tests/unit/test_simnow_docs.py`) — these belong to
+   a concurrent, unrelated SimNow-observation workstream. **Before committing, run
+   `git status --short` and confirm only your own A75-scoped files are staged.**
+5. **Guardrails (reject-on-violation):** no changes to signal-calculation logic; no SimNow
+   order/cancel/send paths touched; no `GOAL PASSED`; the guard test must not produce false
+   positives on the existing, already-accepted `get_legacy_signals as get_all_signals` pattern (if
+   it does, the review will reject).
+6. **Include a Manual-verification block with natively-run counts**, and run `ruff check`
+   proactively before finishing.
+7. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A75 legacy signal-path import hygiene guard implemented"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`. **This is the last task in the
+   entire A73-A75 roadmap** — after this reaches `done`, trigger a fresh third-party audit per the
+   standing instruction (see A73's original Background for the full "keep iterating until score >
+   75, no medium+ issues" instruction, and its honest caveat that 3 of the current 6 findings may
+   not be resolvable through bounded dev tasks alone).
 
 ## Decision Log
 
-- 2026-07-15 - A74 promoted from `docs/design/a73-third-audit-remediation-roadmap.md`'s draft to an
-  active HANDOFF task, immediately after A73 reached `done`. Second of three tasks in the third
+- 2026-07-15 - A75 promoted from `docs/design/a73-third-audit-remediation-roadmap.md`'s draft to an
+  active HANDOFF task, immediately after A74 reached `done`. Third and final task of the third
   audit-remediation roadmap.
-- 2026-07-15 (claude-code pre-promotion research) - Confirmed `BacktestEngine` has no per-instance
-  override for `sizing_model`/`limit_halt_model` — all reads are direct `STRATEGY_CONFIG.get(...)`
-  calls at multiple points in `backtest_engine.py`. Recorded this as the key implementation
-  constraint dev must design around (save/restore context manager, or thread constructor params
-  through with justification).
-- 2026-07-15 (kimi-code dev) - Re-verified `STRATEGY_CONFIG.get("sizing_model")` / `limit_halt_model`
-  reads at `backtest_engine.py:342`, `:346`, `:669-671`, `:699`. Confirmed no per-instance override
-  exists; adopted the recommended save/restore context-manager approach as the smaller, safer diff.
-- 2026-07-15 (kimi-code dev) - Entry point form: added both a reusable context manager
-  `formal_evaluation_config()`, a helper `run_formal_evaluation()`, and a standalone script
-  `run_formal_evaluation.py`. Rationale: the context manager makes the override/restore contract
-  explicit and testable; the helper lets scripts and tests call it without duplicating the override
-  logic; the standalone script is the explicit user-facing entry point requested by the audit.
-- 2026-07-15 (claude-code independent verification, before triggering codex review) - Read the full
-  diff: `formal_evaluation_config()` correctly saves/restores both keys including the edge case of
-  pre-existing non-default values (verified via the dedicated test
-  `test_formal_evaluation_config_restores_non_default_original_values`); `run_formal_evaluation()`
-  wraps `run_single_backtest()` inside the context manager so `generate_report()`'s `mode_label`
-  computation (A70) correctly sees the overridden values. Confirmed `config.py`'s
-  `sizing_model`/`limit_halt_model` default dict values are unchanged (still `"research"`/`"off"`).
-  Re-ran everything independently, matching kimi-code's recorded counts exactly: full unit suite
-  `683 passed, 4 deselected`; `ruff check` clean; both `sync_check.py` gates passed;
-  `run_next_work.ps1 -Preflight` passed. Scope was clean (only A74-scoped files staged).
+- 2026-07-15 (claude-code pre-promotion research) - Re-grepped the full repo for
+  `get_all_signals`/`get_legacy_signals` references; found a much broader reference set than
+  previously scoped (many test files legitimately reference the production
+  `sell_signals.get_all_signals`). Recorded the precise distinction the guard test must make
+  (direct unrenamed `chan_strategy.signals.get_all_signals` import vs. the already-accepted rename
+  pattern vs. legitimate production-path references) so dev doesn't naively grep and produce noise.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-15 | claude-code → kimi-code | design → dev | A74 (formal-evaluation risk+enforce entry point) promoted from third third-party audit remediation roadmap; handoff design->dev |
-| 2026-07-15 | kimi-code → codex | dev → review | A74 formal-evaluation risk+enforce entry point implemented |
-| 2026-07-15 | codex → codex | review → done | A74 review accepted: formal-evaluation entry point verified against acceptance criteria; sandboxed full-unit/preflight reruns hit documented WinError 5 tmp_path limitation, so recorded native counts were used for those two items. |
+| 2026-07-15 | claude-code → kimi-code | design → dev | A75 (legacy signal-path import hygiene guard) promoted from third third-party audit remediation roadmap; handoff design->dev |
