@@ -1,182 +1,163 @@
 ---
-task: A66 - Rewrite README.md to Reflect Current Strategy
+task: A67 - Limit/Halt Unexecutable-Fill Backtest Mode
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Second task of the 2026-07-14 third-party-audit remediation roadmap
-(`docs/design/a65-third-party-audit-remediation-roadmap.md` §"A66"), promoted immediately after
-A65 reached `done` (codex accepted on the first review round).
+Third task of the 2026-07-14 third-party-audit remediation roadmap
+(`docs/design/a65-third-party-audit-remediation-roadmap.md` §"A67"), promoted immediately after
+A66 reached `done` (codex accepted on the first review round). **This is the highest-risk task in
+the A65-A69 roadmap** — it is the only one introducing genuinely new backtest behavior, unlike
+A65/A66's fixes/docs.
 
-**Re-verified 2026-07-15 by claude-code:** `examples/czsc_strategy/README.md` (194 lines, read in
-full) describes a completely different, superseded strategy version: a 5-minute/30-minute/4-hour
-three-tier position-sizing "波段战法" (swing-trading tactic) for A-share stocks, backtested
-2021-01-01~2022-12-31 on Baostock data with 万三+印花税 costs, referencing files
-`czsc_adapter.py`/`czsc_multi_timeframe_strategy.py`/`run_baostock_backtest.py` — **these files
-still exist on disk** (confirmed via `ls`), but are NOT referenced by any test or by
-`chan_strategy/`'s own code (confirmed via `grep`) — they are an inactive, superseded early
-prototype, not the current strategy.
+**Re-verified 2026-07-15 by claude-code (due-diligence read of the full fill-decision path before
+writing this HANDOFF):**
 
-The CURRENT, actively-tested-and-gated strategy lives entirely under `chan_strategy/` and is a
-completely different design: a futures CTA strategy using Chan-theory (缠论) 一买/二买/三买 (first/
-second/third-buy) and mirrored sell signals (`chan_strategy/signals.py`, `chan_strategy/
-sell_signals.py`, signal version `V260615` per `config.py:172`), with:
-- Default instruments (confirmed `config.py:145-159`): `AP888`/`RB888`/`SC888`/`A888`/`ZN888`
-  futures contracts, each with a cited exchange-minimum margin rate.
-- Default frequencies (confirmed `config.py:12-15`): `base_freq="5分钟"`, `trade_freq="30分钟"`,
-  `confirm_freq="5分钟"`, `filter_freq="日线"`.
-- Default backtest window/costs (confirmed `config.py:163-169`): `2023-01-01~2025-12-31`,
-  `commission_rate=0.0001` (万一), `slippage=0.0005` (0.05%) — NOT the README's 2021-2022/万三+印花税.
-- Position sizing by signal tier (confirmed `config.py:19-28`): `pos_1buy=0.10`, `pos_2buy=0.20`,
-  `pos_3buy=0.30` (and mirrored sell-side), fixed stop-loss/timeout/trailing-stop parameters per
-  tier, plus a long list of research-only opt-in gates layered on top over many prior tasks
-  (`exit_model`, `sizing_model`, `limit_halt_model`, `resonance_filter`, `second_buy_mode`,
-  `divergence_model`, `portfolio_risk`, `rollover_stat_tagging`, `weighting`, etc. — all confirmed
-  present in `config.py`, each individually documented by its own inline comment citing the task
-  that introduced it).
-- No test asserts on `README.md`'s content (confirmed via `grep` across `tests/unit/`) — rewriting
-  it is safe and will not break any test.
+`limit_halt_model="aware"` (`config.py:130`) only tags fills — `Position.pairs` entries get
+`is_entry_at_limit`/`is_exit_at_limit` booleans (`positions.py:923-924, 1026-1027`), but these
+NEVER gate whether `_open_long`/`_open_short`/`_close_long`/`_close_short` actually execute. The
+directional flags (`entry_at_limit`/`exit_at_limit`, resolved per-side by `_resolve_limit_flag`,
+`positions.py:667` for exits, `positions.py:953/1067` for entries) are already computed and passed
+into `Position.update` (`positions.py:638-731`) — they are simply stored for later tagging, never
+checked before a fill happens.
 
-**Known, pre-existing, OUT-OF-SCOPE technical-debt note (do not fix as part of this task):**
-`signals.py` itself still contains a `get_all_signals` function that assembles the deprecated
-`signal_second_buy`/`signal_third_buy` implementations from that same file — but the PRODUCTION
-path (`sell_signals.py`'s own `get_all_signals`, which is what the backtest engine actually calls)
-uses its OWN, separately-defined, bug-fixed `signal_second_buy`/`signal_third_buy` (confirmed via
-direct read of both files). The stale `signals.py`-internal `get_all_signals` is a previously-known
-backlog item (🟢#12 in the 2026-07-13 audit) consumed only by some `skill_build/` scripts, not by
-`chan_strategy`'s own backtest path. Do not attempt to fix this as part of A66 — it's out of scope;
-just be aware of it so the new README correctly describes the PRODUCTION signal path
-(`sell_signals.get_all_signals`), not the stale one.
+**Fill decision points confirmed by direct read of `Position.update` (`positions.py:671-731`):**
+- **Entries:** `Operate.LO`/`Operate.SO` at lines 671/675 — a single, easy-to-gate check point.
+- **Exits — SEVEN separate call sites**, not one: signal-close (line 673/677), `exit_model="legacy"`
+  branch's trailing-stop/fixed-stop/timeout (lines 691-708), and `exit_model="structural_atr"`
+  branch's fixed-stop/timeout/ATR-trailing (lines 712-731), plus `_scale_out`'s partial take-profit
+  (line 723-726, not gated by this task — partial TP is a profit-side voluntary action, not a
+  forced exit; see Boundaries).
+- **`_get_operate` re-evaluates every bar from the current `signals_dict`'s classification state**
+  (`positions.py:733-760`, `event.is_match(signals_dict)`) — it is NOT a one-shot edge-triggered
+  event. This matters: if an entry is skipped on bar N because of a limit touch, and the Chan-
+  structure classification (e.g. "一买确认") is still the SAME on bar N+1 (plausible, since
+  structure changes don't necessarily happen every bar), `_get_operate` will naturally re-request
+  the same open on bar N+1 — a "reject this bar's fill" semantic does NOT necessarily mean
+  "permanently lose this trade," though it is an approximation, not a guaranteed retry (the
+  classification COULD also change between bars for unrelated reasons).
 
-Full contract: `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A66 — Rewrite
-`README.md` to Reflect Current Strategy" (the authoritative design — this HANDOFF summarizes it).
+Full contract: `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A67 — Limit/Halt
+Unexecutable-Fill Backtest Mode" (the authoritative design — this HANDOFF summarizes it).
 
 ## Goal
 
-Rewrite `examples/czsc_strategy/README.md` to accurately describe the CURRENT `chan_strategy`
-codebase: its actual signal taxonomy (一买/二买/三买 and mirrored sell signals, sourced from
-`sell_signals.py`'s production `get_all_signals`, not the stale `signals.py`-internal one), actual
-default config (frequencies, instruments, position sizing, backtest window, costs — all cited above
-from direct reads), and the RESEARCH-ONLY/not-a-recommendation posture already established
-elsewhere in this project's house style (mirror the tone of `diagnostics/declassify_historical_
-reports.py`'s banner text or `docs/design/a38-phase-contracts-p2-p8.md`'s own framing — do not
-invent new disclaimer language from scratch). Do NOT invent new performance claims — if citing any
-historical result, it must already exist in a properly-banner'd `diagnostics/*.md` report, cited by
-file-path reference, not reproduced as if fresh.
+Add a new `limit_halt_model="enforce"` value (alongside existing `"off"`/`"aware"`, which MUST
+remain byte-identical). Under `"enforce"`, when a fill's directional limit flag indicates an
+unexecutable price (using the SAME `_resolve_limit_flag`/`_bar_at_limit` directional logic already
+built by A57/A59/A61 — do not re-derive this from scratch), the fill is either rejected (skipped
+entirely for that bar — position state unchanged, tagged as `fill_rejected_at_limit`) or deferred
+(retried at the next fillable bar). **This task's OWN design step must decide reject vs. defer and
+record the decision, with rationale, in the Decision Log BEFORE writing any code** — mirroring the
+A56 "decide, then implement" pattern.
 
-Preserve the OLD README content as a dated historical appendix (or move it to an archive file with
-a clear pointer from the new README) — do not silently delete the historical record. The old
-content describes a real, once-functional early prototype (`czsc_adapter.py` et al., still present
-on disk) — label it clearly as superseded, not as if it never existed.
+**claude-code's own due-diligence lean (evidence for dev to weigh, NOT a pre-made decision):**
+reject is simpler, has no cross-bar state-machine complexity, and — per the `_get_operate`
+re-evaluation behavior confirmed above — often approximates a natural retry on the next bar without
+needing an explicit pending-order mechanism. Defer would more precisely model "the order sits in
+the market until it can fill," but introduces meaningfully more complexity (a pending-fill object
+that must survive across bars, interact correctly with stop-loss/timeout/signal-close priority, and
+be unit-tested for multi-bar-persistence edge cases). If, after weighing this, dev's own design step
+still prefers defer, that's an acceptable choice — but it must be justified in the Decision Log, not
+defaulted to without comparison.
 
 ## Acceptance Criteria
 
-- [x] `README.md`'s described base/trade/filter/confirm frequencies match `chan_strategy/
-      config.py`'s actual current defaults (`5分钟`/`30分钟`/`日线`/`5分钟`).
-- [x] `README.md`'s described instrument universe matches `config.py`'s `contract_specs`
-      (`AP888`/`RB888`/`SC888`/`A888`/`ZN888`).
-- [x] `README.md`'s described backtest window and cost assumptions match `BACKTEST_CONFIG`
-      (`2023-01-01~2025-12-31`, 万一 commission, 0.05% slippage) — NOT the old 2021-2022/万三+印花税.
-- [x] `README.md`'s described signal taxonomy matches the PRODUCTION signal path
-      (`sell_signals.py`'s `get_all_signals`: 一买/二买/三买 and mirrored sell signals), not the
-      stale `signals.py`-internal `get_all_signals`.
-- [x] Any cited historical performance number is sourced from an existing, properly-banner'd
-      `diagnostics/*.md` report by file-path reference, never presented as a fresh claim.
-- [x] The old README content is preserved (dated historical appendix or archive reference with a
-      clear pointer), not silently deleted.
-- [x] No threshold tuning; no pre-2026-04-24 data used to justify any NEW claim; no `GOAL PASSED`.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (should be a
-      no-op — confirms the rewrite touched no tracked code).
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] `limit_halt_model="off"` and `"aware"` remain byte-identical to current behavior (existing
+      equivalence/tagging tests untouched, snapshot-verified).
+- [ ] A recorded design decision (reject vs. defer) with rationale in the Decision Log, BEFORE any
+      code is written.
+- [ ] `limit_halt_model="enforce"` gates BOTH entries (`Operate.LO`/`SO`) and exits — covering all
+      seven exit call sites enumerated above (signal-close, legacy trailing/fixed-stop/timeout,
+      structural_atr fixed-stop/timeout/ATR-trailing). A shared helper function is strongly
+      preferred over duplicating the same gating check at all seven call sites.
+- [ ] Unit-tested: a fixture bar at the limit band produces a rejected/deferred fill (position state
+      correctly unchanged for reject, or correctly retried for defer) — for BOTH an entry and an
+      exit case, with NO lookahead (a fixture proving the decision uses only current-and-prior-bar
+      information, never a future bar).
+- [ ] A comparison report (RESEARCH-ONLY banner, reusing `declassify_historical_reports.
+      build_banner()`) quantifies how much `"enforce"` changes reported trade counts/PnL relative to
+      `"aware"` on the post-2026-04-24 window — reported as honest measurement, not a superiority
+      claim.
+- [ ] No threshold tuning; no pre-2026-04-24 data used for any parameter choice; no SimNow
+      order/cancel/send path changed; no `GOAL PASSED`.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-
-## Manual verification (claude-code's independent re-run, dev-round output not self-reported by kimi-code)
-
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` — 613 passed, 4
-  deselected in 29.69s (identical to A65's baseline — confirms this docs-only rewrite touched no
-  tracked code).
-- `python tools/sync_check.py` — pass (version 4.4.0).
-- `python tools/sync_check.py --root examples/czsc_strategy` — pass (version 0.2.3). synccheck:ignore
-- `run_next_work.ps1 -Preflight` — 189 passed; preflight complete.
-- Spot-checked every numeric claim in the new `README.md` against `chan_strategy/config.py`
-  directly: all 5 instrument margin rates (AP888 7%, RB888/SC888/A888/ZN888 5%), all frequencies,
-  and the backtest window/costs match exactly.
-- Confirmed both cited diagnostic reports
-  (`diagnostics/backtest_matrix_20220101_20260424.md`,
-  `diagnostics/trailing_oos_validation_20250101_20260424.md`) actually exist on disk — no
-  fabricated file references.
-- Confirmed `README.legacy.md` preserves the ENTIRE original README content verbatim (diffed
-  against the pre-A66 committed `README.md`) apart from a replaced H1 title and a new archival
-  notice block prepended — nothing was silently deleted.
-- `chan_strategy/*.py` and all diagnostics scripts are untouched (confirmed via `git status`/`git
-  diff` scope).
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A66". Second task
-   of the A65-A69 roadmap — read the design doc's Background for the full picture.
-2. **Scope:** `examples/czsc_strategy/README.md` only (a documentation-only task). Do not touch
-   `chan_strategy/*.py`, `config.py`'s actual values, `czsc_adapter.py`/`czsc_multi_timeframe_
-   strategy.py`/`run_baostock_backtest.py` (the old files being described — leave them on disk
-   untouched, just stop describing them as the current strategy in the main README body), or any
-   diagnostics script.
-3. **Read `signals.py` and `sell_signals.py` yourself before describing the signal taxonomy** —
-   don't just trust this HANDOFF's summary. Confirm the exact one-buy/two-buy/three-buy semantics
-   and which `get_all_signals` is actually on the production path (`sell_signals.py`'s), per the
-   "known, pre-existing, out-of-scope" note above.
-4. **Read `config.py` in full yourself** — it has ~15 different research-only opt-in switches
-   layered on by many prior tasks (each with its own inline comment). The new README does not need
-   to enumerate every single one exhaustively, but should give an accurate overview of the defaults
-   (all switches default to their legacy/byte-identical value) and point to `config.py` itself as
-   the source of truth for the full list, rather than trying to duplicate every switch's docs in
-   the README (which would itself drift again over time).
-5. **Historical-appendix placement is your own design call** — a dated section at the bottom of
-   the same README, or a separate `README.legacy.md`/similar with a one-line pointer from the main
-   README, are both acceptable; document your choice and reasoning in the Decision Log.
-6. **Any performance number you cite MUST already exist in a banner'd `diagnostics/*.md` file** —
-   search `diagnostics/` for an existing report before citing any number; do not compute or imply a
-   new one.
-7. **Guardrails (reject-on-violation):** no threshold tuning; no pre-2026-04-24 data used to justify
-   any NEW claim; no `GOAL PASSED`; no code file touched; old README content not silently deleted.
-8. **Include a Manual-verification block with natively-run counts** (should mostly show "no
-   change" since this is docs-only, but run the commands anyway to prove nothing broke).
-9. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A66 README rewrite implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
+1. **Entry point:** `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A67". Third task
+   of the A65-A69 roadmap — read the design doc's Background AND re-read A59's `_bar_at_limit`
+   directional-touch work in full before starting (`chan_strategy/limit_config.py`).
+2. **Scope:** `chan_strategy/positions.py` (`Position.update`'s fill-decision path — all points
+   enumerated in Background), `chan_strategy/backtest_engine.py` (if the entry/exit call sites need
+   the directional flag threaded differently for `"enforce"` — check whether the existing
+   `entry_at_limit`/`exit_at_limit` parameters already carry enough information, or whether the
+   exit-side call sites need per-branch flag values that aren't currently computed per-branch), and
+   `chan_strategy/config.py` (document the new value). Do not touch `"off"`/`"aware"`'s existing
+   code paths at all beyond adding the new conditional branch.
+3. **The seven exit call sites are NOT all equally important to gate.** If time/complexity
+   pressure forces a scoping choice, prioritize per the audit's own concern: stop-loss/timeout exits
+   being blocked by a limit/halt bar is the scenario with real risk-modeling value (a position that
+   CANNOT be stopped out during a limit-down day is exactly what the audit flagged as unmodeled
+   risk). Signal-close and ATR-trailing are lower priority if a scoping cut is truly necessary — but
+   try to cover all seven; do not silently skip any without noting it in the Decision Log.
+4. **`_scale_out` (partial take-profit) is explicitly OUT of scope for gating** — it's a voluntary
+   profit-taking action, not a forced exit; the audit's concern is about being UNABLE to exit when
+   needed, not about optional profit-taking being delayed. Do not gate it unless your own design
+   step finds a compelling reason to.
+5. **No lookahead, ever** — whatever mechanism is chosen (reject or defer) must only use
+   information available at or before the bar being evaluated. If defer is chosen, the deferred
+   fill must execute at the NEXT bar's actual price once fillable, never retroactively adjusting the
+   original bar.
+6. **The comparison report** should reuse `diagnostics/exit_model_report.py`-style structure/
+   conventions if applicable (per-trade give-back, cross-model comparison) rather than inventing a
+   new report format from scratch — check that file for precedent first.
+7. **Guardrails (reject-on-violation):** no threshold tuning via backtest/capture-data selection; no
+   pre-2026-04-24 data for any parameter choice; no SimNow order/cancel/send paths touched; no
+   `GOAL PASSED`; `"off"`/`"aware"`'s existing equivalence/tagging snapshots must stay byte-identical.
+8. **Include a Manual-verification block with natively-run counts, and run `ruff check`
+   proactively before finishing.**
+9. **If, after scoping this task in earnest, it proves too large for one dev round, say so
+   explicitly and propose an A67a/A67b split** (mirroring the P8a/P8b and A69 precedent) rather than
+   forcing an oversized or corner-cut implementation into one handoff.
+10. Finish with the acceptance commands, then
+    `python tools/handoff.py next --actor kimi-code --summary "A67 limit/halt enforce mode implemented"`.
+    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-15 - A66 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
-  draft to an active HANDOFF task, started immediately after A65 reached `done` (codex accepted on
-  the first review round).
-- 2026-07-15 - claude-code confirmed the old README's referenced files
-  (`czsc_adapter.py`/`czsc_multi_timeframe_strategy.py`/`run_baostock_backtest.py`) still exist on
-  disk but are unreferenced by any test or by `chan_strategy/`'s own code — a genuinely inactive,
-  superseded prototype, not a currently-used alternate path. Also confirmed the production signal
-  path is `sell_signals.py`'s `get_all_signals` (not the stale `signals.py`-internal one, which is
-  a separate, already-known, out-of-scope backlog item — 🟢#12 from the 2026-07-13 audit).
+- 2026-07-15 - A67 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
+  draft to an active HANDOFF task, started immediately after A66 reached `done` (codex accepted on
+  the first review round). This is the highest-risk task in the A65-A69 roadmap.
+- 2026-07-15 - claude-code's due-diligence read confirmed: `limit_halt_model="aware"` genuinely
+  never gates any fill (tagging-only, as the config comment states); there are SEVEN distinct exit
+  call sites in `Position.update` (not one), spread across the `"legacy"` and `"structural_atr"`
+  exit-model branches; `_get_operate` re-evaluates the Chan-structure classification every bar
+  (not a one-shot edge-triggered event), meaning a rejected entry fill is NOT necessarily a
+  permanently lost trade — this evidence leans toward recommending "reject" over "defer" for
+  simplicity, but the final choice and its justification are dev's own design decision to record.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-15 | codex → claude-code | done → dev | A66 (README rewrite) promoted from third-party audit remediation roadmap; handoff design->dev |
-| 2026-07-15 | kimi-code → codex | dev → review | A66 README rewrite implemented |
-| 2026-07-15 | codex → codex | review → done | A66 review accepted |
+| 2026-07-15 | codex → claude-code | done → dev | A67 (limit/halt enforce mode) promoted from third-party audit remediation roadmap; handoff design->dev |
