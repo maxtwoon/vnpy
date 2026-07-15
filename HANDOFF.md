@@ -121,6 +121,14 @@ windows.
   to this third roadmap without re-asking.
 - 2026-07-15 - A73 promoted from `docs/design/a73-third-audit-remediation-roadmap.md`'s draft to an
   active HANDOFF task. First of three tasks in this roadmap.
+- 2026-07-15 (claude-code independent verification, before triggering codex review) - Read the full
+  diff: `_require_rollover_tagging()` correctly refuses to silently run without
+  `rollover_stat_tagging="on"` (raises, doesn't auto-flip config); confirmed A52's tagging
+  (`backtest_engine.py:572-576`) unconditionally sets `is_rollover_window` on every pair when
+  enabled, so no pair silently drops out of both groups. Re-ran everything independently, matching
+  kimi-code's recorded counts exactly: full unit suite `677 passed, 4 deselected`; `ruff check`
+  clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed. Scope was clean
+  (only A73-scoped files staged; unrelated concurrent-workstream files untouched).
 
 ## 交接历史
 
