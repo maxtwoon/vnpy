@@ -107,6 +107,30 @@ computed accurately without it).
   this second roadmap per its own recommended judgment, without re-asking each time.
 - 2026-07-15 - A70 promoted from `docs/design/a70-second-audit-remediation-roadmap.md`'s draft to
   an active HANDOFF task. First of three tasks in this roadmap.
+- 2026-07-15 (claude-code independent verification, before triggering codex review) - kimi-code's
+  dev commit (`e0fd73eb`) kept scope clean this time (confirmed via `git status --short` before
+  committing — no unrelated concurrent-workstream files were staged, unlike A69's first round).
+  Independently re-ran every acceptance command myself; see Manual Verification below.
+
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 650 passed, 4 deselected
+
+ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py \
+           examples/czsc_strategy/tests/unit/test_report_metrics.py
+# All checks passed
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete; SimNow workflow unit tests: 191 passed
+```
 
 ## 交接历史
 
