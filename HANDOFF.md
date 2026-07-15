@@ -1,19 +1,19 @@
 ---
 task: A77 - Documentation Drift Fixes (README limit_halt_model + Verdict-Layer Docstrings)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a76-fourth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -111,9 +111,18 @@ assertions should change.
   code: README's `limit_halt_model` line still lists only two values; the three measurement-function
   docstrings are individually accurate but don't point to their companion verdict functions'
   thresholds, which is the actual source of the audit's confusion.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full diff: README's `limit_halt_model` line updated to three values, plus a new sentence pointing
+  to `run_formal_evaluation.py`; the three docstrings each gained a two-line pointer to their
+  companion verdict function without altering the original "no threshold invented" statement.
+  Purely additive text, no code changed. Confirmed no test asserts on exact docstring text. Re-ran
+  everything independently, matching kimi-code's expectations: full unit suite unchanged at `700
+  passed, 4 deselected`; `ruff check` clean; both `sync_check.py` gates passed; `run_next_work.ps1
+  -Preflight` passed. Scope was clean (only A77-scoped files staged).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A77 (documentation drift fixes) promoted from fourth third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A77 documentation drift fixes implemented |

@@ -157,7 +157,7 @@ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
 `chan_strategy/config.py` 的 `STRATEGY_CONFIG` 中叠加了大量研究-only 的可选开关（默认均为与历史基线字节一致的值），例如：
 
 - `exit_model`: `"legacy" | "structural_atr"`
-- `limit_halt_model`: `"off" | "aware"`
+- `limit_halt_model`: `"off" | "aware" | "enforce"`
 - `sizing_model`: `"research" | "risk"`
 - `divergence_model`: `"amplitude" | "macd"`
 - `resonance_filter`: `"off" | "daily" | "daily_4h"`
@@ -166,6 +166,8 @@ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
 - `weighting`: `"fixed" | "risk_parity"`
 
 完整列表与默认值请以 `chan_strategy/config.py` 为准，README 不再逐一复制，以避免再次出现文档漂移。
+
+如需运行默认配置以上的正式评估路径（`sizing_model="risk"`、`limit_halt_model="enforce"`、换月窗口开仓门控等），请使用独立入口 `run_formal_evaluation.py`，而不是默认的 `run_chan_backtest.py`。
 
 ## 重要说明
 

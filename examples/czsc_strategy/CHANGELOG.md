@@ -2,6 +2,21 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.12 — 2026-07-16
+
+- A77 修复文档漂移：README `limit_halt_model` 与 verdict 层 docstring 说明。
+  - `README.md` 中 `limit_halt_model` 取值列表更新为 `"off" | "aware" | "enforce"`，与
+    `chan_strategy/config.py` 实际支持值保持一致。
+  - `README.md` 在研究-only 开关章节补充说明：正式评估路径（`sizing_model="risk"`、
+    `limit_halt_model="enforce"`、换月窗口开仓门控）请使用 `run_formal_evaluation.py` 入口。
+  - `diagnostics/cost_sensitivity_report.py` 的 `run_cost_sensitivity()`、
+    `diagnostics/risk_param_sensitivity_report.py` 的 `evaluate_perturbation_gate()`、
+    `diagnostics/backtest_matrix_report.py` 的 `evaluate_oos_gate()` 三个测量函数 docstring
+    增加指向各自 companion verdict 函数（`cost_sensitivity_gate_verdict()`、
+    `perturbation_gate_verdict()`、`oos_gate_verdict()`）的说明，避免读者将“本函数不设定阈值”
+    过度推广到整个文件；保留原函数“不发明任意 pass/fail 阈值”的准确描述不变。
+  - 纯文档/docstring 改动，未修改任何函数逻辑、返回值结构或既有测试断言。
+
 ## 0.2.11 — 2026-07-15
 
 - A76 新增正式评估模式下换月窗口开仓门控（解决第四轮审核唯一 🔴 高严重度问题）。

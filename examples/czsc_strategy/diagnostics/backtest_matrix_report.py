@@ -161,6 +161,9 @@ def evaluate_oos_gate(matrix: dict[str, Any]) -> dict[str, Any]:
     ``in_sample`` and ``out_sample``, plus the return and drawdown ratios. This
     is a measurement/reporting gate: it does not invent an arbitrary pass/fail
     threshold.
+
+    Note: the companion ``oos_gate_verdict()`` function below layers protective
+    thresholds on top of this measurement.
     """
     results: dict[str, Any] = {}
     for symbol, periods in matrix.get("symbols", {}).items():

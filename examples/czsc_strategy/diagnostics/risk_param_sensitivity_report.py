@@ -103,6 +103,9 @@ def evaluate_perturbation_gate(payload: dict[str, Any]) -> dict[str, Any]:
     This is a measurement/reporting gate: it reports sign flips and the maximum
     absolute return delta across variants, but does not invent an arbitrary
     pass/fail threshold.
+
+    Note: the companion ``perturbation_gate_verdict()`` function below layers
+    protective thresholds on top of this measurement.
     """
     results: dict[str, Any] = {}
     for symbol, reports in payload.get("symbols", {}).items():

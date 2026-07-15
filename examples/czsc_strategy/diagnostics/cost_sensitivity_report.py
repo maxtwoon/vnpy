@@ -49,6 +49,9 @@ def run_cost_sensitivity(
     This is an honest measurement gate: it reports how much headline metrics
     move when ``commission_rate`` and ``slippage`` are scaled together. No
     arbitrary pass/fail threshold is invented.
+
+    Note: the companion ``cost_sensitivity_gate_verdict()`` function below
+    layers protective thresholds on top of this measurement.
     """
     base_commission = float(BACKTEST_CONFIG.get("commission_rate", 0.0))
     base_slippage = float(BACKTEST_CONFIG.get("slippage", 0.0))
