@@ -2,6 +2,20 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.10 — 2026-07-15
+
+- A75 新增废弃信号路径导入护栏测试 `tests/unit/test_signal_path_hygiene.py`。
+  - 静态扫描 `chan_strategy/`（除 `signals.py` 自身）、`diagnostics/`、`skill_build/`、
+    `run_chan_backtest.py` 等生产/执行路径文件，断言不存在直接从 `chan_strategy.signals`
+    import `get_all_signals`（不带 `get_legacy_signals` 后缀别名）的写法。
+  - 使用 AST 级检测，正确区分：生产路径 `from chan_strategy.sell_signals import get_all_signals`
+    （允许）、A72 已接受的 `from chan_strategy.signals import get_legacy_signals as get_all_signals`
+    回退别名（允许）、以及真正的违规直接旧名导入（失败）。
+  - 新增反向自测，构造临时违规源码样例验证检测器本身确实能捕获被禁模式，未往生产代码中插入任何
+    违规导入。
+  - 不改动 `chan_strategy/signals.py`、`sell_signals.py` 或任何信号计算逻辑；不改动 SimNow
+    下单/撤单路径；不依赖真实历史数据库。
+
 ## 0.2.9 — 2026-07-15
 
 - A74 新增正式评估回测入口，默认启用 `sizing_model="risk"` + `limit_halt_model="enforce"`。

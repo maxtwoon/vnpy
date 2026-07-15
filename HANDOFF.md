@@ -1,19 +1,19 @@
 ---
 task: A75 - Legacy Signal-Path Import Hygiene Guard Test
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a73-third-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -125,9 +125,24 @@ get_all_signals` pattern A72 introduced in `skill_build/build_mapping.py` and
   `sell_signals.get_all_signals`). Recorded the precise distinction the guard test must make
   (direct unrenamed `chan_strategy.signals.get_all_signals` import vs. the already-accepted rename
   pattern vs. legitimate production-path references) so dev doesn't naively grep and produce noise.
+- 2026-07-15 (kimi-code dev) - Implemented an AST-based detector (`ast.ImportFrom` node scan,
+  checking `alias.name == "get_all_signals"` from module `chan_strategy.signals`), correctly
+  independent of any local `as` rename on the importing side. Excluded `chan_strategy/signals.py`
+  itself and all `tests/` files. Self-test parametrized over 8 synthetic import patterns (banned
+  direct import, banned import with a local alias, the accepted `get_legacy_signals as
+  get_all_signals` rename, production `sell_signals` import, plain module import, multi-name
+  import statements) to prove the detector's precision.
+- 2026-07-15 (claude-code independent verification, before triggering codex review) - Read the
+  full detector logic: confirmed it correctly flags `get_all_signals as old_get_all_signals` (the
+  banned NAME being imported, regardless of local alias) and correctly excludes
+  `get_legacy_signals as get_all_signals` (a different name being renamed on import). Confirmed
+  scope was clean (only A75-scoped files staged). Re-ran everything independently, matching
+  kimi-code's recorded expectations: full unit suite `692 passed, 4 deselected`; `ruff check`
+  clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A75 (legacy signal-path import hygiene guard) promoted from third third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A75 legacy signal-path import hygiene guard implemented |
