@@ -1,7 +1,7 @@
 ---
 task: A81 - Unified Acceptance Gate + Research-Baseline Entry Warning
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a79-fifth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -166,3 +166,4 @@ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A81 (unified acceptance gate + research-baseline entry warning) promoted from fifth third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A81 unified acceptance gate and research-baseline entry warning implemented |
+| 2026-07-16 | codex → codex | review → done | A81 review accepted |
