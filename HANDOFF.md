@@ -1,7 +1,7 @@
 ---
 task: A69 - OOS/Parameter-Perturbation/Cost-Sensitivity Minimum Gate
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-15
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -219,3 +219,4 @@ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A69 (OOS/perturbation/cost-sensitivity gate) promoted from third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-15 | kimi-code → codex | dev → review | A69 OOS/perturbation/cost-sensitivity gate implemented |
+| 2026-07-15 | codex → codex | review → done | A69 review accepted: OOS, perturbation, and cost-sensitivity measurement gates verified |
