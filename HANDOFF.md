@@ -1,19 +1,19 @@
 ---
 task: A78 - Formal-Evaluation intrabar Stop-Loss Default + RESEARCH_BASELINE Consumption Guard
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a76-fourth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -136,3 +136,4 @@ Natively-run acceptance results (current working tree):
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A78 (formal-evaluation intrabar stop default + RESEARCH_BASELINE guard) promoted from fourth third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A78 formal-evaluation intrabar stop default and RESEARCH_BASELINE guard implemented |
