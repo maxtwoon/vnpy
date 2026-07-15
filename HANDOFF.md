@@ -1,7 +1,7 @@
 ---
 task: A72 - Deprecate signals.py Legacy get_all_signals()
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-15
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a70-second-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -182,3 +182,4 @@ python -c "import test_second_buy_real_path"  # (from examples/czsc_strategy/) c
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A72 (signals.py legacy get_all_signals deprecation) promoted from second third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-15 | kimi-code → codex | dev → review | A72 signals.py legacy get_all_signals deprecation implemented |
+| 2026-07-15 | codex → codex | review → done | A72 review passed: legacy get_all_signals deprecation verified |
