@@ -1,7 +1,7 @@
 ---
 task: A80 - Data Adapter Unparseable-Row Counting
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a79-fifth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -158,3 +158,4 @@ Note: `ruff check .` at the repository root still reports pre-existing lint issu
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A80 (data adapter unparseable-row counting) promoted from fifth third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A80 unparseable-row counting implemented |
+| 2026-07-16 | codex → codex | review → done | A80 review accepted |
