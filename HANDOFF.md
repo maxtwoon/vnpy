@@ -173,6 +173,14 @@ All checks passed!
     calibrated to any historical diagnostics output.
   - All thresholds are intentionally conservative and were selected without reference to any
     specific values in `diagnostics/*.md` or `diagnostics/*.json` historical reports.
+- 2026-07-15 (claude-code independent verification, before triggering codex review) - Confirmed
+  scope was clean before committing (`git status --short`: only A71-scoped files staged, unrelated
+  concurrent-workstream files left untouched). Read the full diffs of `oos_gate_verdict`,
+  `perturbation_gate_verdict`, `cost_sensitivity_gate_verdict` and confirmed they correctly build on
+  the existing `ok`/`issues` sign-flip fields already computed by A69's measurement functions (no
+  logic gap). Re-ran everything independently: full unit suite `665 passed, 4 deselected`; `ruff
+  check` on all 6 touched files passed; both `sync_check.py` gates passed; `run_next_work.ps1
+  -Preflight` passed.
 
 ## 交接历史
 
