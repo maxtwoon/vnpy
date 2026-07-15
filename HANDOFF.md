@@ -1,19 +1,19 @@
 ---
 task: A80 - Data Adapter Unparseable-Row Counting
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a79-fifth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -53,21 +53,21 @@ justification, not just being added because "some check felt incomplete").
 
 ## Acceptance Criteria
 
-- [ ] `load_raw_bars()` (or an appropriate wrapper) tracks how many rows were skipped due to
+- [x] `load_raw_bars()` (or an appropriate wrapper) tracks how many rows were skipped due to
       unparseable datetime values, without changing which rows are skipped or how (the skip
       behavior itself is unchanged — only counting is added).
-- [ ] `BacktestEngine.generate_report()`'s output dict includes this count (field name is dev's
+- [x] `BacktestEngine.generate_report()`'s output dict includes this count (field name is dev's
       call, e.g. `unparseable_rows_skipped`) in BOTH the default and formal-evaluation paths.
-- [ ] New unit tests: a dataset with some unparseable timestamps produces an accurate non-zero
+- [x] New unit tests: a dataset with some unparseable timestamps produces an accurate non-zero
       count; a clean dataset produces a count of zero.
-- [ ] No new fail/block/threshold behavior is introduced based on this count.
-- [ ] No changes to existing bar-loading behavior, signal calculation, or any existing test's
+- [x] No new fail/block/threshold behavior is introduced based on this count.
+- [x] No changes to existing bar-loading behavior, signal calculation, or any existing test's
       numeric assertions.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] VERSION/CHANGELOG bumped.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] VERSION/CHANGELOG bumped.
 
 ## Notes for the Next Agent
 
@@ -95,6 +95,37 @@ justification, not just being added because "some check felt incomplete").
    `python tools/handoff.py next --actor kimi-code --summary "A80 unparseable-row counting implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification
+
+Run natively on the dev machine (Windows, Python 3.13):
+
+```text
+$ python -m pytest examples/czsc_strategy/tests/unit/test_a80_unparseable_rows.py -q
+....                                                                     [100%]
+4 passed in 0.25s
+
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+707 passed, 4 deselected in 30.46s
+
+$ python tools/sync_check.py
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+==> Preflight complete; live SimNow capture was not requested
+
+$ ruff check examples/czsc_strategy/chan_strategy/data_adapter.py \
+              examples/czsc_strategy/chan_strategy/backtest_engine.py \
+              examples/czsc_strategy/tests/unit/test_a80_unparseable_rows.py
+All checks passed!
+```
+
+Note: `ruff check .` at the repository root still reports pre-existing lint issues in
+`examples/czsc_strategy/chan_strategy/__init__.py`, `positions.py`, `utils.py`,
+`validation.py`, and other local workspace files that are outside the A80 scope.
+
 ## Decision Log
 
 - 2026-07-16 - A80 promoted from `docs/design/a79-fifth-audit-remediation-roadmap.md`'s draft to an
@@ -105,9 +136,25 @@ justification, not just being added because "some check felt incomplete").
   (backtest_engine.py:230) is the call site that would need to propagate a count into
   `generate_report()`'s output. Decided this is an always-on field (not formal-evaluation-only),
   since it reports data-quality fact, not a stricter execution assumption.
+- 2026-07-16 (kimi-code dev) - Implemented counting via an optional `unparseable_count` out-parameter
+  on `SqliteDataAdapter.load_raw_bars()` so existing call sites are unaffected; propagated the count
+  to `BacktestEngine.unparseable_rows_skipped` and `generate_report()`/`print_report()` for both
+  default and formal-evaluation paths. No skip logic, parsing formats, signal calculation, or
+  threshold/fail behavior was changed.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full diff: the `unparseable_count` out-parameter pattern (mutable single-element list) correctly
+  avoids changing `load_raw_bars()`'s return type, keeping all existing call sites unaffected; the
+  field is correctly always-present in `generate_report()`'s dict regardless of formal-evaluation
+  mode, matching the design decision. Confirmed no new threshold/fail logic was introduced. Diffed
+  `ruff check` before/after: 22 pre-existing errors before this diff, 21 after (one fewer — A80's
+  own new parameter uses modern `list[int] | None` syntax correctly) — no regression. Re-ran
+  everything independently, matching kimi-code's recorded counts exactly: full unit suite `707
+  passed, 4 deselected`; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed.
+  Scope was clean (only A80-scoped files staged).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A80 (data adapter unparseable-row counting) promoted from fifth third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A80 unparseable-row counting implemented |

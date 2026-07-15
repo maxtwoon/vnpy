@@ -2,6 +2,20 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.15 — 2026-07-16
+
+- A80 数据适配器无法解析行计数与上报。
+  - `chan_strategy/data_adapter.py` 的 `SqliteDataAdapter.load_raw_bars()` 新增可选参数
+    `unparseable_count`，对因 `datetime` 无法解析而被跳过的行进行计数；跳过行为本身不变，
+    仅增加计数。
+  - `chan_strategy/backtest_engine.py` 的 `load_data()` 在加载数据时收集该计数并保存为
+    `self.unparseable_rows_skipped`；`generate_report()` 始终将其加入输出字典
+    (`unparseable_rows_skipped`)，包括默认研究路径与正式评估路径；`print_report()` 同步打印。
+  - 新增单测 `tests/unit/test_a80_unparseable_rows.py`：验证可解析数据集计数为 0、含无法解析
+    时间戳的数据集计数准确、以及默认路径和正式评估路径的报告字段均正确；不依赖真实历史数据库。
+  - 未引入基于跳过行数的任何失败/阻塞/阈值逻辑，未改动信号计算、SimNow 下单/撤单路径或既有
+    数值断言。
+
 ## 0.2.14 — 2026-07-16
 
 - A79 正式评估默认改为 trading_calendar 日线聚合。

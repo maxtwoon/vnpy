@@ -227,16 +227,20 @@ class BacktestEngine:
             print(f"使用数据表: {table}")
 
             # 加载原始K线数据
+            unparseable_count: list[int] = [0]
             self.bars = adapter.load_raw_bars(
                 symbol=self.symbol,
                 freq=self.freq,
                 start_date=self.start_date,
                 end_date=self.end_date,
                 table_name=table,
+                unparseable_count=unparseable_count,
             )
+            self.unparseable_rows_skipped = unparseable_count[0]
             print(f"加载数据: {self.symbol}, 频率={self.freq}, "
                   f"范围={self.start_date}~{self.end_date}, "
-                  f"共{len(self.bars)}根K线")
+                  f"共{len(self.bars)}根K线"
+                  f"(跳过无法解析行数={self.unparseable_rows_skipped})")
             return len(self.bars) > 0
         except Exception as e:
             print(f"数据加载失败: {e}")
@@ -310,6 +314,8 @@ class BacktestEngine:
         # A76: per-run rollover open-gating audit state
         self._rollover_rejected_opens: dict[str, int] = {}
         self._rollover_unavailable_reason: str | None = None
+        # A80: honest data-quality reporting for rows skipped during bar loading
+        self.unparseable_rows_skipped = 0
         # 清空 bars 强制重新加载，避免日期/参数修改后仍使用旧数据
         self.bars = []
 
@@ -788,6 +794,7 @@ class BacktestEngine:
             "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
+            "unparseable_rows_skipped": self.unparseable_rows_skipped,
             "traded_bars": len(self.equity_curve),
             "mode_label": _compute_mode_label(
                 sizing_model, limit_halt_model, portfolio_risk, rollover_open_gating
@@ -928,6 +935,7 @@ class BacktestEngine:
         print(f"退出事件语义: {report.get('exit_event_semantics', 'legacy')}")
         print(f"回测区间: {report['period']}")
         print(f"K线总数: {report['total_bars']}")
+        print(f"跳过无法解析行数: {report.get('unparseable_rows_skipped', 0)}")
         print(f"交易K线: {report['traded_bars']}")
         print(f"手续费率: {self.commission_rate}")
         print(f"滑点: {self.slippage}")

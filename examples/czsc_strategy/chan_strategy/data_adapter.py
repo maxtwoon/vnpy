@@ -344,7 +344,8 @@ class SqliteDataAdapter:
         freq: str = "d",
         start_date: str = None,
         end_date: str = None,
-        table_name: str = None
+        table_name: str = None,
+        unparseable_count: list[int] | None = None,
     ) -> List[RawBar]:
         """
         加载并转换为czsc RawBar格式
@@ -354,6 +355,8 @@ class SqliteDataAdapter:
         :param start_date: 开始日期
         :param end_date: 结束日期
         :param table_name: 表名
+        :param unparseable_count: 可选的可变容器（长度为1的列表），用于接收
+            因 datetime 无法解析而被跳过的行数。
         :return: RawBar列表
         """
         df = self.load_kline_data(symbol, start_date, end_date, freq, table_name)
@@ -392,7 +395,8 @@ class SqliteDataAdapter:
         date_col = self._find_column(col_names, ["datetime", "date", "trade_date", "dt", "time"])
 
         bars = []
-        for i, row in df.iterrows():
+        unparseable_rows = 0
+        for _i, row in df.iterrows():
             # 解析日期时间
             dt_val = row[date_col]
             if isinstance(dt_val, str):
@@ -404,6 +408,7 @@ class SqliteDataAdapter:
                     except ValueError:
                         continue
                 else:
+                    unparseable_rows += 1
                     continue  # 跳过无法解析的行
             elif isinstance(dt_val, (int, float)):
                 dt = pd.Timestamp(dt_val).to_pydatetime()
@@ -423,6 +428,9 @@ class SqliteDataAdapter:
                 amount=float(row[amount_col]) if amount_col else 0,
             )
             bars.append(bar)
+
+        if unparseable_count is not None:
+            unparseable_count[0] = unparseable_rows
 
         return bars
 
