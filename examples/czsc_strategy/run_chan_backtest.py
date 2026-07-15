@@ -25,6 +25,13 @@ from chan_strategy.config import SQLITE_DB_PATH, BACKTEST_CONFIG
 
 def main():
     """主函数"""
+    print("!" * 60)
+    print("警告：本入口为 RESEARCH_BASELINE（研究基线）默认入口。")
+    print("      生成的报告使用默认研究配置，不构成生产/可交易证据。")
+    print("      正式评估请使用 run_formal_evaluation.py。")
+    print("!" * 60)
+    print()
+
     print("=" * 60)
     print("缠论择时策略回测系统 v1.0")
     print("=" * 60)

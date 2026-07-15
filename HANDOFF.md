@@ -1,19 +1,19 @@
 ---
 task: A81 - Unified Acceptance Gate + Research-Baseline Entry Warning
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a79-fifth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -114,6 +114,28 @@ promotion pipeline is separate, larger work the user would need to explicitly re
    large remaining item (portfolio_risk/risk-sizing fusion) needs the user's explicit sponsorship
    for a dedicated design effort, not another auto-scoped bounded task.
 
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 715 passed, 4 deselected
+
+ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py \
+           examples/czsc_strategy/run_chan_backtest.py \
+           examples/czsc_strategy/tests/unit/test_a81_acceptance_gate.py
+# 5 pre-existing errors in run_chan_backtest.py (unrelated to this diff, confirmed via
+# git stash comparison); backtest_engine.py and the new test file are clean
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete
+```
+
 ## Decision Log
 
 - 2026-07-16 - A81 promoted from `docs/design/a79-fifth-audit-remediation-roadmap.md`'s draft to an
@@ -124,9 +146,23 @@ promotion pipeline is separate, larger work the user would need to explicitly re
   `risk_param_sensitivity_report.py:180`, `cost_sensitivity_report.py:214`); confirmed
   `run_chan_backtest.py`'s `main()` currently has no pre-execution warning (first print statements
   start at line 28 with the database path, no research-baseline notice).
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full diff: `unified_acceptance_gate()` correctly reuses `assert_not_research_baseline()` via
+  try/except rather than duplicating the mode_label string comparison, and the fail/warn/pass
+  precedence exactly matches the design's combination rule (RESEARCH_BASELINE first, then any fail,
+  then any warn, else pass). The new test file covers every combination case including
+  missing-`overall_status` defaults and empty `mode_label`. `run_chan_backtest.py`'s warning is
+  unmissable and placed before any execution. Diffed `ruff check` before/after on
+  `run_chan_backtest.py`: identical 5 pre-existing errors both times (unused import, f-strings
+  without placeholders, unused variable) — all pre-existing, no regression;
+  `backtest_engine.py`/the new test file are both clean. Re-ran everything independently, matching
+  kimi-code's recorded counts: full unit suite `715 passed, 4 deselected`; both `sync_check.py`
+  gates passed; `run_next_work.ps1 -Preflight` passed. Scope was clean (only A81-scoped files
+  staged).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A81 (unified acceptance gate + research-baseline entry warning) promoted from fifth third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A81 unified acceptance gate and research-baseline entry warning implemented |

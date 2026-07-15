@@ -2,6 +2,22 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.16 — 2026-07-16
+
+- A81 新增统一晋级门禁函数与研究基线入口警告。
+  - `chan_strategy/backtest_engine.py` 新增 `unified_acceptance_gate()`：组合 A71 三项 verdict
+    函数的 `overall_status`（OOS、参数扰动、成本敏感）与报告 `mode_label`，返回单一顶层
+    `"pass"|"warn"|"fail"` 判据：任一输入 `"fail"` → `"fail"`；`mode_label == "RESEARCH_BASELINE"` →
+    `"fail"`；无 `"fail"` 但任一 `"warn"` → `"warn"`；否则 `"pass"`。RESEARCH_BASELINE 检查复用
+    `assert_not_research_baseline()`，不重复字符串比较；不修改任何 verdict 阈值。
+  - `run_chan_backtest.py` 的 `main()` 在首次执行前打印醒目警告：说明本入口为研究基线入口，
+    不构成生产/可交易证据，并指向 `run_formal_evaluation.py`。
+  - 新增单测 `tests/unit/test_a81_acceptance_gate.py`：覆盖全 `"pass"` + 非基线 → `"pass"`、
+    任一 verdict `"fail"` → `"fail"`、RESEARCH_BASELINE → `"fail"`、warn 传播、fail 覆盖 warn、
+    缺失 `overall_status` 默认按 `"pass"` 处理；不依赖真实历史数据库。
+  - 未改动任何既有回测数值输出、SimNow 下单/撤单路径、或现有测试断言；未将新函数接入任何
+    SimNow 晋级判定脚本。
+
 ## 0.2.15 — 2026-07-16
 
 - A80 数据适配器无法解析行计数与上报。

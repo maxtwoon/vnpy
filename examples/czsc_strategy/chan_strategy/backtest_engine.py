@@ -17,6 +17,7 @@ import sys
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
+from typing import Any
 import pandas as pd
 import numpy as np
 
@@ -167,6 +168,68 @@ def assert_not_research_baseline(report: dict) -> None:
             "Report is labeled RESEARCH_BASELINE and cannot be consumed as "
             "production-tradable or promotion evidence."
         )
+
+
+def unified_acceptance_gate(
+    oos_verdict: dict[str, Any],
+    perturbation_verdict: dict[str, Any],
+    cost_verdict: dict[str, Any],
+    report: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a single top-level pass/warn/fail judgment for a backtest report.
+
+    Combines the ``overall_status`` values from the three A71 verdict gates
+    (OOS, risk-parameter perturbation, cost sensitivity) with the report's
+    ``mode_label``. The combination rules are:
+
+    1. ``mode_label == "RESEARCH_BASELINE"`` -> ``"fail"``.
+    2. Any input ``overall_status == "fail"`` -> ``"fail"``.
+    3. Any input ``overall_status == "warn"`` and no ``"fail"`` -> ``"warn"``.
+    4. Otherwise -> ``"pass"``.
+
+    The RESEARCH_BASELINE check reuses ``assert_not_research_baseline()`` so the
+    mode-label logic is not duplicated. No verdict thresholds are invented or
+    modified here; this is a thin combining layer.
+
+    :param oos_verdict: result of ``oos_gate_verdict()``.
+    :param perturbation_verdict: result of ``perturbation_gate_verdict()``.
+    :param cost_verdict: result of ``cost_sensitivity_gate_verdict()``.
+    :param report: the backtest report whose ``mode_label`` is checked.
+    :return: dict with ``overall_status`` (``"pass"|"warn"|"fail"``) and
+        ``reasons`` (list of human-readable strings).
+    """
+    reasons: list[str] = []
+
+    try:
+        assert_not_research_baseline(report)
+    except ValueError as exc:
+        reasons.append(str(exc))
+        return {"overall_status": "fail", "reasons": reasons}
+
+    statuses = [
+        oos_verdict.get("overall_status", "pass"),
+        perturbation_verdict.get("overall_status", "pass"),
+        cost_verdict.get("overall_status", "pass"),
+    ]
+
+    if any(status == "fail" for status in statuses):
+        overall = "fail"
+    elif any(status == "warn" for status in statuses):
+        overall = "warn"
+    else:
+        overall = "pass"
+
+    for label, verdict in (
+        ("oos", oos_verdict),
+        ("perturbation", perturbation_verdict),
+        ("cost", cost_verdict),
+    ):
+        status = verdict.get("overall_status", "pass")
+        if status != "pass":
+            for reason in verdict.get("reasons", []):
+                reasons.append(f"{label}: {reason}")
+
+    return {"overall_status": overall, "reasons": reasons}
 
 
 class BacktestEngine:
