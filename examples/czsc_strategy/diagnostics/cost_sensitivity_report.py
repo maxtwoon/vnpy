@@ -123,6 +123,99 @@ def _compute_deltas(
     return deltas
 
 
+#: Extreme protective ceiling for relative return erosion at 2x costs.
+#: A -90% relative return means doubling costs has erased 90% of the baseline
+#: headline return. Chosen as a conservative, self-evidently unsafe sensitivity
+#: level; not calibrated to any observed diagnostics data.
+COST_RELATIVE_RETURN_WARN_PCT: float = -90.0
+
+
+def cost_sensitivity_gate_verdict(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a pass/warn/fail verdict on top of ``run_cost_sensitivity`` output.
+
+    Threshold reasoning (recorded in HANDOFF.md Decision Log):
+    - If 2.0x costs flip the sign of ``total_return_pct`` vs the 1.0x baseline,
+      the strategy's edge is not robust to transaction assumptions -> fail.
+    - If 2.0x costs erode more than 90% of the baseline return (relative decline
+      below -90%), this is an extreme sensitivity warning. The 90% level is a
+      protective ceiling, not derived from any historical diagnostics output.
+    - The relative-decline warning is only evaluated when the baseline return is
+      positive, because the metric is otherwise directionally misleading.
+    """
+    symbols: dict[str, Any] = {}
+    summary_reasons: list[str] = []
+    has_fail = False
+    has_warn = False
+
+    for symbol, reports in result.get("symbols", {}).items():
+        deltas = reports.get("deltas", {})
+        if "error" in deltas:
+            issue = deltas["error"]
+            symbols[symbol] = {
+                "status": "fail",
+                "reasons": [issue],
+            }
+            has_fail = True
+            summary_reasons.append(f"{symbol}: {issue}")
+            continue
+
+        baseline = reports.get("x1.0", {})
+        baseline_ret = float(baseline.get("total_return_pct", 0)) if "error" not in baseline else 0.0
+        x2 = deltas.get("x2.0", {})
+        if "error" in x2:
+            issue = f"2.0x cost delta unavailable: {x2['error']}"
+            symbols[symbol] = {
+                "status": "fail",
+                "reasons": [issue],
+            }
+            has_fail = True
+            summary_reasons.append(f"{symbol}: {issue}")
+            continue
+
+        x2_ret = float(reports.get("x2.0", {}).get("total_return_pct", 0))
+        reasons: list[str] = []
+        status = "pass"
+
+        sign_flip = (baseline_ret >= 0 and x2_ret < 0) or (baseline_ret < 0 and x2_ret >= 0)
+        if sign_flip:
+            reasons.append(
+                f"2.0x cost return sign flip: baseline={baseline_ret:.2f}%, 2.0x={x2_ret:.2f}%"
+            )
+            status = "fail"
+            has_fail = True
+
+        relative_return_pct = x2.get("relative_return_pct")
+        if (
+            status != "fail"
+            and baseline_ret > 0
+            and relative_return_pct is not None
+            and relative_return_pct < COST_RELATIVE_RETURN_WARN_PCT
+        ):
+            reasons.append(
+                f"2.0x cost relative return decline {relative_return_pct:.2f}% "
+                f"exceeds {COST_RELATIVE_RETURN_WARN_PCT}% ceiling"
+            )
+            status = "warn"
+            has_warn = True
+
+        symbols[symbol] = {
+            "status": status,
+            "reasons": reasons,
+            "baseline_return_pct": baseline_ret,
+            "x2_return_pct": x2_ret,
+            "x2_relative_return_pct": relative_return_pct,
+        }
+        if reasons:
+            summary_reasons.append(f"{symbol}: {'; '.join(reasons)}")
+
+    overall_status = "fail" if has_fail else ("warn" if has_warn else "pass")
+    return {
+        "symbols": symbols,
+        "overall_status": overall_status,
+        "reasons": summary_reasons,
+    }
+
+
 def write_markdown(payload: dict[str, Any], out: Path) -> None:
     banner_lines = build_banner().splitlines()
     while banner_lines and banner_lines[-1] == "":

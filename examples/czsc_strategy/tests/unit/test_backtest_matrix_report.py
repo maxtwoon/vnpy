@@ -10,6 +10,7 @@ if str(DIAG) not in sys.path:
 from chan_strategy.config import STRATEGY_CONFIG  # noqa: E402
 from diagnostics.backtest_matrix_report import (  # noqa: E402
     _dominant_symbol,
+    oos_gate_verdict,
     write_markdown,
 )
 
@@ -106,3 +107,62 @@ def test_dominant_symbol_returns_only_symbol_when_single_series(tmp_path: Path) 
     ]
     db = _make_db(tmp_path, rows)
     assert _dominant_symbol(db, "ap888_1M_raw", "2022-01-01", "2026-07-06") == "rb888"
+
+
+def _oos_result(
+    is_ret: float = 10.0,
+    oos_ret: float = 8.0,
+    is_dd: float = -5.0,
+    oos_dd: float = -6.0,
+    ok: bool = True,
+    issues: list[str] | None = None,
+) -> dict:
+    return {
+        "SYM": {
+            "ok": ok,
+            "issues": issues or [],
+            "is_return_pct": is_ret,
+            "oos_return_pct": oos_ret,
+            "is_max_drawdown_pct": is_dd,
+            "oos_max_drawdown_pct": oos_dd,
+            "return_ratio": oos_ret / is_ret if is_ret != 0 else None,
+            "drawdown_ratio": oos_dd / is_dd if is_dd != 0 else None,
+        }
+    }
+
+
+def test_oos_gate_verdict_pass_when_sign_consistent_and_drawdown_ok() -> None:
+    verdict = oos_gate_verdict(_oos_result(is_ret=10.0, oos_ret=8.0, is_dd=-5.0, oos_dd=-6.0))
+    assert verdict["overall_status"] == "pass"
+    assert verdict["symbols"]["SYM"]["status"] == "pass"
+    assert verdict["symbols"]["SYM"]["reasons"] == []
+    assert verdict["reasons"] == []
+
+
+def test_oos_gate_verdict_fail_on_sign_flip() -> None:
+    verdict = oos_gate_verdict(_oos_result(is_ret=10.0, oos_ret=-2.0, is_dd=-5.0, oos_dd=-6.0))
+    assert verdict["overall_status"] == "fail"
+    assert verdict["symbols"]["SYM"]["status"] == "fail"
+    assert any("sign flip" in r for r in verdict["symbols"]["SYM"]["reasons"])
+
+
+def test_oos_gate_verdict_warn_on_drawdown_expansion() -> None:
+    verdict = oos_gate_verdict(_oos_result(is_ret=10.0, oos_ret=8.0, is_dd=-2.0, oos_dd=-8.0))
+    assert verdict["overall_status"] == "warn"
+    assert verdict["symbols"]["SYM"]["status"] == "warn"
+    assert any("4.00x" in r for r in verdict["symbols"]["SYM"]["reasons"])
+
+
+def test_oos_gate_verdict_fail_overrides_warn() -> None:
+    verdict = oos_gate_verdict(
+        _oos_result(is_ret=10.0, oos_ret=-2.0, is_dd=-2.0, oos_dd=-8.0)
+    )
+    assert verdict["overall_status"] == "fail"
+    assert verdict["symbols"]["SYM"]["status"] == "fail"
+
+
+def test_oos_gate_verdict_fail_when_measurement_unavailable() -> None:
+    verdict = oos_gate_verdict(_oos_result(ok=False, issues=["missing report"]))
+    assert verdict["overall_status"] == "fail"
+    assert verdict["symbols"]["SYM"]["status"] == "fail"
+    assert any("missing report" in r for r in verdict["symbols"]["SYM"]["reasons"])

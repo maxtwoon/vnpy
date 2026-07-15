@@ -196,6 +196,82 @@ def evaluate_oos_gate(matrix: dict[str, Any]) -> dict[str, Any]:
     return results
 
 
+#: Extreme protective ceiling for OOS drawdown expansion vs IS drawdown.
+#: Chosen as a conservative boundary (3x) that any robust strategy should not
+#: cross, not calibrated to any observed diagnostics data.
+OOS_DRAWDOWN_RATIO_WARN: float = 3.0
+
+
+def oos_gate_verdict(oos_result: dict[str, Any]) -> dict[str, Any]:
+    """Return a pass/warn/fail verdict on top of ``evaluate_oos_gate`` output.
+
+    Threshold reasoning (recorded in HANDOFF.md Decision Log):
+    - Sign flip between IS and OOS returns is a qualitative failure.
+    - ``oos_drawdown / is_drawdown > 3.0`` (with non-zero IS drawdown) is an
+      extreme protective ceiling for regime-shift/overfit detection. The 3x
+      value is chosen because it represents a severe, self-evidently unsafe
+      expansion of risk in the holdout period; it is not derived from any
+      historical diagnostics output.
+    """
+    symbols: dict[str, Any] = {}
+    summary_reasons: list[str] = []
+    has_fail = False
+    has_warn = False
+
+    for symbol, gate in oos_result.items():
+        if not gate.get("ok"):
+            issue = "; ".join(gate.get("issues", ["IS/OOS measurement unavailable"]))
+            symbols[symbol] = {
+                "status": "fail",
+                "reasons": [issue],
+            }
+            has_fail = True
+            summary_reasons.append(f"{symbol}: {issue}")
+            continue
+
+        reasons: list[str] = []
+        status = "pass"
+
+        is_ret = float(gate.get("is_return_pct", 0))
+        oos_ret = float(gate.get("oos_return_pct", 0))
+        is_dd = float(gate.get("is_max_drawdown_pct", 0))
+        oos_dd = float(gate.get("oos_max_drawdown_pct", 0))
+        sign_flip = (is_ret >= 0 and oos_ret < 0) or (is_ret < 0 and oos_ret >= 0)
+        if sign_flip:
+            reasons.append(f"IS/OOS return sign flip: IS={is_ret:.2f}%, OOS={oos_ret:.2f}%")
+            status = "fail"
+            has_fail = True
+
+        dd_ratio = oos_dd / is_dd if is_dd != 0 else None
+        if dd_ratio is not None and dd_ratio > OOS_DRAWDOWN_RATIO_WARN:
+            reasons.append(
+                f"OOS drawdown {oos_dd:.2f}% is {dd_ratio:.2f}x IS drawdown {is_dd:.2f}% "
+                f"(exceeds {OOS_DRAWDOWN_RATIO_WARN}x ceiling)"
+            )
+            if status != "fail":
+                status = "warn"
+                has_warn = True
+
+        symbols[symbol] = {
+            "status": status,
+            "reasons": reasons,
+            "is_return_pct": is_ret,
+            "oos_return_pct": oos_ret,
+            "is_max_drawdown_pct": is_dd,
+            "oos_max_drawdown_pct": oos_dd,
+            "drawdown_ratio": dd_ratio,
+        }
+        if reasons:
+            summary_reasons.append(f"{symbol}: {'; '.join(reasons)}")
+
+    overall_status = "fail" if has_fail else ("warn" if has_warn else "pass")
+    return {
+        "symbols": symbols,
+        "overall_status": overall_status,
+        "reasons": summary_reasons,
+    }
+
+
 def build_matrix(db_path: Path, symbols: list[str], quiet: bool = True) -> dict[str, Any]:
     periods = {
         "full": (DEFAULT_START, DEFAULT_END),

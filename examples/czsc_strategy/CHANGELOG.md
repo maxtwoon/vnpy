@@ -2,6 +2,24 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.6 — 2026-07-15
+
+- A71 将 A69 三项测量型门禁升级为机器可判定晋级门禁。
+  - 在 `diagnostics/backtest_matrix_report.py` 新增 `oos_gate_verdict()`：IS/OOS 收益符号翻转为
+    `fail`；OOS 最大回撤相对 IS 最大回撤超过 3 倍（且 IS 回撤非零）为 `warn`；否则 `pass`。
+  - 在 `diagnostics/risk_param_sensitivity_report.py` 新增 `perturbation_gate_verdict()`：任一参数变体
+    相对 baseline 收益符号翻转为 `fail`；否则 `pass`。不设 `warn`  tier，因为符号翻转本身是无需校准的
+    定性判据；不引入 epsilon 豁免，避免任意阈值掩盖真实脆弱性。
+  - 在 `diagnostics/cost_sensitivity_report.py` 新增 `cost_sensitivity_gate_verdict()`：2.0x 成本下
+    `total_return_pct` 符号翻转为 `fail`；2.0x 成本相对 1.0x 基线的收益相对跌幅超过 90%（仅当基线收益为正）
+    为 `warn`；否则 `pass`。
+  - 三个 verdict 函数均返回 `symbols` 层 verdict、`overall_status` 与人类可读 `reasons`；不改变底层
+    A69 测量函数的返回结构与既有测试。
+  - 阈值选取为极端、自证安全的保护性上限，未依据 `diagnostics/` 任何历史报告观测值反推；理由记录在
+    `HANDOFF.md` Decision Log。
+  - 新增单测覆盖 `pass`/`warn`/`fail`（或 `pass`/`fail`）各态，使用构造 fixture，不依赖真实历史数据库。
+  - 不改动 `chan_strategy/*.py` 交易逻辑、SimNow 下单/撤单路径，不涉及参数调优。
+
 ## 0.2.5 — 2026-07-15
 
 - A70 默认回测报告强制标注 research/off 模式标签。

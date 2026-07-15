@@ -1,19 +1,19 @@
 ---
 task: A71 - A69 Measurement-Gate Hardening (OOS/Perturbation/Cost-Sensitivity Verdicts)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a70-second-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -64,23 +64,23 @@ verdict is independent — no cross-script aggregation required).
 
 ## Acceptance Criteria
 
-- [ ] All three verdict functions implemented, each with its threshold-selection reasoning recorded
+- [x] All three verdict functions implemented, each with its threshold-selection reasoning recorded
       in this HANDOFF's Decision Log (see design doc §"A71" for the suggested starting rules —
       dev may adjust the exact numbers but must keep the "extreme, self-evidently-safe, not fit to
       observed data" property and explain why).
-- [ ] Each verdict function has unit tests covering `"pass"`, and its failure/warning tier(s), using
+- [x] Each verdict function has unit tests covering `"pass"`, and its failure/warning tier(s), using
       constructed fixture dicts — no dependency on real historical DB data.
-- [ ] The existing `evaluate_oos_gate`/`evaluate_perturbation_gate`/A69's cost-sensitivity delta
+- [x] The existing `evaluate_oos_gate`/`evaluate_perturbation_gate`/A69's cost-sensitivity delta
       computation and their existing tests are unchanged (new functions are additive, not
       replacements).
-- [ ] No threshold is backed into matching any specific value observed in
+- [x] No threshold is backed into matching any specific value observed in
       `diagnostics/*.md`/`diagnostics/*.json` historical reports — the Decision Log must argue
       safety, not fit.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] VERSION/CHANGELOG bumped if this changes any report script's user-visible output (it likely
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] VERSION/CHANGELOG bumped if this changes any report script's user-visible output (it likely
       does not change `chan_strategy/config.py`'s `STRATEGY_CONFIG`/`BACKTEST_CONFIG` values, so the
       automated `project_version_freshness` gate won't force a bump — but house style still expects
       one for any user-visible diagnostics behavior addition; bump anyway).
@@ -117,14 +117,66 @@ verdict is independent — no cross-script aggregation required).
    `python tools/handoff.py next --actor kimi-code --summary "A71 OOS/perturbation/cost-sensitivity gate verdicts implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification
+
+```text
+# A71 verdict-function unit tests
+$ python -m pytest examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py examples/czsc_strategy/tests/unit/test_risk_param_sensitivity_report.py examples/czsc_strategy/tests/unit/test_cost_sensitivity_report.py -q -m "not realdb"
+20 passed in 0.24s
+
+# Full czsc_strategy unit suite
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+665 passed, 4 deselected in 28.37s
+
+# Root sync_check
+$ python tools/sync_check.py
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+# czsc_strategy sync_check
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+# SimNow preflight (unrelated workstream; not committed)
+$ .\run_next_work.ps1 -Preflight
+191 passed in 15.26s
+Preflight complete; live SimNow capture was not requested
+
+# Lint on modified files
+$ ruff check examples/czsc_strategy/diagnostics/backtest_matrix_report.py examples/czsc_strategy/diagnostics/risk_param_sensitivity_report.py examples/czsc_strategy/diagnostics/cost_sensitivity_report.py examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py examples/czsc_strategy/tests/unit/test_risk_param_sensitivity_report.py examples/czsc_strategy/tests/unit/test_cost_sensitivity_report.py
+All checks passed!
+```
+
 ## Decision Log
 
 - 2026-07-15 - A71 promoted from `docs/design/a70-second-audit-remediation-roadmap.md`'s draft to
   an active HANDOFF task, immediately after A70 reached `done` (codex accepted on the first review
   round). Second of three tasks in the second audit-remediation roadmap.
+- 2026-07-15 - Threshold selection for the three verdict functions (A71 implementation by
+  kimi-code):
+  - **OOS gate (`oos_gate_verdict`)**: sign flip between IS and OOS returns is a qualitative
+    failure (no calibration needed). `oos_drawdown / is_drawdown > 3.0` (with non-zero IS drawdown)
+    maps to `warn`. The 3x ratio is chosen as an extreme protective ceiling for regime-shift /
+    overfit detection; any robust strategy whose OOS risk explodes to more than triple the IS risk
+    is already in a self-evidently unsafe region. This value is **not** derived from any historical
+    diagnostics output.
+  - **Parameter perturbation gate (`perturbation_gate_verdict`)**: sign flip vs baseline is a
+    qualitative failure. This gate intentionally has **no `warn` tier** because sign-flip is already
+    a threshold-free, self-evidently unsafe outcome. No epsilon exemption is introduced for near-zero
+    baselines, because any such epsilon would be an arbitrary threshold that could hide genuine
+    strategy fragility. The known near-zero edge case has not been observed in current test data;
+    if it appears repeatedly in future reports, the Decision Log can be revisited.
+  - **Cost sensitivity gate (`cost_sensitivity_gate_verdict`)**: 2.0x costs flipping the sign of
+    `total_return_pct` vs the 1.0x baseline is a qualitative failure. A relative return decline at
+    2.0x below -90% (only evaluated when the baseline return is positive) maps to `warn`. The 90%
+    erosion level is chosen as an extreme protective ceiling: if doubling costs wipes out 90% of the
+    headline return, the strategy is excessively sensitive to transaction assumptions. It is **not**
+    calibrated to any historical diagnostics output.
+  - All thresholds are intentionally conservative and were selected without reference to any
+    specific values in `diagnostics/*.md` or `diagnostics/*.json` historical reports.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A71 (A69 measurement-gate hardening) promoted from second third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A71 OOS/perturbation/cost-sensitivity gate verdicts implemented |

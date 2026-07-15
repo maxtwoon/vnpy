@@ -135,6 +135,53 @@ def evaluate_perturbation_gate(payload: dict[str, Any]) -> dict[str, Any]:
     return results
 
 
+def perturbation_gate_verdict(perturbation_result: dict[str, Any]) -> dict[str, Any]:
+    """Return a pass/fail verdict on top of ``evaluate_perturbation_gate`` output.
+
+    This gate uses only the qualitative sign-flip criterion. There is no "warn"
+    tier because sign flip is already a threshold-free, self-evidently unsafe
+    outcome: a robust strategy should not change its profit/loss sign when
+    risk-control parameters are perturbed within reasonable bands.
+
+    Threshold reasoning (recorded in HANDOFF.md Decision Log):
+    - Sign flip vs baseline is a qualitative failure.
+    - No epsilon exemption for near-zero baselines is introduced, because any
+      such epsilon would be an arbitrary threshold that could hide genuine
+      fragility. If future data shows repeated spurious flips on noise-level
+      baselines, this can be revisited.
+    """
+    symbols: dict[str, Any] = {}
+    summary_reasons: list[str] = []
+    has_fail = False
+
+    for symbol, gate in perturbation_result.items():
+        if not gate.get("ok"):
+            issue = "; ".join(gate.get("issues", ["perturbation measurement unavailable"]))
+            symbols[symbol] = {
+                "status": "fail",
+                "reasons": [issue],
+                "baseline_return_pct": gate.get("baseline_return_pct"),
+                "max_abs_delta_pct": gate.get("max_abs_delta_pct"),
+            }
+            has_fail = True
+            summary_reasons.append(f"{symbol}: {issue}")
+            continue
+
+        symbols[symbol] = {
+            "status": "pass",
+            "reasons": [],
+            "baseline_return_pct": gate.get("baseline_return_pct"),
+            "max_abs_delta_pct": gate.get("max_abs_delta_pct"),
+        }
+
+    overall_status = "fail" if has_fail else "pass"
+    return {
+        "symbols": symbols,
+        "overall_status": overall_status,
+        "reasons": summary_reasons,
+    }
+
+
 def write_markdown(payload: dict[str, Any], out: Path) -> None:
     lines = [
         "# 风控参数敏感性报告",
