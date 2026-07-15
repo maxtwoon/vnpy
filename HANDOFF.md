@@ -1,157 +1,159 @@
 ---
-task: A65 - Fix Failing Test + Harden capture_window Against Missing Capture Metadata
+task: A66 - Rewrite README.md to Reflect Current Strategy
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-First task of the 2026-07-14 third-party-audit remediation roadmap
-(`docs/design/a65-third-party-audit-remediation-roadmap.md` §"A65"), started immediately after the
-roadmap was designed (per the user's explicit choice to follow the audit's own priority order in
-full).
+Second task of the 2026-07-14 third-party-audit remediation roadmap
+(`docs/design/a65-third-party-audit-remediation-roadmap.md` §"A66"), promoted immediately after
+A65 reached `done` (codex accepted on the first review round).
 
-**Re-verified 2026-07-15 by claude-code, still failing, line numbers unchanged:**
-`python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` produces
-`1 failed, 610 passed, 4 deselected`. The failure:
-`test_simnow_consistency_source.py::test_build_strategy_surface_from_captured_session_uses_real_
-callbacks` raises `KeyError: 'started_at'` inside `simnow_strategy_surface.py:40`'s
-`capture_window` function, called unconditionally from `build_strategy_surface_from_captured_
-session` at line 157.
+**Re-verified 2026-07-15 by claude-code:** `examples/czsc_strategy/README.md` (194 lines, read in
+full) describes a completely different, superseded strategy version: a 5-minute/30-minute/4-hour
+three-tier position-sizing "波段战法" (swing-trading tactic) for A-share stocks, backtested
+2021-01-01~2022-12-31 on Baostock data with 万三+印花税 costs, referencing files
+`czsc_adapter.py`/`czsc_multi_timeframe_strategy.py`/`run_baostock_backtest.py` — **these files
+still exist on disk** (confirmed via `ls`), but are NOT referenced by any test or by
+`chan_strategy/`'s own code (confirmed via `grep`) — they are an inactive, superseded early
+prototype, not the current strategy.
 
-**Root cause (confirmed via `git log`/`git show`):** this call to `capture_window` was added by a
-separate, PARALLEL commit (`fb18b45e`, "A35: add optional historical DB auto-update to SimNow
-observation wrapper") — this is NOT related to this session's own A61-A64 work (which touched
-`simnow_strategy_surface.py`'s `build_strategy_surface_from_captured_session` for a different
-reason — the workflow-owned symbol filter). The `fb18b45e` commit added `window_start`/
-`window_end` fields to the captured-session surface's `meta`, but did not update the
-`test_simnow_consistency_source.py` fixture (dating to A41, well before `fb18b45e`), which
-constructs a capture dict with no `meta` key at all. Confirmed via direct read of
-`simnow_daily_capture.py` that PRODUCTION captures always populate `started_at`/`ended_at` — this
-is a test/robustness gap, not a live-capture risk, but it currently blocks a clean test run.
+The CURRENT, actively-tested-and-gated strategy lives entirely under `chan_strategy/` and is a
+completely different design: a futures CTA strategy using Chan-theory (缠论) 一买/二买/三买 (first/
+second/third-buy) and mirrored sell signals (`chan_strategy/signals.py`, `chan_strategy/
+sell_signals.py`, signal version `V260615` per `config.py:172`), with:
+- Default instruments (confirmed `config.py:145-159`): `AP888`/`RB888`/`SC888`/`A888`/`ZN888`
+  futures contracts, each with a cited exchange-minimum margin rate.
+- Default frequencies (confirmed `config.py:12-15`): `base_freq="5分钟"`, `trade_freq="30分钟"`,
+  `confirm_freq="5分钟"`, `filter_freq="日线"`.
+- Default backtest window/costs (confirmed `config.py:163-169`): `2023-01-01~2025-12-31`,
+  `commission_rate=0.0001` (万一), `slippage=0.0005` (0.05%) — NOT the README's 2021-2022/万三+印花税.
+- Position sizing by signal tier (confirmed `config.py:19-28`): `pos_1buy=0.10`, `pos_2buy=0.20`,
+  `pos_3buy=0.30` (and mirrored sell-side), fixed stop-loss/timeout/trailing-stop parameters per
+  tier, plus a long list of research-only opt-in gates layered on top over many prior tasks
+  (`exit_model`, `sizing_model`, `limit_halt_model`, `resonance_filter`, `second_buy_mode`,
+  `divergence_model`, `portfolio_risk`, `rollover_stat_tagging`, `weighting`, etc. — all confirmed
+  present in `config.py`, each individually documented by its own inline comment citing the task
+  that introduced it).
+- No test asserts on `README.md`'s content (confirmed via `grep` across `tests/unit/`) — rewriting
+  it is safe and will not break any test.
 
-Full contract: `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A65 — Fix Failing Test
-+ Harden `capture_window` Against Missing Capture Metadata" (the authoritative design — this
-HANDOFF summarizes it).
+**Known, pre-existing, OUT-OF-SCOPE technical-debt note (do not fix as part of this task):**
+`signals.py` itself still contains a `get_all_signals` function that assembles the deprecated
+`signal_second_buy`/`signal_third_buy` implementations from that same file — but the PRODUCTION
+path (`sell_signals.py`'s own `get_all_signals`, which is what the backtest engine actually calls)
+uses its OWN, separately-defined, bug-fixed `signal_second_buy`/`signal_third_buy` (confirmed via
+direct read of both files). The stale `signals.py`-internal `get_all_signals` is a previously-known
+backlog item (🟢#12 in the 2026-07-13 audit) consumed only by some `skill_build/` scripts, not by
+`chan_strategy`'s own backtest path. Do not attempt to fix this as part of A66 — it's out of scope;
+just be aware of it so the new README correctly describes the PRODUCTION signal path
+(`sell_signals.get_all_signals`), not the stale one.
+
+Full contract: `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A66 — Rewrite
+`README.md` to Reflect Current Strategy" (the authoritative design — this HANDOFF summarizes it).
 
 ## Goal
 
-Make `capture_window` (and/or its caller `build_strategy_surface_from_captured_session`) tolerant
-of missing `started_at`/`ended_at` — either (a) `capture_window` returns a sentinel (e.g.
-`("", "")` or `(None, None)`) when either key is absent, with callers treating that as "window
-unavailable," or (b) `build_strategy_surface_from_captured_session` catches the missing-key case
-explicitly and omits `window_start`/`window_end` from its `meta` output. Pick whichever keeps
-`build_strategy_surface_from_capture` (the OTHER, older caller at line 65, which this task must
-NOT change the behavior of) unaffected. Additionally, decide whether
-`test_simnow_consistency_source.py`'s fixture should be updated to include `started_at`/
-`ended_at` (matching real production captures) in addition to, or instead of, making the function
-more tolerant.
+Rewrite `examples/czsc_strategy/README.md` to accurately describe the CURRENT `chan_strategy`
+codebase: its actual signal taxonomy (一买/二买/三买 and mirrored sell signals, sourced from
+`sell_signals.py`'s production `get_all_signals`, not the stale `signals.py`-internal one), actual
+default config (frequencies, instruments, position sizing, backtest window, costs — all cited above
+from direct reads), and the RESEARCH-ONLY/not-a-recommendation posture already established
+elsewhere in this project's house style (mirror the tone of `diagnostics/declassify_historical_
+reports.py`'s banner text or `docs/design/a38-phase-contracts-p2-p8.md`'s own framing — do not
+invent new disclaimer language from scratch). Do NOT invent new performance claims — if citing any
+historical result, it must already exist in a properly-banner'd `diagnostics/*.md` report, cited by
+file-path reference, not reproduced as if fresh.
+
+Preserve the OLD README content as a dated historical appendix (or move it to an archive file with
+a clear pointer from the new README) — do not silently delete the historical record. The old
+content describes a real, once-functional early prototype (`czsc_adapter.py` et al., still present
+on disk) — label it clearly as superseded, not as if it never existed.
 
 ## Acceptance Criteria
 
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes with ZERO
-      failures (currently `1 failed, 610 passed, 4 deselected`).
-- [x] `build_strategy_surface_from_capture`'s (the pre-existing caller) own tests remain
-      byte-identical — this task must not change its behavior.
-- [x] A fixture proves `capture_window`/`build_strategy_surface_from_captured_session` handles
-      missing `started_at`/`ended_at` gracefully (no crash), with the chosen semantic (sentinel
-      value or graceful omission) explicitly asserted.
-- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
-      `GOAL PASSED`.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] `README.md`'s described base/trade/filter/confirm frequencies match `chan_strategy/
+      config.py`'s actual current defaults (`5分钟`/`30分钟`/`日线`/`5分钟`).
+- [ ] `README.md`'s described instrument universe matches `config.py`'s `contract_specs`
+      (`AP888`/`RB888`/`SC888`/`A888`/`ZN888`).
+- [ ] `README.md`'s described backtest window and cost assumptions match `BACKTEST_CONFIG`
+      (`2023-01-01~2025-12-31`, 万一 commission, 0.05% slippage) — NOT the old 2021-2022/万三+印花税.
+- [ ] `README.md`'s described signal taxonomy matches the PRODUCTION signal path
+      (`sell_signals.py`'s `get_all_signals`: 一买/二买/三买 and mirrored sell signals), not the
+      stale `signals.py`-internal `get_all_signals`.
+- [ ] Any cited historical performance number is sourced from an existing, properly-banner'd
+      `diagnostics/*.md` report by file-path reference, never presented as a fresh claim.
+- [ ] The old README content is preserved (dated historical appendix or archive reference with a
+      clear pointer), not silently deleted.
+- [ ] No threshold tuning; no pre-2026-04-24 data used to justify any NEW claim; no `GOAL PASSED`.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (should be a
+      no-op — confirms the rewrite touched no tracked code).
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-
-## Manual Verification
-
-Natively-run counts:
-
-```text
-python -m pytest examples/czsc_strategy/tests/unit/test_simnow_consistency_source.py -q
-7 passed in 0.09s
-
-python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
-613 passed, 4 deselected in 29.06s
-
-python tools/sync_check.py
-PASS: 版本与文档一致。
-
-python tools/sync_check.py --root examples/czsc_strategy
-PASS: 版本与文档一致。
-
-ruff check examples/czsc_strategy/diagnostics/simnow_strategy_surface.py examples/czsc_strategy/tests/unit/test_simnow_consistency_source.py
-All checks passed!
-
-.\run_next_work.ps1 -Preflight (from examples/czsc_strategy/diagnostics/)
-189 passed in 16.02s
-Preflight complete; live SimNow capture was not requested
-```
-
-Chosen semantic: `capture_window` returns `(None, None)` when either `started_at` or `ended_at`
-is absent. `build_strategy_surface_from_captured_session` omits `window_start`/`window_end` from
-`meta` in that case. `build_strategy_surface_from_capture` is unchanged (it continues to assume
-production captures populate the window metadata).
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A65". First task
-   of a new 5-task roadmap (A65-A69) triaging the 2026-07-14 third-party audit's findings — read
-   the design doc's Background for the full picture, including why this bug is unrelated to this
-   session's own A61-A64 work.
-2. **Scope:** `examples/czsc_strategy/diagnostics/simnow_strategy_surface.py` (`capture_window`
-   and/or `build_strategy_surface_from_captured_session`) and
-   `examples/czsc_strategy/tests/unit/test_simnow_consistency_source.py`. Do not touch the other
-   changes from the parallel `fb18b45e` commit (`run_next_work.ps1`,
-   `simnow_run_summary.py`'s historical-DB-auto-update feature, etc.) beyond what's needed to fix
-   this one `KeyError` — this task is scoped to the test failure only.
-3. **Two callers of `capture_window`, only one should change behavior:**
-   `build_strategy_surface_from_capture` (line 65, pre-existing since A41-era work, its own tests
-   must stay byte-identical) and `build_strategy_surface_from_captured_session` (line 157, where
-   `fb18b45e` added the new, unguarded call). Whatever fix you choose must not alter the first
-   caller's behavior.
-4. **Don't silently paper over a genuinely-missing-metadata case in production** — if you choose
-   the "return a sentinel" approach, make sure "unavailable" is genuinely distinguishable from a
-   real window, not defaulted to a fake-but-plausible-looking value.
-5. **Guardrails (reject-on-violation):** no threshold tuning; no pre-2026-04-24 data; no SimNow
-   order/cancel/send paths touched; no `GOAL PASSED`; `build_strategy_surface_from_capture`'s
-   existing tests must stay byte-identical.
-6. **Include a Manual-verification block with natively-run counts, and run `ruff check`
-   proactively before finishing** — this consistently correlates with one-round review acceptance.
-7. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A65 capture_window hardening + test fix implemented"`.
+1. **Entry point:** `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A66". Second task
+   of the A65-A69 roadmap — read the design doc's Background for the full picture.
+2. **Scope:** `examples/czsc_strategy/README.md` only (a documentation-only task). Do not touch
+   `chan_strategy/*.py`, `config.py`'s actual values, `czsc_adapter.py`/`czsc_multi_timeframe_
+   strategy.py`/`run_baostock_backtest.py` (the old files being described — leave them on disk
+   untouched, just stop describing them as the current strategy in the main README body), or any
+   diagnostics script.
+3. **Read `signals.py` and `sell_signals.py` yourself before describing the signal taxonomy** —
+   don't just trust this HANDOFF's summary. Confirm the exact one-buy/two-buy/three-buy semantics
+   and which `get_all_signals` is actually on the production path (`sell_signals.py`'s), per the
+   "known, pre-existing, out-of-scope" note above.
+4. **Read `config.py` in full yourself** — it has ~15 different research-only opt-in switches
+   layered on by many prior tasks (each with its own inline comment). The new README does not need
+   to enumerate every single one exhaustively, but should give an accurate overview of the defaults
+   (all switches default to their legacy/byte-identical value) and point to `config.py` itself as
+   the source of truth for the full list, rather than trying to duplicate every switch's docs in
+   the README (which would itself drift again over time).
+5. **Historical-appendix placement is your own design call** — a dated section at the bottom of
+   the same README, or a separate `README.legacy.md`/similar with a one-line pointer from the main
+   README, are both acceptable; document your choice and reasoning in the Decision Log.
+6. **Any performance number you cite MUST already exist in a banner'd `diagnostics/*.md` file** —
+   search `diagnostics/` for an existing report before citing any number; do not compute or imply a
+   new one.
+7. **Guardrails (reject-on-violation):** no threshold tuning; no pre-2026-04-24 data used to justify
+   any NEW claim; no `GOAL PASSED`; no code file touched; old README content not silently deleted.
+8. **Include a Manual-verification block with natively-run counts** (should mostly show "no
+   change" since this is docs-only, but run the commands anyway to prove nothing broke).
+9. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A66 README rewrite implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-15 - A65 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
-  draft to an active HANDOFF task, started immediately after the roadmap was designed. First task
-  of the A65-A69 third-party-audit remediation wave, per the user's explicit choice to follow the
-  audit's own priority order in full.
-- 2026-07-15 - claude-code re-verified the test failure is still present and line numbers
-  unchanged: `simnow_strategy_surface.py:40`'s `capture_window`, called unconditionally from
-  `build_strategy_surface_from_captured_session:157` (added by the unrelated, parallel `fb18b45e`
-  commit), raises `KeyError` against `test_simnow_consistency_source.py`'s pre-`fb18b45e` fixture.
-  Confirmed via `simnow_daily_capture.py` that production captures always populate the required
-  fields — this is a test/robustness gap, not a live-capture risk.
+- 2026-07-15 - A66 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
+  draft to an active HANDOFF task, started immediately after A65 reached `done` (codex accepted on
+  the first review round).
+- 2026-07-15 - claude-code confirmed the old README's referenced files
+  (`czsc_adapter.py`/`czsc_multi_timeframe_strategy.py`/`run_baostock_backtest.py`) still exist on
+  disk but are unreferenced by any test or by `chan_strategy/`'s own code — a genuinely inactive,
+  superseded prototype, not a currently-used alternate path. Also confirmed the production signal
+  path is `sell_signals.py`'s `get_all_signals` (not the stale `signals.py`-internal one, which is
+  a separate, already-known, out-of-scope backlog item — 🟢#12 from the 2026-07-13 audit).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-15 | codex → claude-code | done → dev | A65 (fix failing test + harden capture_window) promoted from third-party audit remediation roadmap; handoff design->dev |
-| 2026-07-15 | kimi-code → codex | dev → review | A65 capture_window hardening + test fix implemented |
-| 2026-07-15 | codex → codex | review → done | A65 review accepted |
+| 2026-07-15 | codex → claude-code | done → dev | A66 (README rewrite) promoted from third-party audit remediation roadmap; handoff design->dev |
