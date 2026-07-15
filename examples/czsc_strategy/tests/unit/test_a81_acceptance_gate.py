@@ -97,7 +97,7 @@ def test_warn_propagates_when_no_fail() -> None:
             verdicts["oos"],
             verdicts["perturbation"],
             verdicts["cost"],
-            {"mode_label": "FORMAL_EVALUATION"},
+            {"mode_label": "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk)"},
         )
         assert result["overall_status"] == "warn", f"expected warn when {warning_source} warns"
         assert any(warning_source in reason for reason in result["reasons"])
@@ -113,14 +113,34 @@ def test_missing_overall_status_defaults_to_pass() -> None:
     assert result["overall_status"] == "pass"
 
 
-def test_empty_mode_label_does_not_fail() -> None:
+def test_empty_mode_label_fails() -> None:
     result = unified_acceptance_gate(
         _verdict("pass"),
         _verdict("pass"),
         _verdict("pass"),
         {"mode_label": ""},
     )
-    assert result["overall_status"] == "pass"
+    assert result["overall_status"] == "fail"
+
+
+def test_missing_mode_label_fails() -> None:
+    result = unified_acceptance_gate(
+        _verdict("pass"),
+        _verdict("pass"),
+        _verdict("pass"),
+        {},
+    )
+    assert result["overall_status"] == "fail"
+
+
+def test_none_mode_label_fails() -> None:
+    result = unified_acceptance_gate(
+        _verdict("pass"),
+        _verdict("pass"),
+        _verdict("pass"),
+        {"mode_label": None},
+    )
+    assert result["overall_status"] == "fail"
 
 
 def test_research_baseline_reason_propagates_even_with_fail_verdicts() -> None:

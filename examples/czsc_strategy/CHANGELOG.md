@@ -2,6 +2,23 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.17 — 2026-07-16
+
+- A82 将 `assert_not_research_baseline()` 从 blocklist 改为 fail-closed allow-list（第六轮审核致命项修复）。
+  - `chan_strategy/backtest_engine.py` 的 `assert_not_research_baseline()` 改为：仅当
+    `report["mode_label"]` 为字符串且以 `"PARTIAL_PRODUCTION_FEATURES("` 开头（即 `_compute_mode_label()`
+    实际产生的非研究基线格式）时放行；缺失键、`None`、空字符串、`"RESEARCH_BASELINE"`、
+    任何未被识别的字符串一律抛出 `ValueError`。错误信息包含实际 `mode_label` 值以便审计追溯。
+  - `unified_acceptance_gate()` 继续复用 `assert_not_research_baseline()`，因此对上述所有不确定/未知
+    输入返回顶层 `"fail"`；函数注释同步更新为 allow-list 语义。
+  - 修正 `tests/unit/test_formal_evaluation.py`：将原先断言 `{}`/`{"mode_label": ""}`/`FORMAL_EVALUATION`
+    通过的测试改为断言它们现在被拒绝；保留并扩展对 `"PARTIAL_PRODUCTION_FEATURES(...)"` 的放行断言。
+  - 修正 `tests/unit/test_a81_acceptance_gate.py`：将 `test_empty_mode_label_does_not_fail` 改为
+    `test_empty_mode_label_fails`，并新增 `test_missing_mode_label_fails`、`test_none_mode_label_fails`；
+    修正 `test_warn_propagates_when_no_fail` 中使用的非安全标签，避免与 allow-list 冲突。
+  - 未改动 `_compute_mode_label()` 本身的计算逻辑或格式，未改动任何回测数值输出、SimNow 下单/撤单路径、
+    或诊断脚本。
+
 ## 0.2.16 — 2026-07-16
 
 - A81 新增统一晋级门禁函数与研究基线入口警告。

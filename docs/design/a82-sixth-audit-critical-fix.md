@@ -69,3 +69,28 @@
 - 确认新逻辑对 `_compute_mode_label()` 实际可能产生的每一种字符串格式都有明确判定（不留"两种已知
   格式之外的第三种真实场景被意外拒绝"的回归）。
 - 确认原先"证明漏洞存在"的测试断言已经反向修正为"证明漏洞已修复"，而不是被删除或跳过。
+
+## Manual Verification
+
+以下命令均在本机实际执行并返回成功：
+
+```text
+$ python -m pytest examples/czsc_strategy/tests/unit/test_formal_evaluation.py examples/czsc_strategy/tests/unit/test_a81_acceptance_gate.py -q -m "not realdb"
+19 passed in 0.12s
+
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+717 passed, 4 deselected in 29.90s
+
+$ ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/tests/unit/test_formal_evaluation.py examples/czsc_strategy/tests/unit/test_a81_acceptance_gate.py
+All checks passed!
+
+$ python tools/sync_check.py
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+191 passed in 15.85s
+Preflight complete; live SimNow capture was not requested
+```

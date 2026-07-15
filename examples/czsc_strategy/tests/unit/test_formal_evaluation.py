@@ -219,8 +219,17 @@ def test_assert_not_research_baseline_raises_on_research_baseline():
         assert_not_research_baseline({"mode_label": "RESEARCH_BASELINE"})
 
 
-def test_assert_not_research_baseline_passes_on_other_labels():
+def test_assert_not_research_baseline_rejects_unknown_labels():
+    # Only the PARTIAL_PRODUCTION_FEATURES(...) prefix produced by
+    # _compute_mode_label() is a known-safe allow-list match.
     assert_not_research_baseline({"mode_label": "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk)"})
-    assert_not_research_baseline({"mode_label": "FORMAL_EVALUATION"})
-    assert_not_research_baseline({"mode_label": ""})
-    assert_not_research_baseline({})
+    with pytest.raises(ValueError):
+        assert_not_research_baseline({"mode_label": "FORMAL_EVALUATION"})
+    with pytest.raises(ValueError):
+        assert_not_research_baseline({"mode_label": "SOME_TYPO"})
+    with pytest.raises(ValueError):
+        assert_not_research_baseline({"mode_label": ""})
+    with pytest.raises(ValueError):
+        assert_not_research_baseline({"mode_label": None})
+    with pytest.raises(ValueError):
+        assert_not_research_baseline({})

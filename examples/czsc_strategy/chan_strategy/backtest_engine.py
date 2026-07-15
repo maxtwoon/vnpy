@@ -154,18 +154,26 @@ def _compute_mode_label(
 
 
 def assert_not_research_baseline(report: dict) -> None:
-    """Raise if ``report`` is labeled as a research-baseline result.
+    """Raise unless ``report`` carries a known-safe mode label.
+
+    This guard is fail-closed: only ``mode_label`` values matching the
+    ``"PARTIAL_PRODUCTION_FEATURES("`` prefix produced by ``_compute_mode_label()``
+    are accepted as non-research evidence. Anything else — missing key,
+    ``None``, empty string, ``"RESEARCH_BASELINE"``, or any unrecognized
+    string — raises ``ValueError``.
 
     Future promotion/acceptance logic should call this guard before treating
-    any backtest report as production-tradable evidence. Reports whose
-    ``mode_label`` equals ``"RESEARCH_BASELINE"`` are research outputs only
-    and must not be consumed as formal evaluation results.
+    any backtest report as production-tradable evidence.
 
-    :raises ValueError: if ``report.get("mode_label") == "RESEARCH_BASELINE"``.
+    :raises ValueError: if ``mode_label`` is missing or not a known-safe value.
     """
-    if report.get("mode_label") == "RESEARCH_BASELINE":
+    mode_label = report.get("mode_label")
+    if not isinstance(mode_label, str) or not mode_label.startswith(
+        "PARTIAL_PRODUCTION_FEATURES("
+    ):
         raise ValueError(
-            "Report is labeled RESEARCH_BASELINE and cannot be consumed as "
+            f"Report mode_label {mode_label!r} is missing, empty, or not a "
+            "known-safe production feature label and cannot be consumed as "
             "production-tradable or promotion evidence."
         )
 
@@ -182,13 +190,13 @@ def unified_acceptance_gate(
     (OOS, risk-parameter perturbation, cost sensitivity) with the report's
     ``mode_label``. The combination rules are:
 
-    1. ``mode_label == "RESEARCH_BASELINE"`` -> ``"fail"``.
+    1. ``mode_label`` is not a known-safe production feature label -> ``"fail"``.
     2. Any input ``overall_status == "fail"`` -> ``"fail"``.
     3. Any input ``overall_status == "warn"`` and no ``"fail"`` -> ``"warn"``.
     4. Otherwise -> ``"pass"``.
 
-    The RESEARCH_BASELINE check reuses ``assert_not_research_baseline()`` so the
-    mode-label logic is not duplicated. No verdict thresholds are invented or
+    The mode-label check reuses ``assert_not_research_baseline()`` so the
+    allow-list logic is not duplicated. No verdict thresholds are invented or
     modified here; this is a thin combining layer.
 
     :param oos_verdict: result of ``oos_gate_verdict()``.

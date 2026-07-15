@@ -1,19 +1,19 @@
 ---
 task: A82 - Fail-Closed Allow-List Fix for assert_not_research_baseline
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a82-sixth-audit-critical-fix.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -109,9 +109,22 @@ the one function fixes both.
   after this fix lands.
 - 2026-07-16 - A82 promoted from `docs/design/a82-sixth-audit-critical-fix.md`'s draft to an
   active HANDOFF task.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full diff: `assert_not_research_baseline()` now correctly checks
+  `mode_label.startswith("PARTIAL_PRODUCTION_FEATURES(")` as the sole allow-list condition,
+  rejecting missing/`None`/empty/unknown/`RESEARCH_BASELINE` values — exactly matching the design.
+  Confirmed the two test files' previously-bug-encoding assertions were correctly reversed (not
+  deleted): `test_assert_not_research_baseline_rejects_unknown_labels` now asserts rejection for
+  every unsafe input, and `test_a81_acceptance_gate.py` gained three new dedicated tests
+  (`test_empty_mode_label_fails`, `test_missing_mode_label_fails`, `test_none_mode_label_fails`)
+  replacing the one that previously asserted the opposite. Re-ran everything independently,
+  matching kimi-code's recorded counts exactly: full unit suite `717 passed, 4 deselected`; `ruff
+  check` clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed. Scope was
+  clean (only A82-scoped files staged).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A82 (fail-closed allow-list fix for research-baseline guard) promoted from sixth audit critical fix; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A82 fail-closed allow-list fix for assert_not_research_baseline implemented |
