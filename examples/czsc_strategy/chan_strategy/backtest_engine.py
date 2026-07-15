@@ -14,6 +14,7 @@
 - 数据为1分钟K线，需要合成更高周期
 """
 import sys
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 import pandas as pd
@@ -46,6 +47,36 @@ from chan_strategy.positions import _research_symbol_key as _position_symbol_key
 
 def _research_symbol_key(symbol: str) -> str:
     return "".join(ch for ch in str(symbol).upper() if ch.isalnum())
+
+
+@contextmanager
+def formal_evaluation_config():
+    """Temporarily override STRATEGY_CONFIG for a formal-evaluation run.
+
+    Formal evaluation uses real contract-multiplier/margin-constrained sizing
+    (``sizing_model="risk"``) and rejects fills at unexecutable limit/halt
+    bands (``limit_halt_model="enforce"``). The original config values are
+    saved and restored on exit, including when the wrapped code raises.
+
+    This intentionally mutates the shared ``STRATEGY_CONFIG`` dict because
+    ``BacktestEngine`` reads these knobs directly from the module-level dict
+    at multiple points at runtime; there is no per-instance constructor
+    parameter to override them.
+    """
+    keys = ("sizing_model", "limit_halt_model")
+    overrides = {"sizing_model": "risk", "limit_halt_model": "enforce"}
+    saved: dict[str, str] = {}
+    for key in keys:
+        saved[key] = STRATEGY_CONFIG.get(key)
+    try:
+        STRATEGY_CONFIG.update(overrides)
+        yield
+    finally:
+        for key in keys:
+            if saved[key] is None:
+                STRATEGY_CONFIG.pop(key, None)
+            else:
+                STRATEGY_CONFIG[key] = saved[key]
 
 
 def _apply_symbol_position_overrides(pos_weights: dict[str, float], symbol: str) -> dict[str, float]:
@@ -882,6 +913,33 @@ def run_single_backtest(
     report = engine.run()
     engine.print_report(report)
     return report
+
+
+def run_formal_evaluation(
+    symbol: str,
+    freq: str = "1",
+    start_date: str = None,
+    end_date: str = None,
+    table_name: str = None,
+    **kwargs
+) -> dict:
+    """Run a single backtest under formal-evaluation defaults.
+
+    This entry point temporarily enables ``sizing_model="risk"`` and
+    ``limit_halt_model="enforce"`` for the duration of the run and restores
+    the original values afterward. It is the explicit "formal evaluation"
+    path recommended by the third-party audit without changing the library
+    defaults in ``config.py``.
+    """
+    with formal_evaluation_config():
+        return run_single_backtest(
+            symbol=symbol,
+            freq=freq,
+            start_date=start_date,
+            end_date=end_date,
+            table_name=table_name,
+            **kwargs,
+        )
 
 
 def run_batch_backtest(

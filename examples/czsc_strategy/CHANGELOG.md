@@ -2,6 +2,20 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.9 — 2026-07-15
+
+- A74 新增正式评估回测入口，默认启用 `sizing_model="risk"` + `limit_halt_model="enforce"`。
+  - 不改动 `chan_strategy/config.py` 中 `STRATEGY_CONFIG`/`BACKTEST_CONFIG` 的默认字典值；既有默认路径
+    （`run_chan_backtest.py`、直接构造 `BacktestEngine`、既有 `diagnostics/*.py`）行为完全不变。
+  - 在 `chan_strategy/backtest_engine.py` 新增 `formal_evaluation_config()` 上下文管理器，临时覆盖
+    `sizing_model` 与 `limit_halt_model`，并在 `finally` 中无条件恢复原始值（即使运行期间抛异常）。
+  - 新增 `run_formal_evaluation()` 便捷函数与 `run_formal_evaluation.py` 独立脚本，作为显式正式评估入口。
+  - 报告沿用 A70 的 `mode_label` 机制；正式评估路径下 `mode_label` 为
+    `PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce)`，明确标识非研究基线。
+  - 新增单测 `tests/unit/test_formal_evaluation.py`，覆盖：覆盖生效、成功/异常后配置恢复、保留既有非默认值、
+    入口函数行为、`mode_label` 非基线；不依赖真实历史数据库。
+  - 不改动任何 SimNow 下单/撤单路径，不涉及阈值调优。
+
 ## 0.2.8 — 2026-07-15
 
 - A73 新增 `diagnostics/rollover_contribution_report.py` 换月窗口收益贡献单列报告。
