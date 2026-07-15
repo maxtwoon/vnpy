@@ -138,6 +138,13 @@ STRATEGY_CONFIG = {
     # without changing fills, prices or trade counts.
     "rollover_stat_tagging": "off",       # "off" (legacy, default) | "on"
 
+    # A76 rollover-window open gating (P11). "off" is the legacy byte-identical default;
+    # "on" blocks NEW long/short opens on bars whose trading date falls inside the
+    # rollover exclusion window. Exits, stop-loss, timeout and risk-control for
+    # already-open positions are unaffected. Enabled by formal_evaluation_config()
+    # for formal-evaluation runs.
+    "rollover_open_gating": "off",        # "off" (legacy, default) | "on"
+
     "weighting": "fixed",                 # "fixed" (legacy 10/20/30 split) | "risk_parity"
     "corr_clusters": {                    # correlated symbol clusters for gross exposure cap
         "industrial_energy": ["RB888", "ZN888", "SC888"],

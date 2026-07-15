@@ -638,6 +638,9 @@ class Position:
         # A67 enforce-mode rejection audit trail (set when a fill is skipped this bar)
         self._pending_fill_rejected_at_limit: bool = False
 
+        # A76 rollover-window open-gating rejection counter (per Position)
+        self._rollover_rejected_opens: int = 0
+
     def _reject_fill_at_limit(
         self,
         flag: bool | tuple[bool, bool] | None,
@@ -664,7 +667,8 @@ class Position:
                total_open_margin: float | None = None,
                atr: float | None = None,
                entry_at_limit: bool | None = None,
-               exit_at_limit: bool | None = None):
+               exit_at_limit: bool | None = None,
+               rollover_open_blocked: bool = False):
         """
         根据当前信号更新持仓状态
 
@@ -685,20 +689,28 @@ class Position:
                                execution bar, or a legacy plain bool.
         :param exit_at_limit: A51 flag: ``(touched_upper, touched_lower)`` for the
                               current bar, or a legacy plain bool.
+        :param rollover_open_blocked: A76 flag: when ``True``, NEW opens (long or
+            short) on this bar are rejected. Exits and risk-control for already-open
+            positions are unaffected.
         """
         self._pending_exit_at_limit = _resolve_limit_flag(exit_at_limit, self.pos, is_entry=False)
         trade_price = execution_price if execution_price is not None else price
         operate, event_name = self._get_operate(signals_dict, price, dt)
 
         # A67: gate entries and exits when the fill direction is unexecutable at the limit band.
+        # A76: gate NEW opens inside the rollover exclusion window (exits unaffected).
         if operate == Operate.LO and self.pos == 0:
-            if not self._reject_fill_at_limit(entry_at_limit, 1, is_entry=True):
+            if rollover_open_blocked:
+                self._rollover_rejected_opens += 1
+            elif not self._reject_fill_at_limit(entry_at_limit, 1, is_entry=True):
                 self._open_long(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
         elif operate == Operate.LC and self.pos > 0:
             if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
                 self._close_long(trade_price, dt, f"信号平仓-{event_name}" if event_name else "信号平仓")
         elif operate == Operate.SO and self.pos == 0:
-            if not self._reject_fill_at_limit(entry_at_limit, -1, is_entry=True):
+            if rollover_open_blocked:
+                self._rollover_rejected_opens += 1
+            elif not self._reject_fill_at_limit(entry_at_limit, -1, is_entry=True):
                 self._open_short(trade_price, dt, event_name, equity_at_entry, total_open_margin, entry_at_limit)
         elif operate == Operate.SC and self.pos < 0:
             if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
@@ -1900,7 +1912,8 @@ class ChanTimingStrategy:
                equity_at_entry: float | None = None,
                total_open_margin: float | None = None,
                entry_at_limit: bool | None = None,
-               exit_at_limit: bool | None = None):
+               exit_at_limit: bool | None = None,
+               rollover_open_blocked: bool = False):
         """
         更新所有持仓子策略
 
@@ -1915,6 +1928,8 @@ class ChanTimingStrategy:
         :param total_open_margin: A40 risk-mode pre-open margin across all positions
         :param entry_at_limit: A51 flag passed to each Position for entry tagging.
         :param exit_at_limit: A51 flag passed to each Position for exit tagging.
+        :param rollover_open_blocked: A76 flag passed to each Position to block
+            NEW opens inside the rollover exclusion window.
         """
         # A51/A67: forward limit flags under "aware" and "enforce"; "off" keeps
         # the legacy Position.update call signature byte-identical.
@@ -1922,6 +1937,9 @@ class ChanTimingStrategy:
         if STRATEGY_CONFIG.get("limit_halt_model", "off") in ("aware", "enforce"):
             limit_kwargs["entry_at_limit"] = entry_at_limit
             limit_kwargs["exit_at_limit"] = exit_at_limit
+
+        # A76: forward rollover open-gating flag to every Position update.
+        rollover_kwargs: dict = {"rollover_open_blocked": rollover_open_blocked}
 
         # 记录日线趋势状态（便于验证日线过滤是否生效）
         self._log_daily_trend(signals_dict, dt)
@@ -2028,14 +2046,14 @@ class ChanTimingStrategy:
         if buy1_pos.pos != 0 or _research_first_buy_allowed(self.symbol, signals_dict):
             buy1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                            **limit_kwargs)
+                            **limit_kwargs, **rollover_kwargs)
         else:
             buy1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                            **limit_kwargs)
+                            **limit_kwargs, **rollover_kwargs)
         buy3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                         equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                        **limit_kwargs)
+                        **limit_kwargs, **rollover_kwargs)
 
         # 二买需要一买上下文: 仅当一买子策略有过历史交易记录或有一买锚点时才生效
         if buy1_pos.pairs or self.buy1_history:
@@ -2047,16 +2065,16 @@ class ChanTimingStrategy:
             ):
                 buy2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                **limit_kwargs)
+                                **limit_kwargs, **rollover_kwargs)
             else:
                 buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                 equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                **limit_kwargs)
+                                **limit_kwargs, **rollover_kwargs)
         else:
             # 无一买上下文，二买仅执行风控（传空信号，不触发开仓）
             buy2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                             equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                            **limit_kwargs)
+                            **limit_kwargs, **rollover_kwargs)
 
         if self.enable_short:
             sell1_pos = self.positions[3]  # 一卖子策略
@@ -2067,35 +2085,35 @@ class ChanTimingStrategy:
             if sell1_pos.pos != 0 or short_open_allowed:
                 sell1_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                  equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                 **limit_kwargs)
+                                 **limit_kwargs, **rollover_kwargs)
             else:
                 sell1_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                  equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                 **limit_kwargs)
+                                 **limit_kwargs, **rollover_kwargs)
 
             if sell3_pos.pos != 0 or short_open_allowed:
                 sell3_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                  equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                 **limit_kwargs)
+                                 **limit_kwargs, **rollover_kwargs)
             else:
                 sell3_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                  equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                 **limit_kwargs)
+                                 **limit_kwargs, **rollover_kwargs)
 
             # 二卖需要一卖上下文
             if sell1_pos.pairs or self.sell1_history:
                 if sell2_pos.pos != 0 or short_open_allowed:
                     sell2_pos.update(signals_dict, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                      equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                     **limit_kwargs)
+                                     **limit_kwargs, **rollover_kwargs)
                 else:
                     sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                      equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                     **limit_kwargs)
+                                     **limit_kwargs, **rollover_kwargs)
             else:
                 sell2_pos.update({}, price, dt, execution_price=execution_price, bar_high=bar_high, bar_low=bar_low,
                                  equity_at_entry=equity_at_entry, total_open_margin=total_open_margin, atr=current_atr,
-                                 **limit_kwargs)
+                                 **limit_kwargs, **rollover_kwargs)
 
     def get_total_pos(self) -> int:
         """获取总仓位方向"""

@@ -165,7 +165,7 @@ def test_strategy_update_second_buy_research_gates():
 
         def update(self, signals, price, dt, execution_price=None,
                    bar_high=None, bar_low=None, equity_at_entry=None,
-                   total_open_margin=None, atr=None):
+                   total_open_margin=None, atr=None, rollover_open_blocked=False):
             self.calls.append((signals, price, dt, execution_price))
 
     original = dict(STRATEGY_CONFIG)

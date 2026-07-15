@@ -1,19 +1,19 @@
 ---
 task: A76 - Formal-Evaluation Rollover-Window Open-Gating
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a76-fourth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -84,42 +84,46 @@ Rationale for why the more aggressive "force-close positions in-window" option w
 
 ## Notes for the Next Agent
 
-(dev = kimi-code must read this before writing code)
+(review = claude-cowork; verify against the acceptance criteria and design doc §"A76")
 
-1. **Entry point:** `docs/design/a76-fourth-audit-remediation-roadmap.md` §"A76". First and highest-
-   priority of the three A76-A78 tasks (addresses the audit's only 🔴 high finding).
-2. **Read the design doc's full Semantics section** — it discusses whether to add a new dedicated
-   `STRATEGY_CONFIG` key (e.g. `rollover_open_gating`) enabled by `formal_evaluation_config()`, vs.
-   binding the behavior unconditionally into `formal_evaluation_config()` directly. The design doc
-   recommends the dedicated-key approach for consistency with this project's "every feature gets
-   its own explicit switch" convention (A51/A52/A67), but leaves the final call to you — record
-   your choice and reasoning in the Decision Log.
-3. **Suggested implementation shape**: reuse A67's `limit_halt_model="enforce"`
-   "reject-this-bar's-fill" pattern (`Position._reject_fill_at_limit()`) as a model for how to
-   reject an open without introducing a cross-bar state machine — `_get_operate()` re-evaluates
-   Chan-theory structure every bar, so a rejected open on a rollover-window bar will naturally be
-   re-attempted on a later bar once structure conditions are still met and the window has passed.
-4. **Scope:** `chan_strategy/backtest_engine.py` (gate wiring), possibly `chan_strategy/positions.py`
-   if the open-rejection needs a new helper analogous to A67's, plus a new/extended test file under
-   `tests/unit/`. Do NOT apply any price adjustment to the continuous-contract data itself — that is
-   explicitly out of scope (see design doc Rationale). Do NOT touch any SimNow order/cancel/send
-   path.
-5. **Do not touch the unrelated files currently sitting modified in the working tree**
-   (`diagnostics/ACCEPTANCE.md`, `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`, `WORK_LOG.md`,
-   `run_next_work.ps1`, `simnow_20d_promotion_decision.md`,
-   `tests/unit/test_run_next_work_wrapper.py`, `tests/unit/test_simnow_docs.py`) — these belong to
-   a concurrent, unrelated SimNow-observation workstream. **Before committing, run
-   `git status --short` and confirm only your own A76-scoped files are staged.**
-6. **Guardrails (reject-on-violation):** no price adjustment to continuous-contract data; no
-   force-closing of already-open positions inside the window; no threshold tuning; no pre-2026-
-   04-24 data for any new parameter choice; no SimNow order/cancel/send paths touched; no
-   `GOAL PASSED`; the gate must be provably scoped to formal-evaluation mode only — a leak into the
-   default path is a reject-worthy bug, test for it explicitly.
-7. **Include a Manual-verification block with natively-run counts**, and run `ruff check`
-   proactively before finishing.
-8. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A76 formal-evaluation rollover-window open-gating implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
+1. **What changed:** A76 adds a formal-evaluation-only rollover-window open gate. A new
+   `STRATEGY_CONFIG["rollover_open_gating"] = "off" | "on"` switch (default `"off"`) is enabled to
+   `"on"` by `formal_evaluation_config()`. `BacktestEngine.run()` pre-computes
+   `_rollover_excluded_dates()` when the switch is on, passes a per-bar
+   `rollover_open_blocked` flag to `ChanTimingStrategy.update()` / `Position.update()`, and the
+   open branches skip the fill when the flag is true. Already-open positions continue to exit,
+   stop-loss, timeout and risk-control normally. No price adjustment is applied to the continuous
+   contract data.
+2. **Key files to review:**
+   - `examples/czsc_strategy/chan_strategy/config.py` — new `rollover_open_gating` default.
+   - `examples/czsc_strategy/chan_strategy/backtest_engine.py` — `formal_evaluation_config()`
+     override, per-bar blocked flag, report audit fields (`rollover_open_gating_rejected_opens`,
+     `rollover_open_gating_unavailable`), mode-label update.
+   - `examples/czsc_strategy/chan_strategy/positions.py` — open-branch skip + rejection counter.
+   - `examples/czsc_strategy/tests/unit/test_rollover_open_gating.py` — new regression tests.
+   - `examples/czsc_strategy/tests/unit/test_formal_evaluation.py` — updated to assert the new
+     override and mode label.
+   - Minor test-fake signature updates in `test_branch_completion.py`,
+     `test_portfolio_accounting.py`, `test_positions.py` to accept the new `rollover_open_blocked`
+     kwarg.
+3. **Review focus:** confirm the gate only blocks **new** opens and never forces closes; confirm
+   behavior is byte-identical when `rollover_open_gating="off"`; confirm degraded/unavailable
+   rollover detection is visible in the report; confirm no SimNow order/cancel/send paths were
+   touched.
+4. **Unrelated modified files in the working tree** (`diagnostics/ACCEPTANCE.md`,
+   `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`, `WORK_LOG.md`, `run_next_work.ps1`,
+   `simnow_20d_promotion_decision.md`, `tests/unit/test_run_next_work_wrapper.py`,
+   `tests/unit/test_simnow_docs.py`) belong to a concurrent SimNow-observation workstream and were
+   not staged by A76.
+
+## Manual Verification
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → 700 passed, 4 deselected.
+- `python tools/sync_check.py` → PASS.
+- `python tools/sync_check.py --root examples/czsc_strategy` → PASS.
+- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → preflight complete.
+- `ruff check` on A76-scoped source/test files → clean. (`chan_strategy/positions.py` carries
+  pre-existing `typing.List/Dict/Tuple` style warnings unrelated to this change.)
 
 ## Decision Log
 
@@ -129,9 +133,33 @@ Rationale for why the more aggressive "force-close positions in-window" option w
   are non-code (manual exchange-notice verification) or already mitigated (A75's import guard).
 - 2026-07-15 - A76 promoted from `docs/design/a76-fourth-audit-remediation-roadmap.md`'s draft to
   an active HANDOFF task. First and highest-priority of three tasks in this roadmap.
+- 2026-07-15 - Implemented A76 with a dedicated `STRATEGY_CONFIG["rollover_open_gating"] = "off" | "on"`
+  switch (default `"off"`) that `formal_evaluation_config()` temporarily enables to `"on"`. This
+  matches the project's "every feature gets its own explicit switch" convention (A51/A52/A67) and
+  leaves room for testing the gate in isolation. The gate reuses A52's `_rollover_excluded_dates()`
+  infrastructure, blocks only NEW long/short opens on excluded trading dates, and does not affect
+  exits, stop-loss, timeout or risk-control for already-open positions. No price adjustment is
+  applied to the underlying continuous-contract data.
+- 2026-07-15 (claude-code independent verification, before triggering codex review) - Read every
+  diff in full given the higher risk of this change (touches core position-open logic in
+  `positions.py`): confirmed the gate only intercepts the `Operate.LO`/`Operate.SO` open branches
+  (never `LC`/`SC` exits), `Position.update()`'s `rollover_open_blocked` parameter defaults to
+  `False` so the legacy call signature and behavior are preserved when unpassed, and
+  `ChanTimingStrategy.update()` always forwards a deterministic `False` when gating is off (never
+  omits it), which keeps off-mode byte-identical while still allowing the flag to be threaded
+  through unconditionally. Confirmed the new test file covers the critical edge case (an
+  already-open position continues to exit normally inside the window) and graceful degradation
+  when rollover metadata is missing. Confirmed `test_rollover_off_equivalence.py` (A52's existing
+  equivalence snapshot) was untouched and still passes. Diffed ruff output before/after this
+  change: all 30 flagged issues (`typing.List`/`Dict`/`Tuple` style, one unused `pytest` import in
+  `test_positions.py`) are pre-existing and unrelated to this diff, confirmed via `git stash`
+  comparison. Re-ran everything independently, matching kimi-code's recorded counts exactly: full
+  unit suite `700 passed, 4 deselected`; both `sync_check.py` gates passed; `run_next_work.ps1
+  -Preflight` passed. Scope was clean (only A76-scoped files staged).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A76 (formal-evaluation rollover-window open-gating) promoted from fourth third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A76 formal-evaluation rollover-window open-gating implemented |

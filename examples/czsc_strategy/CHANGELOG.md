@@ -2,6 +2,23 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.11 — 2026-07-15
+
+- A76 新增正式评估模式下换月窗口开仓门控（解决第四轮审核唯一 🔴 高严重度问题）。
+  - 新增 `STRATEGY_CONFIG["rollover_open_gating"] = "off" | "on"`，默认 `"off"`，保持默认路径字节级不变。
+  - `formal_evaluation_config()` 将 `rollover_open_gating` 临时覆盖为 `"on"`，与 `sizing_model="risk"`、
+    `limit_halt_model="enforce"` 一起构成正式评估三覆盖；运行结束后无条件恢复原始值（含异常路径）。
+  - 门控仅阻止换月排除窗口内的新开仓（多头/空头），不影响窗口内已持仓位的止损、超时、移动止损、信号平仓等
+    风控逻辑；不调整连续合约拼接价格本身。
+  - 复用 A52 的 `rollover_config.py` / `_rollover_excluded_dates()` 计算排除日期，元数据缺失/检测失败时
+    优雅降级为不门控，并在报告/日志中显式标识 `"rollover_open_gating_unavailable"`，避免与"生效但无排除日期"
+    静默不可区分。
+  - 正式评估报告的 `mode_label` 扩展为
+    `PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,rollover_open_gating=on)`。
+  - 新增单测 `tests/unit/test_rollover_open_gating.py`，覆盖：默认 off、正式评估启用、窗口内开仓被拦、默认路径
+    正常开仓、已持仓正常平仓、元数据缺失降级可识别、mode_label 包含新维度；不依赖真实历史数据库。
+  - 不改动任何 SimNow 下单/撤单路径，不涉及阈值调优，不对连续合约价格做任何前复权/后复权/价差平滑。
+
 ## 0.2.10 — 2026-07-15
 
 - A75 新增废弃信号路径导入护栏测试 `tests/unit/test_signal_path_hygiene.py`。

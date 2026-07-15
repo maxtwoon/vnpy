@@ -63,8 +63,12 @@ def formal_evaluation_config():
     at multiple points at runtime; there is no per-instance constructor
     parameter to override them.
     """
-    keys = ("sizing_model", "limit_halt_model")
-    overrides = {"sizing_model": "risk", "limit_halt_model": "enforce"}
+    keys = ("sizing_model", "limit_halt_model", "rollover_open_gating")
+    overrides = {
+        "sizing_model": "risk",
+        "limit_halt_model": "enforce",
+        "rollover_open_gating": "on",
+    }
     saved: dict[str, str] = {}
     for key in keys:
         saved[key] = STRATEGY_CONFIG.get(key)
@@ -103,27 +107,31 @@ def _compute_mode_label(
     sizing_model: str,
     limit_halt_model: str,
     portfolio_risk: str,
+    rollover_open_gating: str,
 ) -> str:
     """Compute the backtest mode label from execution/risk config knobs.
 
     The pure-default configuration (research sizing + limit/halt off +
-    portfolio risk off) is labeled RESEARCH_BASELINE so readers cannot
-    mistake the output for production-tradable results. Any deviation is
-    reported explicitly with the dimension name and current value.
+    portfolio risk off + rollover open gating off) is labeled
+    RESEARCH_BASELINE so readers cannot mistake the output for
+    production-tradable results. Any deviation is reported explicitly with
+    the dimension name and current value.
     """
     defaults = {
         "sizing": ("sizing_model", "research"),
         "limit_halt": ("limit_halt_model", "off"),
         "portfolio_risk": ("portfolio_risk", "off"),
+        "rollover_open_gating": ("rollover_open_gating", "off"),
     }
     actuals = {
         "sizing": sizing_model,
         "limit_halt": limit_halt_model,
         "portfolio_risk": portfolio_risk,
+        "rollover_open_gating": rollover_open_gating,
     }
     deviations = [
         (dim, actuals[dim])
-        for dim in ("sizing", "limit_halt", "portfolio_risk")
+        for dim in ("sizing", "limit_halt", "portfolio_risk", "rollover_open_gating")
         if actuals[dim] != defaults[dim][1]
     ]
     if not deviations:
@@ -270,6 +278,9 @@ class BacktestEngine:
         self.trade_bars = []
         self.czsc_obj = None
         self.strategy = None
+        # A76: per-run rollover open-gating audit state
+        self._rollover_rejected_opens: dict[str, int] = {}
+        self._rollover_unavailable_reason: str | None = None
         # 清空 bars 强制重新加载，避免日期/参数修改后仍使用旧数据
         self.bars = []
 
@@ -387,8 +398,38 @@ class BacktestEngine:
                     f"Add the symbol to limit_config.py or use limit_halt_model='off'."
                 )
 
+        # A76: pre-compute rollover exclusion window when gating is active.
+        rollover_open_gating = STRATEGY_CONFIG.get("rollover_open_gating", "off")
+        rollover_gating_active = rollover_open_gating == "on"
+        excluded_dates: set[date] = set()
+        if rollover_gating_active:
+            try:
+                transitions = _detect_transitions(
+                    Path(self.db_path), self.symbol, self.start_date, self.end_date
+                )
+            except Exception as e:  # pragma: no cover - defensive best-effort fallback
+                self._rollover_unavailable_reason = f"detection_failed: {e}"
+                transitions = {"unavailable": self._rollover_unavailable_reason}
+            if transitions.get("unavailable"):
+                self._rollover_unavailable_reason = transitions["unavailable"]
+                print(
+                    f"[!] rollover_open_gating='on' but rollover detection unavailable: "
+                    f"{transitions['unavailable']}; gating disabled for this run"
+                )
+            else:
+                trading_dates = _trading_dates_from_bars(Path(self.db_path), self.symbol)
+                excluded_dates, _ = _exclusion_dates(
+                    transitions.get("transition_dates", []), trading_dates
+                )
+                if not excluded_dates:
+                    print(
+                        "[!] rollover_open_gating='on' but no rollover exclusion dates "
+                        "found in the current window"
+                    )
+
         for i in range(warmup_bars, len(trade_bars)):
             bar = trade_bars[i]
+            rollover_open_blocked = rollover_gating_active and (bar.dt.date() in excluded_dates)
 
             # A51/A67: compute per-bar directional limit-band flags for entry/exit tagging/gating.
             entry_at_limit: tuple[bool, bool] | None = None
@@ -429,6 +470,7 @@ class BacktestEngine:
                 "bar_low": bar.low,
                 "equity_at_entry": equity_at_entry,
                 "total_open_margin": total_open_margin,
+                "rollover_open_blocked": rollover_open_blocked,
             }
             # A51/A67 flags are injected under "aware" and "enforce"; "off" keeps
             # the legacy call signature unchanged.
@@ -700,6 +742,7 @@ class BacktestEngine:
         sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
         limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
         portfolio_risk = STRATEGY_CONFIG.get("portfolio_risk", "off")
+        rollover_open_gating = STRATEGY_CONFIG.get("rollover_open_gating", "off")
 
         # 基础信息
         report = {
@@ -712,11 +755,14 @@ class BacktestEngine:
             "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
             "resonance_filter": STRATEGY_CONFIG.get("resonance_filter", "off"),
             "portfolio_risk": portfolio_risk,
+            "rollover_open_gating": rollover_open_gating,
             "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
             "traded_bars": len(self.equity_curve),
-            "mode_label": _compute_mode_label(sizing_model, limit_halt_model, portfolio_risk),
+            "mode_label": _compute_mode_label(
+                sizing_model, limit_halt_model, portfolio_risk, rollover_open_gating
+            ),
         }
 
         # 各子策略绩效
@@ -737,6 +783,15 @@ class BacktestEngine:
             report["final_total_open_margin"] = (
                 self.equity_curve[-1].get("total_open_margin", 0.0) if self.equity_curve else 0.0
             )
+
+        # A76: surface rollover open-gating audit state so degraded/unavailable
+        # detection is not silently indistinguishable from "gating worked".
+        if rollover_open_gating == "on":
+            positions = getattr(self.strategy, "positions", []) if self.strategy else []
+            report["rollover_open_gating_rejected_opens"] = {
+                pos.name: pos._rollover_rejected_opens for pos in positions
+            }
+            report["rollover_open_gating_unavailable"] = self._rollover_unavailable_reason
 
         # sizing_model caveat: surfaced in report body so readers of the file see it
         sizing_model = report["sizing_model"]
