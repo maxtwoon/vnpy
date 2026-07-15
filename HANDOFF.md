@@ -101,6 +101,16 @@ windows.
    `python tools/handoff.py next --actor kimi-code --summary "A73 rollover-window contribution report implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification
+
+- `ruff check examples/czsc_strategy/diagnostics/rollover_contribution_report.py examples/czsc_strategy/tests/unit/test_rollover_contribution_report.py` — passed (no issues).
+- `python -m pytest examples/czsc_strategy/tests/unit/test_rollover_contribution_report.py -q` — 11 passed.
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` — 677 passed, 4 deselected.
+- `python tools/sync_check.py` — PASS.
+- `python tools/sync_check.py --root examples/czsc_strategy` — PASS.
+- `diagnostics/run_next_work.ps1 -Preflight` — 191 passed, preflight complete.
+- Git status confirmed: only A73-scoped files (`diagnostics/rollover_contribution_report.py`, `tests/unit/test_rollover_contribution_report.py`, `VERSION`, `CHANGELOG.md`, `HANDOFF.md`) committed; unrelated SimNow workstream files remain unstaged.
+
 ## Decision Log
 
 - 2026-07-15 - Third third-party audit (67/100, up from 66, no fatal items) scoped down to
