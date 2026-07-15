@@ -189,6 +189,29 @@ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_
     or SimNow order/cancel/send paths are touched. All three gates are measurement/reporting-only
     and implemented in this single dev round because each reuses existing infrastructure with a
     small, well-bounded addition.
+- 2026-07-15 (claude-code pre-review due diligence, before triggering codex) — kimi-code's original
+  dev commit (`31879e56`) had two problems, found and fixed before review:
+  1. `diagnostics/cost_sensitivity_report.py` — one of the three claimed-complete gates — was never
+     actually committed. It lives under the git-ignored `diagnostics/` path and needs `git add -f`
+     (the same class of omission as A59); the committed `test_a69_robustness_gates.py` imports it 5
+     times, so a fresh checkout would fail on import. Fixed by `git add -f`-ing the file into the
+     real A69 commit.
+  2. The same commit bundled an entirely unrelated, unrequested change — making historical-DB
+     auto-update default-on for formal `-LiveCapture` runs in `run_next_work.ps1`, plus matching
+     doc/test updates — under the A69 commit message. This is the concurrent SimNow-observation
+     workstream's own "2026-07-15 Formal Daily Flow Alignment Fix" (visible in
+     `diagnostics/WORK_LOG.md`'s own entry of that name), which was sitting uncommitted in the
+     working tree and got scooped in, not something kimi-code wrote for A69. Per this session's
+     standing rule not to revert or interfere with that concurrent workstream's own files, this
+     content was NOT discarded — it was left as uncommitted working-tree changes (unchanged from
+     before A69's dev round started) so that workstream can commit it on its own terms. `git reset
+     HEAD~1` (mixed, local-only, nothing pushed) was used to split the single bundled commit into
+     the true A69-scoped commit (`834fe5e0`: `HANDOFF.md`, `backtest_matrix_report.py`,
+     `risk_param_sensitivity_report.py`, `cost_sensitivity_report.py`, `test_a69_robustness_gates.py`)
+     — the unrelated files were left unstaged, not committed by claude-code.
+  3. Re-verified independently after the split: `pytest examples/czsc_strategy/tests/unit -q -m "not
+     realdb"` → 640 passed, 4 deselected; `ruff check` on the four A69 files → all checks passed;
+     both `sync_check.py` gates → PASS; `run_next_work.ps1 -Preflight` → preflight complete.
 
 ## 交接历史
 
