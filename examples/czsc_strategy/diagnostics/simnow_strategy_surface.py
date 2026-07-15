@@ -36,7 +36,15 @@ def _parse_event_dt(value: str) -> datetime:
     return dt.astimezone(ASIA_SHANGHAI)
 
 
-def capture_window(meta: dict[str, Any]) -> tuple[str, str]:
+def capture_window(meta: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return the capture window bounds, or (None, None) when unavailable.
+
+    Production captures always populate ``started_at``/``ended_at``, but
+    legacy fixtures and partial payloads may omit them. Returning ``None``
+    makes "unavailable" distinguishable from a real window.
+    """
+    if "started_at" not in meta or "ended_at" not in meta:
+        return None, None
     start = _parse_capture_dt(str(meta["started_at"])).isoformat()
     end = _parse_capture_dt(str(meta["ended_at"])).isoformat()
     return start, end
@@ -169,20 +177,23 @@ def build_strategy_surface_from_captured_session(capture: dict[str, Any]) -> dic
         if row.get("symbol")
     })
 
+    meta: dict[str, Any] = {
+        "source": "captured_session",
+        "trade_date": "",
+        "captured_orders_count": len(orders),
+        "filtered_trades_count": len(filtered_trades),
+        "filtered_positions_count": len(filtered_positions),
+        "filtered_symbols": filtered_symbols,
+    }
+    if window_start is not None and window_end is not None:
+        meta["window_start"] = window_start
+        meta["window_end"] = window_end
+
     return {
         "signals": [],
         "trades": trades,
         "positions": positions,
-        "meta": {
-            "source": "captured_session",
-            "trade_date": "",
-            "window_start": window_start,
-            "window_end": window_end,
-            "captured_orders_count": len(orders),
-            "filtered_trades_count": len(filtered_trades),
-            "filtered_positions_count": len(filtered_positions),
-            "filtered_symbols": filtered_symbols,
-        },
+        "meta": meta,
     }
 
 

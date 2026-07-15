@@ -1,19 +1,19 @@
 ---
 task: A65 - Fix Failing Test + Harden capture_window Against Missing Capture Metadata
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -61,18 +61,48 @@ more tolerant.
 
 ## Acceptance Criteria
 
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes with ZERO
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes with ZERO
       failures (currently `1 failed, 610 passed, 4 deselected`).
-- [ ] `build_strategy_surface_from_capture`'s (the pre-existing caller) own tests remain
+- [x] `build_strategy_surface_from_capture`'s (the pre-existing caller) own tests remain
       byte-identical — this task must not change its behavior.
-- [ ] A fixture proves `capture_window`/`build_strategy_surface_from_captured_session` handles
+- [x] A fixture proves `capture_window`/`build_strategy_surface_from_captured_session` handles
       missing `started_at`/`ended_at` gracefully (no crash), with the chosen semantic (sentinel
       value or graceful omission) explicitly asserted.
-- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
+- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
       `GOAL PASSED`.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+
+## Manual Verification
+
+Natively-run counts:
+
+```text
+python -m pytest examples/czsc_strategy/tests/unit/test_simnow_consistency_source.py -q
+7 passed in 0.09s
+
+python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+613 passed, 4 deselected in 29.06s
+
+python tools/sync_check.py
+PASS: 版本与文档一致。
+
+python tools/sync_check.py --root examples/czsc_strategy
+PASS: 版本与文档一致。
+
+ruff check examples/czsc_strategy/diagnostics/simnow_strategy_surface.py examples/czsc_strategy/tests/unit/test_simnow_consistency_source.py
+All checks passed!
+
+.\run_next_work.ps1 -Preflight (from examples/czsc_strategy/diagnostics/)
+189 passed in 16.02s
+Preflight complete; live SimNow capture was not requested
+```
+
+Chosen semantic: `capture_window` returns `(None, None)` when either `started_at` or `ended_at`
+is absent. `build_strategy_surface_from_captured_session` omits `window_start`/`window_end` from
+`meta` in that case. `build_strategy_surface_from_capture` is unchanged (it continues to assume
+production captures populate the window metadata).
 
 ## Notes for the Next Agent
 
@@ -123,3 +153,4 @@ more tolerant.
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A65 (fix failing test + harden capture_window) promoted from third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A65 capture_window hardening + test fix implemented |

@@ -8,7 +8,10 @@ if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
 from simnow_daily_monitor import compare_simnow_replay, make_record  # noqa: E402
-from simnow_strategy_surface import build_strategy_surface_from_captured_session  # noqa: E402
+from simnow_strategy_surface import (  # noqa: E402
+    build_strategy_surface_from_captured_session,
+    capture_window,
+)
 
 
 def _baseline() -> dict[str, Any]:
@@ -54,8 +57,16 @@ def _captured_position() -> dict[str, Any]:
     }
 
 
+def _capture_meta() -> dict[str, Any]:
+    return {
+        "started_at": "2026-07-01T01:00:00+00:00",
+        "ended_at": "2026-07-01T08:00:00+00:00",
+    }
+
+
 def test_build_strategy_surface_from_captured_session_uses_real_callbacks():
     capture: dict[str, Any] = {
+        "meta": _capture_meta(),
         "captured": {
             "trades": [_captured_trade()],
             "positions": [_captured_position()],
@@ -66,6 +77,30 @@ def test_build_strategy_surface_from_captured_session_uses_real_callbacks():
     assert surface["meta"]["source"] == "captured_session"
     assert len(surface["trades"]) == 1
     assert surface["trades"][0]["symbol"] == "AP888"
+    assert len(surface["positions"]) == 1
+    assert surface["meta"]["window_start"] == "2026-07-01T09:00:00+08:00"
+    assert surface["meta"]["window_end"] == "2026-07-01T16:00:00+08:00"
+
+
+def test_capture_window_returns_none_when_metadata_missing():
+    assert capture_window({}) == (None, None)
+    assert capture_window({"started_at": "2026-07-01T01:00:00+00:00"}) == (None, None)
+    assert capture_window({"ended_at": "2026-07-01T08:00:00+00:00"}) == (None, None)
+
+
+def test_build_strategy_surface_from_captured_session_omits_window_when_metadata_missing():
+    capture: dict[str, Any] = {
+        "captured": {
+            "trades": [_captured_trade()],
+            "positions": [_captured_position()],
+            "orders": [],
+        },
+    }
+    surface = build_strategy_surface_from_captured_session(capture)
+    assert surface["meta"]["source"] == "captured_session"
+    assert "window_start" not in surface["meta"]
+    assert "window_end" not in surface["meta"]
+    assert len(surface["trades"]) == 1
     assert len(surface["positions"]) == 1
 
 
