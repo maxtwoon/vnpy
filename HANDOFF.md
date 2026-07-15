@@ -1,19 +1,19 @@
 ---
 task: A68 - Report-Layer Separation of sizing_model="research" vs Real-Capital Output
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -62,20 +62,20 @@ report-generation time.
 
 ## Acceptance Criteria
 
-- [ ] A fresh run of `backtest_matrix_report.py` (or its unit-tested equivalent) produces output
+- [x] A fresh run of `backtest_matrix_report.py` (or its unit-tested equivalent) produces output
       that includes the `sizing_model`-aware caveat and the RESEARCH-ONLY banner WITHOUT relying on
       `declassify_historical_reports.py` running afterward (unit-tested: assert the banner/caveat
       text is present in freshly-generated output).
-- [ ] The caveat text correctly differs between `sizing_model="research"` and `="risk"`
+- [x] The caveat text correctly differs between `sizing_model="research"` and `="risk"`
       (unit-tested for both).
-- [ ] No existing report's actual numeric content changes — this is a labeling/caveat addition
+- [x] No existing report's actual numeric content changes — this is a labeling/caveat addition
       only.
-- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
+- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
       `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
@@ -108,6 +108,17 @@ report-generation time.
    `python tools/handoff.py next --actor kimi-code --summary "A68 report-layer sizing_model separation implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification
+
+Run natively in the working tree on 2026-07-15:
+
+- `ruff check examples/czsc_strategy/diagnostics/backtest_matrix_report.py examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py` → All checks passed.
+- `python -m pytest examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py -v` → 5 passed.
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → 627 passed, 4 deselected.
+- `python tools/sync_check.py` → PASS.
+- `python tools/sync_check.py --root examples/czsc_strategy` → PASS.
+- `powershell.exe -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight` (run from `examples/czsc_strategy/`) → Preflight complete.
+
 ## Decision Log
 
 - 2026-07-15 - A68 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
@@ -118,9 +129,14 @@ report-generation time.
   `sizing_model`/banner awareness, and confirmed the exact import pattern A67 already established
   for `build_banner` (`from diagnostics.declassify_historical_reports import build_banner`) so A68
   can reuse it directly rather than re-deriving the import path.
+- 2026-07-15 - kimi-code scan of `diagnostics/*.py` confirmed `run_position_sizing_report.py`
+  already threads `sizing_model` through its JSON output and surfaces a research-mode caveat; no
+  markdown sibling with the same gap was found, so the fix is scoped to `backtest_matrix_report.py`
+  per the design.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A68 (report-layer sizing_model separation) promoted from third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A68 report-layer sizing_model separation implemented |

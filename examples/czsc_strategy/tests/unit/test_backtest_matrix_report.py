@@ -7,7 +7,52 @@ DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
 if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
-from diagnostics.backtest_matrix_report import _dominant_symbol  # noqa: E402
+from chan_strategy.config import STRATEGY_CONFIG  # noqa: E402
+from diagnostics.backtest_matrix_report import (  # noqa: E402
+    _dominant_symbol,
+    write_markdown,
+)
+
+
+def _minimal_matrix() -> dict:
+    return {
+        "generated_at": "2024-01-01T00:00:00+00:00",
+        "db_path": "/tmp/test.db",
+        "symbols": {"TEST": {}},
+        "checks": {"TEST": {}},
+    }
+
+
+def test_write_markdown_includes_research_caveat_and_banner(tmp_path: Path) -> None:
+    saved = STRATEGY_CONFIG.get("sizing_model", "research")
+    STRATEGY_CONFIG["sizing_model"] = "research"
+    try:
+        path = tmp_path / "report.md"
+        write_markdown(_minimal_matrix(), path)
+        text = path.read_text(encoding="utf-8")
+        assert "RESEARCH ONLY" in text
+        assert "RESEARCH-ONLY / NOT PROMOTION EVIDENCE" in text
+        assert "当前仓位模型为 `research`" in text
+        assert "不是真实资金 P&L 曲线" in text
+        assert "当前仓位模型为 `risk`" not in text
+    finally:
+        STRATEGY_CONFIG["sizing_model"] = saved
+
+
+def test_write_markdown_includes_risk_caveat_and_banner(tmp_path: Path) -> None:
+    saved = STRATEGY_CONFIG.get("sizing_model", "research")
+    STRATEGY_CONFIG["sizing_model"] = "risk"
+    try:
+        path = tmp_path / "report.md"
+        write_markdown(_minimal_matrix(), path)
+        text = path.read_text(encoding="utf-8")
+        assert "RESEARCH ONLY" in text
+        assert "RESEARCH-ONLY / NOT PROMOTION EVIDENCE" in text
+        assert "当前仓位模型为 `risk`" in text
+        assert "未经验证于实盘" in text
+        assert "不是真实资金 P&L 曲线" not in text
+    finally:
+        STRATEGY_CONFIG["sizing_model"] = saved
 
 
 def _make_db(tmp_path: Path, rows: list[tuple[str, str]]) -> Path:

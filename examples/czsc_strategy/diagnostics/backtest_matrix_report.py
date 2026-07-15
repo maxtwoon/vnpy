@@ -16,8 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from chan_strategy.backtest_engine import BacktestEngine
-from chan_strategy.config import SQLITE_DB_PATH
+from chan_strategy.backtest_engine import BacktestEngine  # noqa: E402
+from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG  # noqa: E402
+from diagnostics.declassify_historical_reports import build_banner  # noqa: E402
 
 
 DEFAULT_SYMBOLS = ["AP888", "RB888", "SC888", "A888", "ZN888"]
@@ -190,9 +191,29 @@ def _sub_strategy_rows(symbol: str, period_name: str, report: dict[str, Any]) ->
     return rows
 
 
+def _sizing_caveat(sizing_model: str) -> str:
+    if sizing_model == "research":
+        return (
+            "⚠️ 当前仓位模型为 `research`（研究模式）：报告中的收益率使用固定 1 手 / "
+            "1 倍合约乘数计算，仅为百分比回报代理，不是真实资金 P&L 曲线。"
+        )
+    return (
+        "⚠️ 当前仓位模型为 `risk`（风险仓位模式）：手数、合约乘数与保证金按配置计算，"
+        "但仍是回测结果，未经验证于实盘，不可直接用于生产资金分配。"
+    )
+
+
 def write_markdown(matrix: dict[str, Any], path: Path) -> None:
+    sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
+    banner_lines = build_banner().splitlines()
+    while banner_lines and banner_lines[-1] == "":
+        banner_lines.pop()
+
     lines = [
         "# 真实数据回测矩阵报告",
+        "",
+        *banner_lines,
+        _sizing_caveat(sizing_model),
         "",
         f"- 生成时间：{matrix['generated_at']}",
         f"- 数据库：`{matrix['db_path']}`",
