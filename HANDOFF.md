@@ -1,7 +1,7 @@
 ---
 task: A77 - Documentation Drift Fixes (README limit_halt_model + Verdict-Layer Docstrings)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a76-fourth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -159,3 +159,4 @@ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_
 | 2026-07-16 | kimi-code → codex | dev → review | A77 documentation drift fixes implemented |
 | 2026-07-16 | codex → kimi-code | review → dev | 打回: Missing required Manual-verification block for sandbox-limited pytest/preflight evidence |
 | 2026-07-16 | kimi-code → codex | dev → review | A77 documentation drift fixes implemented (Manual Verification block added) |
+| 2026-07-16 | codex → codex | review → done | A77 review accepted: documentation drift fixes and manual verification block satisfy acceptance criteria |
