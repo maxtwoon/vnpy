@@ -1,19 +1,19 @@
 ---
 task: A69 - OOS/Parameter-Perturbation/Cost-Sensitivity Minimum Gate
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -84,20 +84,22 @@ oversized or corner-cut implementation into one handoff.
 
 ## Acceptance Criteria
 
-- [ ] A recorded design decision (in the Decision Log, BEFORE code) on what each of the three
+- [x] A recorded design decision (in the Decision Log, BEFORE code) on what each of the three
       concepts (OOS, perturbation, cost-sensitivity) concretely means as an implementable check in
       this codebase, informed by the existing infrastructure cited in Background.
-- [ ] At least one of the three is implemented as a real, runnable check with a documented
-      pass/fail or honest-measurement output (unit-tested or diagnostic-script-verified).
-- [ ] Existing `backtest_matrix_report.py`/`risk_param_sensitivity_report.py` behavior/output is
+- [x] All three are implemented as real, runnable measurement gates:
+  - OOS: `diagnostics/backtest_matrix_report.py::evaluate_oos_gate()` + markdown section.
+  - Parameter perturbation: `diagnostics/risk_param_sensitivity_report.py::evaluate_perturbation_gate()` + markdown section.
+  - Cost sensitivity: new `diagnostics/cost_sensitivity_report.py` (1.0x/1.5x/2.0x commission+slippage).
+- [x] Existing `backtest_matrix_report.py`/`risk_param_sensitivity_report.py` behavior/output is
       NOT broken by any reuse of their infrastructure (their own existing tests, if any, stay
       byte-identical unless this task's own scope explicitly extends them).
-- [ ] No threshold tuning; no pre-2026-04-24 data used for any NEW parameter choice; no SimNow
+- [x] No threshold tuning; no pre-2026-04-24 data used for any NEW parameter choice; no SimNow
       order/cancel/send path changed; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `diagnostics/run_next_work.ps1 -Preflight` passes.
 
 ## Notes for the Next Agent
 
@@ -132,6 +134,28 @@ oversized or corner-cut implementation into one handoff.
    entire A65-A69 roadmap** — after this reaches `done`, the whole third-party-audit remediation
    wave is complete.
 
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 640 passed, 4 deselected
+
+ruff check examples/czsc_strategy/diagnostics/backtest_matrix_report.py \
+           examples/czsc_strategy/diagnostics/risk_param_sensitivity_report.py \
+           examples/czsc_strategy/diagnostics/cost_sensitivity_report.py \
+           examples/czsc_strategy/tests/unit/test_a69_robustness_gates.py
+# All checks passed
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete
+```
+
 ## Decision Log
 
 - 2026-07-15 - A69 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
@@ -144,9 +168,31 @@ oversized or corner-cut implementation into one handoff.
   outputs with no gate; no re-runnable cost/slippage-sensitivity script currently exists (only
   historical one-off reports). This evidence is presented for dev's own design step to weigh, not
   as a pre-made decision.
+- 2026-07-15 (kimi-code dev design step) — Concrete implementable checks decided BEFORE code:
+  * **OOS gate:** Reuse `backtest_matrix_report.py`'s existing IS/OOS split. For each symbol,
+    compare `in_sample` and `out_sample` `total_return_pct` signs. A sign flip (one positive, one
+    negative) is flagged as an honest measurement of qualitative instability. Also report the
+    OOS/IS return ratio and OOS/IS max-drawdown ratio as supplementary sensitivity metrics. No
+    hard pass/fail threshold is invented; the gate is a measurement/reporting gate.
+  * **Parameter-perturbation gate:** Reuse `risk_param_sensitivity_report.py`'s existing variant
+    mechanism. For each symbol, compare every variant's `total_return_pct` sign against the
+    baseline. Any sign flip is flagged. Also report the maximum absolute return delta across
+    variants as a sensitivity metric. No threshold tuning; the gate is a measurement/reporting
+    gate.
+  * **Cost-sensitivity gate:** Add a new runnable script
+    `diagnostics/cost_sensitivity_report.py`. It runs the same backtest at 1.0x (baseline),
+    1.5x, and 2.0x the configured `commission_rate` + `slippage`, leveraging `BacktestEngine`'s
+    existing constructor parameters. It reports absolute and relative deltas in
+    `total_return_pct`, `max_drawdown_pct`, and `sharpe_ratio`. This is an honest measurement gate
+    (no arbitrary pass/fail threshold), matching the audit's "minimum gate" framing.
+  * Scope kept to `diagnostics/*.py` plus `tests/unit/*.py`; no `chan_strategy/*.py` trading logic
+    or SimNow order/cancel/send paths are touched. All three gates are measurement/reporting-only
+    and implemented in this single dev round because each reuses existing infrastructure with a
+    small, well-bounded addition.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A69 (OOS/perturbation/cost-sensitivity gate) promoted from third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A69 OOS/perturbation/cost-sensitivity gate implemented |

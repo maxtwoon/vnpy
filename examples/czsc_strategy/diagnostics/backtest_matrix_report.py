@@ -106,7 +106,14 @@ def _dominant_symbol(db_path: Path, table_name: str, start: str, end: str) -> st
     return str(best[0])
 
 
-def run_one(db_path: Path, symbol: str, start: str, end: str, quiet: bool = True) -> dict[str, Any]:
+def run_one(
+    db_path: Path,
+    symbol: str,
+    start: str,
+    end: str,
+    quiet: bool = True,
+    **engine_kwargs: Any,
+) -> dict[str, Any]:
     table_name = f"{symbol.lower()}_1M_raw"
     data_symbol = _dominant_symbol(db_path, table_name, start, end)
     engine = BacktestEngine(
@@ -115,6 +122,7 @@ def run_one(db_path: Path, symbol: str, start: str, end: str, quiet: bool = True
         table_name=table_name,
         start_date=start,
         end_date=end,
+        **engine_kwargs,
     )
     if quiet:
         with contextlib.redirect_stdout(io.StringIO()):
@@ -144,6 +152,48 @@ def _period_checks(report: dict[str, Any]) -> list[str]:
     if report.get("total_trades", 0) <= 0:
         issues.append("total trades empty")
     return issues
+
+
+def evaluate_oos_gate(matrix: dict[str, Any]) -> dict[str, Any]:
+    """Compare in-sample and out-of-sample reports as an honest measurement gate.
+
+    Returns, per symbol, whether the sign of ``total_return_pct`` flips between
+    ``in_sample`` and ``out_sample``, plus the return and drawdown ratios. This
+    is a measurement/reporting gate: it does not invent an arbitrary pass/fail
+    threshold.
+    """
+    results: dict[str, Any] = {}
+    for symbol, periods in matrix.get("symbols", {}).items():
+        is_report = periods.get("in_sample", {})
+        oos_report = periods.get("out_sample", {})
+        if "error" in is_report or "error" in oos_report:
+            results[symbol] = {"ok": False, "issues": ["missing is or oos report due to error"]}
+            continue
+
+        is_ret = float(is_report.get("total_return_pct", 0))
+        oos_ret = float(oos_report.get("total_return_pct", 0))
+        is_dd = float(is_report.get("max_drawdown_pct", 0))
+        oos_dd = float(oos_report.get("max_drawdown_pct", 0))
+
+        sign_flip = (is_ret >= 0 and oos_ret < 0) or (is_ret < 0 and oos_ret >= 0)
+        issues: list[str] = []
+        if sign_flip:
+            issues.append(f"IS/OOS return sign flip: IS={is_ret:.2f}%, OOS={oos_ret:.2f}%")
+
+        return_ratio = oos_ret / is_ret if is_ret != 0 else None
+        drawdown_ratio = oos_dd / is_dd if is_dd != 0 else None
+
+        results[symbol] = {
+            "ok": not sign_flip,
+            "issues": issues,
+            "is_return_pct": is_ret,
+            "oos_return_pct": oos_ret,
+            "is_max_drawdown_pct": is_dd,
+            "oos_max_drawdown_pct": oos_dd,
+            "return_ratio": return_ratio,
+            "drawdown_ratio": drawdown_ratio,
+        }
+    return results
 
 
 def build_matrix(db_path: Path, symbols: list[str], quiet: bool = True) -> dict[str, Any]:
@@ -262,6 +312,31 @@ def write_markdown(matrix: dict[str, Any], path: Path) -> None:
         for period_name, report in reports.items():
             if "error" not in report:
                 lines.extend(_sub_strategy_rows(symbol, period_name, report))
+    oos_gate = matrix.get("oos_gate", {})
+    if oos_gate:
+        lines.extend(
+            [
+                "",
+                "## 样本外（OOS）门禁",
+                "",
+                "| 品种 | 样本内收益率 | 样本外收益率 | 收益比 | 回撤比 | 状态 |",
+                "|---|---:|---:|---:|---:|---|",
+            ]
+        )
+        for symbol, gate in oos_gate.items():
+            ratio_text = _fmt_num(gate.get("return_ratio"), 2) if gate.get("return_ratio") is not None else "-"
+            dd_ratio_text = _fmt_num(gate.get("drawdown_ratio"), 2) if gate.get("drawdown_ratio") is not None else "-"
+            status = "通过" if gate["ok"] else "符号翻转：" + "; ".join(gate["issues"])
+            lines.append(
+                "| {symbol} | {is_ret} | {oos_ret} | {ratio} | {dd_ratio} | {status} |".format(
+                    symbol=symbol,
+                    is_ret=_fmt_pct(gate.get("is_return_pct", 0)),
+                    oos_ret=_fmt_pct(gate.get("oos_return_pct", 0)),
+                    ratio=ratio_text,
+                    dd_ratio=dd_ratio_text,
+                    status=status,
+                )
+            )
     lines.extend(
         [
             "",
@@ -269,6 +344,7 @@ def write_markdown(matrix: dict[str, Any], path: Path) -> None:
             "",
             "- 本报告只固化真实 DB 上的收益与交易数事实，不把收益率作为自动门禁。",
             "- 自动检查只覆盖：数据非空、回测无 error、交易K线非空、最终权益为正、至少有交易。",
+            "- 新增 OOS 门禁为 honest measurement：仅报告 IS/OOS 收益符号是否一致及比例，不设定任意阈值。",
             "- 若策略逻辑、成本、日线过滤或中枢算法再变化，本报告必须重跑。",
             "",
         ]
@@ -289,6 +365,7 @@ def main() -> None:
         raise SystemExit(f"DB not found: {args.db_path}")
 
     matrix = build_matrix(args.db_path, args.symbols, quiet=not args.verbose)
+    matrix["oos_gate"] = evaluate_oos_gate(matrix)
     args.out_json.write_text(json.dumps(_json_safe(matrix), ensure_ascii=False, indent=2), encoding="utf-8")
     write_markdown(matrix, args.out_md)
 
@@ -298,11 +375,19 @@ def main() -> None:
         for period, check in periods.items()
         if not check["ok"]
     ]
+    oos_failed = [
+        (symbol, gate["issues"])
+        for symbol, gate in matrix["oos_gate"].items()
+        if not gate["ok"]
+    ]
     print(f"wrote {args.out_json}")
     print(f"wrote {args.out_md}")
     if failed:
         for symbol, period, issues in failed:
             print(f"WARNING {symbol} {period}: {'; '.join(issues)}")
+    if oos_failed:
+        for symbol, issues in oos_failed:
+            print(f"OOS GATE {symbol}: {'; '.join(issues)}")
 
 
 if __name__ == "__main__":

@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG
-from diagnostics.backtest_matrix_report import run_one
+from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG  # noqa: E402
+from diagnostics.backtest_matrix_report import run_one  # noqa: E402
 
 
 DEFAULT_SYMBOLS = ["RB888", "SC888"]
@@ -93,7 +93,46 @@ def run_sensitivity(db_path: Path, symbols: list[str], start: str, end: str) -> 
         for name, overrides in VARIANTS.items():
             report = _run_variant(db_path, symbol, start, end, overrides)
             payload["symbols"][symbol][name] = report
+    payload["perturbation_gate"] = evaluate_perturbation_gate(payload)
     return payload
+
+
+def evaluate_perturbation_gate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check whether any parameter variant flips the sign of total return vs baseline.
+
+    This is a measurement/reporting gate: it reports sign flips and the maximum
+    absolute return delta across variants, but does not invent an arbitrary
+    pass/fail threshold.
+    """
+    results: dict[str, Any] = {}
+    for symbol, reports in payload.get("symbols", {}).items():
+        baseline_report = reports.get("baseline", {})
+        if "error" in baseline_report:
+            results[symbol] = {"ok": False, "issues": ["baseline report contains error"]}
+            continue
+
+        baseline_ret = float(baseline_report.get("total_return_pct", 0))
+        issues: list[str] = []
+        max_abs_delta: float = 0.0
+        for name, report in reports.items():
+            if name == "baseline" or "error" in report:
+                continue
+            variant_ret = float(report.get("total_return_pct", 0))
+            delta = variant_ret - baseline_ret
+            max_abs_delta = max(max_abs_delta, abs(delta))
+            sign_flip = (baseline_ret >= 0 and variant_ret < 0) or (baseline_ret < 0 and variant_ret >= 0)
+            if sign_flip:
+                issues.append(
+                    f"variant '{name}' return sign flip: baseline={baseline_ret:.2f}%, variant={variant_ret:.2f}%"
+                )
+
+        results[symbol] = {
+            "ok": not issues,
+            "issues": issues,
+            "baseline_return_pct": baseline_ret,
+            "max_abs_delta_pct": max_abs_delta,
+        }
+    return results
 
 
 def write_markdown(payload: dict[str, Any], out: Path) -> None:
@@ -128,6 +167,23 @@ def write_markdown(payload: dict[str, Any], out: Path) -> None:
                     pf=pf_text,
                 )
             )
+    gate = payload.get("perturbation_gate", {})
+    if gate:
+        lines.extend(
+            [
+                "",
+                "## 参数扰动门禁",
+                "",
+                "| 品种 | 基线收益率 | 最大绝对偏差 | 符号翻转 |",
+                "|---|---:|---:|---|",
+            ]
+        )
+        for symbol, g in gate.items():
+            flip_text = "; ".join(g["issues"]) if g["issues"] else "无"
+            lines.append(
+                f"| {symbol} | {_fmt_pct(g.get('baseline_return_pct', 0))} | "
+                f"{_fmt_pct(g.get('max_abs_delta_pct', 0))} | {flip_text} |"
+            )
     lines.extend(
         [
             "",
@@ -157,6 +213,14 @@ def main() -> None:
     write_markdown(payload, args.out_md)
     print(f"wrote {args.out_json}")
     print(f"wrote {args.out_md}")
+    failed = [
+        (symbol, gate["issues"])
+        for symbol, gate in payload.get("perturbation_gate", {}).items()
+        if not gate["ok"]
+    ]
+    if failed:
+        for symbol, issues in failed:
+            print(f"PERTURBATION GATE {symbol}: {'; '.join(issues)}")
 
 
 if __name__ == "__main__":
