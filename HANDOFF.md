@@ -1,19 +1,19 @@
 ---
 task: A73 - Rollover-Window Return Contribution Report
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a73-third-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -117,3 +117,4 @@ windows.
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A73 (rollover-window contribution report) promoted from third third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A73 rollover-window contribution report implemented |

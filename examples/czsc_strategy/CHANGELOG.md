@@ -2,6 +2,19 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.8 — 2026-07-15
+
+- A73 新增 `diagnostics/rollover_contribution_report.py` 换月窗口收益贡献单列报告。
+  - 复用 `BacktestEngine` 与 `Position.pairs` 机制，在 `rollover_stat_tagging="on"` 下运行回测，
+    按 A52 标记的 `is_rollover_window` 将已平仓交易分为换月窗口内/外两组。
+  - 每品种输出两组交易的总收益贡献、胜率、平均盈亏、交易笔数对比，以及两者总收益贡献的差值。
+  - 报告为纯测量型输出，不设置任何 pass/fail 阈值，不改动 `backtest_engine.py` 的 A52 标记逻辑、
+    既有测试或任何 SimNow 下单/撤单路径。
+  - 报告顶部包含 RESEARCH-ONLY / NOT PROMOTION EVIDENCE 横幅，符合 A54 约定。
+  - 若 `rollover_stat_tagging` 不是 `"on"`，报告明确抛出 `RuntimeError`，避免静默产出误导性全 0/空输出。
+  - 新增单测 `tests/unit/test_rollover_contribution_report.py`，使用构造的 `Position.pairs` fixture
+    验证分组与聚合逻辑，不依赖真实历史数据库。
+
 ## 0.2.7 — 2026-07-15
 
 - A72 弃用 `chan_strategy/signals.py` 中的旧 `get_all_signals()` 入口。
