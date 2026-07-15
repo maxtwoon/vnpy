@@ -1,19 +1,19 @@
 ---
 task: A67 - Limit/Halt Unexecutable-Fill Backtest Mode
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -102,6 +102,24 @@ defaulted to without comparison.
 
 ## Notes for the Next Agent
 
+(review = codex rejected 2026-07-15)
+
+Root sync gate is failing and must be fixed before this handoff can advance:
+
+- `python tools/sync_check.py` fails with:
+  `project_version_freshness[examples/czsc_strategy]: commit 4aff7e39 could not read chan_strategy/config.py`
+- Reproduction evidence: `git show 4aff7e39:chan_strategy/config.py` fails, while
+  `git show 4aff7e39:examples/czsc_strategy/chan_strategy/config.py` succeeds.
+- The child gate still passes: `python tools/sync_check.py --root examples/czsc_strategy`.
+- Targeted A67 tests pass: `python -m pytest examples/czsc_strategy/tests/unit/test_limit_halt_enforce.py -q -m "not realdb"` => `12 passed`.
+- Full unit/preflight reruns in codex still hit the documented sandbox `tmp_path` / `WinError 5`
+  limitation, so use the existing Manual Verification counts for those two acceptance items.
+
+Likely fix direction: root `project_version_freshness` path handling needs to read the
+project-rooted config from the repo-root path when using `git show`, or the root config needs an
+equivalent path convention that keeps `changed` detection and `git show` consistent. After fixing,
+rerun `python tools/sync_check.py` plus the child sync gate and targeted A67 test.
+
 (dev = kimi-code must read this before writing code)
 
 1. **Entry point:** `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A67". Third task
@@ -179,6 +197,41 @@ On the post-2026-04-24 window the report shows zero rejected fills because no te
 actually hit its daily limit band during the window — this is honest measurement, not a claim of
 no effect.
 
+## Round 2 fix (claude-code, 2026-07-15, after codex's round-1 rejection)
+
+codex's round-1 review correctly rejected on a root `sync_check.py` gate failure — but the root
+cause was NOT in A67's own strategy-logic code. Investigation found TWO real, independent bugs in
+`tools/sync_guardian/sync_check.py`'s A60-introduced `project_version_freshness` gate, both first
+triggered by A67 simply being the first post-A60 commit that actually modified `config.py`
+(A60 itself never touched `config.py`, so this code path had never actually run against real data):
+
+1. **Windows GBK decode crash, silently swallowed.** `_file_at_commit`'s `subprocess.check_output`
+   calls used `text=True` with no explicit encoding, so on Windows they decoded git's UTF-8 output
+   using the system locale (GBK/cp936) — any Python file with non-ASCII content (e.g.
+   `config.py`'s Chinese comments) raised `UnicodeDecodeError`, caught by a broad `except Exception`
+   and silently turned into a false "could not read" gate failure. Fixed by pinning
+   `encoding="utf-8", errors="replace"` on all the A60-introduced subprocess calls
+   (`_find_gate_since_commit`, `_commits_after`, `_files_changed_in_commit`, `_file_at_commit`,
+   `_first_parent`).
+2. **`ast.literal_eval` cannot parse arithmetic expressions.** `_config_surface_fingerprint` used
+   `ast.literal_eval(node.value)` to parse `STRATEGY_CONFIG`/`BACKTEST_CONFIG`'s dict literal, but
+   `config.py` has genuinely always contained non-literal numeric expressions for readability
+   (e.g. `"interval_1buy": 3600 * 24`, "one day in seconds") — `literal_eval` rejects any
+   expression node, not just unsafe ones. Fixed with a new `_safe_eval_node` helper: a
+   literal-eval superset that additionally tolerates numeric `BinOp`/`UnaryOp` (Add/Sub/Mult/Div on
+   constants only) while still rejecting anything with potential side effects (calls, names,
+   comprehensions).
+
+Both bugs are pre-existing defects in A60's own code, unrelated to A67's strategy logic — A67 was
+simply the first commit to exercise this code path against `config.py`'s real content. Added two
+regression tests to `tests/test_sync_guardian.py`
+(`test_project_version_freshness_handles_non_ascii_config_content`,
+`test_project_version_freshness_handles_arithmetic_expressions_in_config`) reproducing both bugs
+against a minimal fixture repo, both passing after the fix. Re-verified: `tests/
+test_sync_guardian.py` (14 passed), full czsc_strategy unit suite (625 passed, unchanged), A67's
+own targeted tests (12 passed), both root and child `sync_check.py` gates now PASS, `ruff check` on
+the modified file (clean), and preflight (189 passed).
+
 ## Decision Log
 
 - 2026-07-15 - A67 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
@@ -214,3 +267,4 @@ no effect.
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A67 (limit/halt enforce mode) promoted from third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-15 | kimi-code → codex | dev → review | A67 limit/halt enforce mode implemented |
+| 2026-07-15 | codex → kimi-code | review → dev | 打回: root sync_check fails on project_version_freshness config path |

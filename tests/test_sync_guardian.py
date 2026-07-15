@@ -537,3 +537,90 @@ def test_project_version_freshness_passes_when_version_or_changelog_touched(
 
     result = _sync_check(repo)
     assert result.returncode == 0, result.stderr
+
+
+def test_project_version_freshness_handles_non_ascii_config_content(fresh_repo: Path) -> None:
+    """A config.py with non-ASCII (e.g. Chinese) comments/strings must not crash the gate.
+
+    Regression test for a real bug found during A67's review: on Windows,
+    subprocess's default text-mode decoding uses the system locale (often
+    GBK/cp936), which raised UnicodeDecodeError on any UTF-8 source file
+    containing non-ASCII bytes -- silently swallowed into a false "could not
+    read" gate failure. The fix pins encoding="utf-8" on the git subprocess
+    calls that read file content.
+    """
+    repo = fresh_repo
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        project_version_freshness={
+            "project_root": ".",
+            "config_file": "config.py",
+            "watch_variables": ["STRATEGY_CONFIG", "BACKTEST_CONFIG"],
+            "version_file": "VERSION",
+            "changelog_file": "CHANGELOG.md",
+        },
+    )
+    (repo / "config.py").write_text(
+        '"""缠论择时策略配置"""\nSTRATEGY_CONFIG = {"a": 1}  # 一买仓位\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    (repo / "VERSION").write_text("0.1.0\n", encoding="utf-8")
+    (repo / "CHANGELOG.md").write_text("# 0.1.0\n\n初始版本。\n", encoding="utf-8")
+    _write_handoff(repo, "design", "designer")
+    _commit_all(repo, "add project version freshness config with Chinese comments")
+
+    (repo / "config.py").write_text(
+        '"""缠论择时策略配置"""\nSTRATEGY_CONFIG = {"a": 2}  # 一买仓位调整\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    _commit_all(repo, "change config key without versioning, non-ascii file")
+
+    result = _sync_check(repo)
+    assert result.returncode != 0
+    assert "could not read" not in result.stderr
+    assert "STRATEGY_CONFIG" in result.stderr
+
+
+def test_project_version_freshness_handles_arithmetic_expressions_in_config(
+    fresh_repo: Path,
+) -> None:
+    """A config.py dict value written as a simple arithmetic expression (e.g. ``3600 * 24``)
+    must not crash the gate's AST-based fingerprinting.
+
+    Regression test for a real bug found during A67's review: the fingerprint
+    parser used ``ast.literal_eval`` directly, which rejects any non-literal
+    expression node (including basic numeric arithmetic that real config files
+    commonly use for readability, e.g. "one day in seconds").
+    """
+    repo = fresh_repo
+    _write_synccheck_yml(
+        repo,
+        deliverables_policy=False,
+        project_version_freshness={
+            "project_root": ".",
+            "config_file": "config.py",
+            "watch_variables": ["STRATEGY_CONFIG", "BACKTEST_CONFIG"],
+            "version_file": "VERSION",
+            "changelog_file": "CHANGELOG.md",
+        },
+    )
+    (repo / "config.py").write_text(
+        'STRATEGY_CONFIG = {"interval": 3600 * 24, "a": 1}\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    (repo / "VERSION").write_text("0.1.0\n", encoding="utf-8")
+    (repo / "CHANGELOG.md").write_text("# 0.1.0\n\nInitial.\n", encoding="utf-8")
+    _write_handoff(repo, "design", "designer")
+    _commit_all(repo, "add project version freshness config with arithmetic expr")
+
+    (repo / "config.py").write_text(
+        'STRATEGY_CONFIG = {"interval": 3600 * 24, "a": 2}\nBACKTEST_CONFIG = {"start": "2023-01-01"}\n',
+        encoding="utf-8",
+    )
+    _commit_all(repo, "change config key without versioning, arithmetic expr file")
+
+    result = _sync_check(repo)
+    assert result.returncode != 0
+    assert "parse error" not in result.stderr
+    assert "STRATEGY_CONFIG" in result.stderr

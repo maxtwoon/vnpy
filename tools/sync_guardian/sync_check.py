@@ -660,13 +660,50 @@ def _repo_relative(root: Path, target: Path) -> str:
         return target.as_posix()
 
 
+_SAFE_BINOPS = {
+    ast.Add: lambda a, b: a + b,
+    ast.Sub: lambda a, b: a - b,
+    ast.Mult: lambda a, b: a * b,
+    ast.Div: lambda a, b: a / b,
+}
+
+
+def _safe_eval_node(node: ast.AST) -> Any:
+    """Evaluate a literal-ish AST node, tolerating simple numeric arithmetic.
+
+    ``ast.literal_eval`` only accepts pure literals and raises on any expression
+    node -- but real config dicts commonly write derived numeric constants as
+    small arithmetic expressions (e.g. ``3600 * 24`` for "one day in seconds").
+    This extends literal evaluation with numeric ``BinOp``/``UnaryOp`` support
+    (Add/Sub/Mult/Div on constants only) while still rejecting anything that
+    could have side effects (calls, names, comprehensions, etc.).
+    """
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_BINOPS:
+        left = _safe_eval_node(node.left)
+        right = _safe_eval_node(node.right)
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            return _SAFE_BINOPS[type(node.op)](left, right)
+        raise ValueError("non-numeric operand in config arithmetic expression")
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return -_safe_eval_node(node.operand)
+    if isinstance(node, ast.Dict):
+        return {
+            _safe_eval_node(k): _safe_eval_node(v)
+            for k, v in zip(node.keys, node.values, strict=True)
+        }
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return [_safe_eval_node(elt) for elt in node.elts]
+    return ast.literal_eval(node)
+
+
 def _config_surface_fingerprint(text: str, watch_names: list[str]) -> dict[str, str]:
     """Parse a Python file and return a JSON-normalised fingerprint for watched dicts.
 
     Only top-level assignments whose names are in ``watch_names`` are considered.
-    The value must be a literal dict (``ast.literal_eval``-safe).  The fingerprint
-    captures key additions/removals and value changes, but ignores comments or
-    formatting-only edits.
+    The value must be a dict literal, evaluated via ``_safe_eval_node`` (a
+    literal-eval superset that also tolerates simple numeric arithmetic like
+    ``3600 * 24``).  The fingerprint captures key additions/removals and value
+    changes, but ignores comments or formatting-only edits.
     """
     tree = ast.parse(text)
     result: dict[str, str] = {}
@@ -674,7 +711,7 @@ def _config_surface_fingerprint(text: str, watch_names: list[str]) -> dict[str, 
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id in watch_names:
-                    value = ast.literal_eval(node.value)
+                    value = _safe_eval_node(node.value)
                     if not isinstance(value, dict):
                         raise ValueError(f"{target.id} is not a dict literal")
                     result[target.id] = json.dumps(value, sort_keys=True, ensure_ascii=False)
@@ -691,7 +728,7 @@ def _find_gate_since_commit(root: Path, cfg_path: Path) -> str | None:
     try:
         out = subprocess.check_output(
             ["git", "log", "--reverse", "--format=%H", "-S", "project_version_freshness", "--", rel],
-            cwd=root, text=True, stderr=subprocess.DEVNULL,
+            cwd=root, text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL,
         ).strip()
     except Exception:  # noqa: BLE001
         return None
@@ -704,7 +741,7 @@ def _commits_after(root: Path, since: str) -> list[str]:
     try:
         out = subprocess.check_output(
             ["git", "log", "--reverse", "--format=%H", f"{since}..HEAD"],
-            cwd=root, text=True, stderr=subprocess.DEVNULL,
+            cwd=root, text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL,
         ).strip()
     except Exception:  # noqa: BLE001
         return []
@@ -715,7 +752,7 @@ def _files_changed_in_commit(root: Path, commit: str) -> list[str]:
     try:
         out = subprocess.check_output(
             ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],
-            cwd=root, text=True, stderr=subprocess.DEVNULL,
+            cwd=root, text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL,
         ).strip()
     except Exception:  # noqa: BLE001
         return []
@@ -723,10 +760,16 @@ def _files_changed_in_commit(root: Path, commit: str) -> list[str]:
 
 
 def _file_at_commit(root: Path, commit: str, rel_path: str) -> str | None:
+    # NOTE: explicit encoding="utf-8" is required here -- on Windows, subprocess's
+    # default text-mode decoding uses the system locale (often GBK/cp936), which
+    # raises UnicodeDecodeError on any UTF-8 source file containing non-ASCII
+    # characters (e.g. Chinese comments in config.py). That exception was
+    # previously swallowed by the broad except below, silently turning a decode
+    # failure into a false "could not read" gate failure (found by A67's review).
     try:
         return subprocess.check_output(
             ["git", "show", f"{commit}:{rel_path}"],
-            cwd=root, text=True, stderr=subprocess.DEVNULL,
+            cwd=root, text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL,
         )
     except Exception:  # noqa: BLE001
         return None
@@ -736,7 +779,7 @@ def _first_parent(root: Path, commit: str) -> str | None:
     try:
         return subprocess.check_output(
             ["git", "rev-parse", f"{commit}^"],
-            cwd=root, text=True, stderr=subprocess.DEVNULL,
+            cwd=root, text=True, encoding="utf-8", errors="replace", stderr=subprocess.DEVNULL,
         ).strip() or None
     except Exception:  # noqa: BLE001
         return None
