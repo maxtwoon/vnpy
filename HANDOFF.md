@@ -1,7 +1,7 @@
 ---
 task: A75 - Legacy Signal-Path Import Hygiene Guard Test
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-15
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a73-third-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -146,3 +146,4 @@ get_all_signals` pattern A72 introduced in `skill_build/build_mapping.py` and
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A75 (legacy signal-path import hygiene guard) promoted from third third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-15 | kimi-code → codex | dev → review | A75 legacy signal-path import hygiene guard implemented |
+| 2026-07-15 | codex → codex | review → done | A75 review accepted: guard test, version/changelog, sync gates, and scoped diff verified; unit/preflight sandbox WinError 5 matched documented limitation, using recorded independent counts |
