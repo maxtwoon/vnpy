@@ -44,7 +44,7 @@ try:
     # 与 diagnostics/signal_funnel.py 保持一致，优先用合并了买卖点的版本
     from chan_strategy.sell_signals import get_all_signals
 except ImportError:  # pragma: no cover
-    from chan_strategy.signals import get_all_signals
+    from chan_strategy.signals import get_legacy_signals as get_all_signals
 
 
 # 关注的完全分类/买卖点信号后缀（用于映射的"状态"维度）

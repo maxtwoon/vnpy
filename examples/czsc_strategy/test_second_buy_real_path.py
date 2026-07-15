@@ -16,7 +16,7 @@ from typing import List, Optional
 from czsc import CZSC
 from czsc.objects import RawBar, Freq
 
-from chan_strategy.signals import get_all_signals
+from chan_strategy.signals import get_legacy_signals
 from chan_strategy.positions import ChanTimingStrategy
 from chan_strategy.validation import SignalValidator
 
@@ -155,7 +155,7 @@ def run_strategy_over_bars(bars: List[RawBar]) -> tuple[ChanTimingStrategy, List
         czsc = CZSC(chunk)
         # 关键：必须使用策略已记录的一买锚点计算二买信号，
         # 否则 signal_second_buy 会因缺少 anchor 直接返回非二买。
-        signals = get_all_signals(czsc, freq="30分钟",
+        signals = get_legacy_signals(czsc, freq="30分钟",
                                    buy1_anchor=strategy.get_last_buy1_anchor())
         price = chunk[-1].close
         dt = chunk[-1].dt

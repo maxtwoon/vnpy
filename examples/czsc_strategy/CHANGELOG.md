@@ -2,6 +2,25 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.7 — 2026-07-15
+
+- A72 弃用 `chan_strategy/signals.py` 中的旧 `get_all_signals()` 入口。
+  - 将原函数重命名为 `get_legacy_signals()`，函数体与信号计算逻辑保持不变；
+     docstring 增加说明，指出其已被 `chan_strategy.sell_signals.get_all_signals`
+    取代。
+  - 在原 `get_all_signals` 名称保留薄包装，调用时触发 `DeprecationWarning`
+    （`stacklevel=2`）并转发到 `get_legacy_signals()`，避免破坏潜在隐藏调用方。
+  - 更新 `skill_build/build_mapping.py` 与
+    `skill_build/scripts/analyze_symbol.py` 的 `except ImportError` 回退分支，
+    改为显式导入 `get_legacy_signals`，避免在死代码回退路径触发弃用告警。
+  - 将故意测试遗留实现本身的 `tests/unit/test_remaining_coverage.py` 与
+    `test_second_buy_real_path.py` 改为调用 `get_legacy_signals()`，消除正常测试
+    运行中的告警噪音。
+  - 新增单测 `test_base_get_all_signals_emits_deprecation_warning`：断言旧入口
+    仍返回与 `get_legacy_signals()` 一致的结果，并触发 `DeprecationWarning`。
+  - 不改动 `chan_strategy/sell_signals.py`、任何 SimNow 下单/撤单路径，也不改动
+    任何信号计算逻辑；所有既有数值/结构断言保持字节级不变。
+
 ## 0.2.6 — 2026-07-15
 
 - A71 将 A69 三项测量型门禁升级为机器可判定晋级门禁。

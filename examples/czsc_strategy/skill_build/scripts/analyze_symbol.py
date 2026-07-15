@@ -58,7 +58,7 @@ from chan_strategy.zhongshu import build_zhongshu_from_bis
 try:
     from chan_strategy.sell_signals import get_all_signals
 except ImportError:  # pragma: no cover
-    from chan_strategy.signals import get_all_signals
+    from chan_strategy.signals import get_legacy_signals as get_all_signals
 
 
 # 我们对外汇报的状态维度：key 后缀 -> 输出字段名

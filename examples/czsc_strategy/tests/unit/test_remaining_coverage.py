@@ -151,8 +151,17 @@ def test_base_third_buy_edge_branches(czsc_factory, bi_factory, monkeypatch):
     assert _v(base_signals.signal_third_buy(czsc_factory(no_leave))) == "非三买"
 
 
-def test_base_get_all_signals(czsc_factory, bi_factory):
-    sigs = base_signals.get_all_signals(czsc_factory(_zbase(datetime(2024, 1, 1), bi_factory)))
+def test_base_get_legacy_signals(czsc_factory, bi_factory):
+    sigs = base_signals.get_legacy_signals(czsc_factory(_zbase(datetime(2024, 1, 1), bi_factory)))
+    assert "30分钟_D1BSP_三买阶段V260615" in sigs
+
+
+def test_base_get_all_signals_emits_deprecation_warning(czsc_factory, bi_factory):
+    c = czsc_factory(_zbase(datetime(2024, 1, 1), bi_factory))
+    with pytest.warns(DeprecationWarning, match="chan_strategy.signals.get_all_signals is deprecated"):
+        sigs = base_signals.get_all_signals(c)
+    legacy = base_signals.get_legacy_signals(c)
+    assert sigs == legacy
     assert "30分钟_D1BSP_三买阶段V260615" in sigs
 
 

@@ -14,6 +14,7 @@
 - 单级别背驰只能输出"疑似"
 - 完全分类信号必须穷尽、互斥
 """
+import warnings
 from typing import Any
 
 import numpy as np
@@ -854,8 +855,14 @@ def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: f
 # 汇总函数
 # ============================================================
 
-def get_all_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -> dict:
-    """获取所有信号的汇总字典"""
+def get_legacy_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -> dict:
+    """获取所有信号的汇总字典（遗留实现）。
+
+    .. note::
+        该函数已被 ``chan_strategy.sell_signals.get_all_signals`` 取代，保留此
+        入口仅用于兼容历史脚本。新代码应始终从 ``chan_strategy.sell_signals``
+        导入 ``get_all_signals``。
+    """
     signals = {}
     signals.update(signal_bi_direction(c, freq))
     signals.update(signal_zs_position(c, freq))
@@ -869,6 +876,22 @@ def get_all_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -
     if STRATEGY_CONFIG.get("exit_event_semantics") == "restructured":
         signals.update(signal_risk_control_recent(c, freq))
     return signals
+
+
+def get_all_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -> dict:
+    """获取所有信号的汇总字典（兼容入口）。
+
+    .. deprecated::
+        此入口已弃用，请改用 ``chan_strategy.sell_signals.get_all_signals``。
+        内部仅转发到 :func:`get_legacy_signals` 并触发 ``DeprecationWarning``。
+    """
+    warnings.warn(
+        "chan_strategy.signals.get_all_signals is deprecated; use "
+        "chan_strategy.sell_signals.get_all_signals instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_legacy_signals(c, freq=freq, buy1_anchor=buy1_anchor)
 
 
 # ============================================================

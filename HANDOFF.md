@@ -1,19 +1,19 @@
 ---
 task: A72 - Deprecate signals.py Legacy get_all_signals()
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a70-second-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -145,9 +145,40 @@ its Rationale is superseded by the correction above).
   always exists). Narrowed this task's real scope accordingly (see Background above). This
   correction is recorded here rather than by editing the design doc in place, to preserve the
   design doc as the historical record of what was believed at roadmap-creation time.
+- 2026-07-15 (claude-code independent verification, before triggering codex review) - Confirmed
+  scope was clean before committing (only A72-scoped files staged; unrelated concurrent-workstream
+  files left untouched). Read every diff: `signals.py`'s rename+wrapper is exactly as specified;
+  both `skill_build` callers' `except ImportError` fallback now names `get_legacy_signals`
+  explicitly; both test files updated correctly, including a new
+  `test_base_get_all_signals_emits_deprecation_warning` asserting `pytest.warns(DeprecationWarning)`
+  and exact result equality with `get_legacy_signals`. Confirmed the 21 pre-existing ruff errors in
+  `test_second_buy_real_path.py` (unused `typing.List`/`Optional` imports, `E702` semicolons, etc.)
+  are unchanged before/after this diff — not a regression introduced here. Re-ran everything
+  independently: full unit suite `666 passed, 4 deselected`; both `sync_check.py` gates passed;
+  `run_next_work.ps1 -Preflight` passed.
+
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 666 passed, 4 deselected
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete
+
+python -c "import test_second_buy_real_path"  # (from examples/czsc_strategy/) confirms rename didn't break import
+# OK
+```
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A72 (signals.py legacy get_all_signals deprecation) promoted from second third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A72 signals.py legacy get_all_signals deprecation implemented |
