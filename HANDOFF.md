@@ -56,22 +56,22 @@ summarizes it).
 
 ## Acceptance Criteria
 
-- [ ] `formal_evaluation_config()` additionally overrides `STRATEGY_CONFIG["stop_execution_model"]`
+- [x] `formal_evaluation_config()` additionally overrides `STRATEGY_CONFIG["stop_execution_model"]`
       to `"intrabar"` and restores the original value afterward, including when the wrapped code
       raises an exception — proven by a dedicated test (following the same pattern as A74's
       `test_formal_evaluation_config_restores_original_values_on_exception` and A76's equivalent).
-- [ ] A test proves `run_formal_evaluation()`'s reported `stop_execution_model` is `"intrabar"`
+- [x] A test proves `run_formal_evaluation()`'s reported `stop_execution_model` is `"intrabar"`
       during the run.
-- [ ] A new reusable guard function exists that raises when given a report dict with
+- [x] A new reusable guard function exists that raises when given a report dict with
       `mode_label == "RESEARCH_BASELINE"`, and does NOT raise for any other `mode_label` value.
       Tests cover both cases.
-- [ ] No changes to the non-formal-evaluation default path's behavior — all existing tests pass
+- [x] No changes to the non-formal-evaluation default path's behavior — all existing tests pass
       unmodified, no numeric assertions change.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] VERSION/CHANGELOG bumped.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] VERSION/CHANGELOG bumped.
 
 ## Notes for the Next Agent
 
@@ -106,6 +106,17 @@ summarizes it).
    standing instruction (see A76's original Background for the full "keep iterating until score >
    75, no medium+ issues" instruction).
 
+## Manual Verification
+
+Natively-run acceptance results (current working tree):
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **702 passed, 4 deselected**.
+- `python tools/sync_check.py` → **PASS** (vnpy version 4.4.0).
+- `python tools/sync_check.py --root examples/czsc_strategy` → **PASS** (czsc_strategy VERSION file consistent with CHANGELOG).
+- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → **191 passed**; live capture not requested.
+- `ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/tests/unit/test_formal_evaluation.py` → **All checks passed**.
+  - Note: `ruff check .` across the whole repository reports many pre-existing lint issues in unrelated local files (`docs/chanlunnew/`, `examples/czsc_strategy/_debug_zs.py`, notebooks, etc.); the A78-scoped files are clean.
+
 ## Decision Log
 
 - 2026-07-16 - A78 promoted from `docs/design/a76-fourth-audit-remediation-roadmap.md`'s draft to
@@ -113,6 +124,12 @@ summarizes it).
   audit-remediation roadmap.
 - 2026-07-16 (claude-code pre-promotion research) - Confirmed `stop_execution_model` default is
   `"close"` in `config.py:63`, with `"intrabar"` behavior gated in `positions.py:886`/`:901`.
+- 2026-07-16 (kimi-code dev) - Implemented A78: added `stop_execution_model="intrabar"` to
+  `formal_evaluation_config()` (save/restore on both success and exception paths); added
+  `assert_not_research_baseline(report: dict)` guard in the same module so the formal-evaluation
+  surface stays together; extended `tests/unit/test_formal_evaluation.py` to cover the override,
+  restore, entry-point report field, and guard behavior; bumped `examples/czsc_strategy/VERSION` and
+  recorded the change in `CHANGELOG.md`. No SimNow order/cancel/send paths were touched; no threshold tuning.
 
 ## 交接历史
 

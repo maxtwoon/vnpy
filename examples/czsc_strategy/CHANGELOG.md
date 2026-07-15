@@ -2,6 +2,21 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.13 — 2026-07-16
+
+- A78 正式评估默认改为 intrabar 止损执行模型，并新增 RESEARCH_BASELINE 消费护栏函数。
+  - `chan_strategy/backtest_engine.py` 的 `formal_evaluation_config()` 在正式评估期间额外临时覆盖
+    `STRATEGY_CONFIG["stop_execution_model"] = "intrabar"`，运行结束后（含异常路径）无条件恢复原始值；
+    与已有的 `sizing_model="risk"`、`limit_halt_model="enforce"`、`rollover_open_gating="on"` 共同构成
+    正式评估四覆盖。
+  - 新增可复用护栏函数 `assert_not_research_baseline(report: dict)`：当 `report.get("mode_label") ==
+    "RESEARCH_BASELINE"` 时抛出 `ValueError`，供未来任何晋级/acceptance 逻辑在消费报告前调用；本任务
+    不改造现有 SimNow 晋级判定脚本。
+  - 新增/扩展单测 `tests/unit/test_formal_evaluation.py`：验证 `stop_execution_model` 覆盖生效、成功/异常
+    后恢复、非默认原始值保留、入口函数 `run_formal_evaluation()` 内报告字段为 `"intrabar"`，并覆盖护栏
+    函数对 `"RESEARCH_BASELINE"` 抛出、对其他标签/空 dict 不抛出的行为；不依赖真实历史数据库。
+  - 未修改 `chan_strategy/config.py` 默认字典，未改动非正式评估默认路径的任何既有测试断言。
+
 ## 0.2.12 — 2026-07-16
 
 - A77 修复文档漂移：README `limit_halt_model` 与 verdict 层 docstring 说明。

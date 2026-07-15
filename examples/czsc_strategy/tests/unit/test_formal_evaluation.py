@@ -13,6 +13,7 @@ import pytest
 
 from chan_strategy.backtest_engine import (
     BacktestEngine,
+    assert_not_research_baseline,
     formal_evaluation_config,
     run_formal_evaluation,
 )
@@ -35,17 +36,20 @@ def test_formal_evaluation_config_sets_risk_enforce_and_rollover_gating():
     STRATEGY_CONFIG["sizing_model"] = "research"
     STRATEGY_CONFIG["limit_halt_model"] = "off"
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
+    STRATEGY_CONFIG["stop_execution_model"] = "close"
 
     with formal_evaluation_config():
         assert STRATEGY_CONFIG["sizing_model"] == "risk"
         assert STRATEGY_CONFIG["limit_halt_model"] == "enforce"
         assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
+        assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
 
 
 def test_formal_evaluation_config_restores_original_values_on_success():
     STRATEGY_CONFIG["sizing_model"] = "research"
     STRATEGY_CONFIG["limit_halt_model"] = "off"
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
+    STRATEGY_CONFIG["stop_execution_model"] = "close"
 
     with formal_evaluation_config():
         pass
@@ -53,12 +57,14 @@ def test_formal_evaluation_config_restores_original_values_on_success():
     assert STRATEGY_CONFIG["sizing_model"] == "research"
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
+    assert STRATEGY_CONFIG["stop_execution_model"] == "close"
 
 
 def test_formal_evaluation_config_restores_original_values_on_exception():
     STRATEGY_CONFIG["sizing_model"] = "research"
     STRATEGY_CONFIG["limit_halt_model"] = "off"
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
+    STRATEGY_CONFIG["stop_execution_model"] = "close"
 
     class CustomError(Exception):
         pass
@@ -68,11 +74,13 @@ def test_formal_evaluation_config_restores_original_values_on_exception():
             assert STRATEGY_CONFIG["sizing_model"] == "risk"
             assert STRATEGY_CONFIG["limit_halt_model"] == "enforce"
             assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
+            assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
             raise CustomError("boom")
 
     assert STRATEGY_CONFIG["sizing_model"] == "research"
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
+    assert STRATEGY_CONFIG["stop_execution_model"] == "close"
 
 
 def test_formal_evaluation_config_restores_non_default_original_values():
@@ -80,15 +88,18 @@ def test_formal_evaluation_config_restores_non_default_original_values():
     STRATEGY_CONFIG["sizing_model"] = "risk"
     STRATEGY_CONFIG["limit_halt_model"] = "aware"
     STRATEGY_CONFIG["rollover_open_gating"] = "on"
+    STRATEGY_CONFIG["stop_execution_model"] = "intrabar"
 
     with formal_evaluation_config():
         assert STRATEGY_CONFIG["sizing_model"] == "risk"
         assert STRATEGY_CONFIG["limit_halt_model"] == "enforce"
         assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
+        assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
 
     assert STRATEGY_CONFIG["sizing_model"] == "risk"
     assert STRATEGY_CONFIG["limit_halt_model"] == "aware"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
+    assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
 
 
 # --------------------------------------------------------------- entry point behavior
@@ -103,6 +114,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
             "sizing_model": STRATEGY_CONFIG.get("sizing_model"),
             "limit_halt_model": STRATEGY_CONFIG.get("limit_halt_model"),
             "rollover_open_gating": STRATEGY_CONFIG.get("rollover_open_gating"),
+            "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model"),
         })
         return {
             "symbol": self.symbol,
@@ -121,6 +133,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
     assert STRATEGY_CONFIG["sizing_model"] == "research"
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
+    assert STRATEGY_CONFIG["stop_execution_model"] == "close"
 
     report = run_formal_evaluation("AP888", table_name="ap888_1M_raw")
 
@@ -129,6 +142,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
     assert seen[0]["sizing_model"] == "risk"
     assert seen[0]["limit_halt_model"] == "enforce"
     assert seen[0]["rollover_open_gating"] == "on"
+    assert seen[0]["stop_execution_model"] == "intrabar"
 
     # The entry point returns the report from run_single_backtest.
     assert report["symbol"] == "AP888"
@@ -137,6 +151,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
     assert STRATEGY_CONFIG["sizing_model"] == "research"
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
+    assert STRATEGY_CONFIG["stop_execution_model"] == "close"
 
 
 def test_run_formal_evaluation_mode_label_is_non_baseline(monkeypatch):
@@ -166,6 +181,22 @@ def test_run_formal_evaluation_mode_label_is_non_baseline(monkeypatch):
 
     assert report["sizing_model"] == "risk"
     assert report["limit_halt_model"] == "enforce"
+    assert report["stop_execution_model"] == "intrabar"
     assert report["mode_label"] == (
         "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,rollover_open_gating=on)"
     )
+
+
+# --------------------------------------------------------------- research-baseline guard
+
+
+def test_assert_not_research_baseline_raises_on_research_baseline():
+    with pytest.raises(ValueError):
+        assert_not_research_baseline({"mode_label": "RESEARCH_BASELINE"})
+
+
+def test_assert_not_research_baseline_passes_on_other_labels():
+    assert_not_research_baseline({"mode_label": "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk)"})
+    assert_not_research_baseline({"mode_label": "FORMAL_EVALUATION"})
+    assert_not_research_baseline({"mode_label": ""})
+    assert_not_research_baseline({})

@@ -54,20 +54,28 @@ def formal_evaluation_config():
     """Temporarily override STRATEGY_CONFIG for a formal-evaluation run.
 
     Formal evaluation uses real contract-multiplier/margin-constrained sizing
-    (``sizing_model="risk"``) and rejects fills at unexecutable limit/halt
-    bands (``limit_halt_model="enforce"``). The original config values are
-    saved and restored on exit, including when the wrapped code raises.
+    (``sizing_model="risk"``), rejects fills at unexecutable limit/halt
+    bands (``limit_halt_model="enforce"``), blocks new opens inside rollover
+    windows (``rollover_open_gating="on"``), and checks stop-loss against bar
+    extremes (``stop_execution_model="intrabar"``). The original config values
+    are saved and restored on exit, including when the wrapped code raises.
 
     This intentionally mutates the shared ``STRATEGY_CONFIG`` dict because
     ``BacktestEngine`` reads these knobs directly from the module-level dict
     at multiple points at runtime; there is no per-instance constructor
     parameter to override them.
     """
-    keys = ("sizing_model", "limit_halt_model", "rollover_open_gating")
+    keys = (
+        "sizing_model",
+        "limit_halt_model",
+        "rollover_open_gating",
+        "stop_execution_model",
+    )
     overrides = {
         "sizing_model": "risk",
         "limit_halt_model": "enforce",
         "rollover_open_gating": "on",
+        "stop_execution_model": "intrabar",
     }
     saved: dict[str, str] = {}
     for key in keys:
@@ -138,6 +146,23 @@ def _compute_mode_label(
         return "RESEARCH_BASELINE"
     parts = [f"{defaults[dim][0]}={value}" for dim, value in deviations]
     return f"PARTIAL_PRODUCTION_FEATURES({','.join(parts)})"
+
+
+def assert_not_research_baseline(report: dict) -> None:
+    """Raise if ``report`` is labeled as a research-baseline result.
+
+    Future promotion/acceptance logic should call this guard before treating
+    any backtest report as production-tradable evidence. Reports whose
+    ``mode_label`` equals ``"RESEARCH_BASELINE"`` are research outputs only
+    and must not be consumed as formal evaluation results.
+
+    :raises ValueError: if ``report.get("mode_label") == "RESEARCH_BASELINE"``.
+    """
+    if report.get("mode_label") == "RESEARCH_BASELINE":
+        raise ValueError(
+            "Report is labeled RESEARCH_BASELINE and cannot be consumed as "
+            "production-tradable or promotion evidence."
+        )
 
 
 class BacktestEngine:
