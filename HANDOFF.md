@@ -1,134 +1,125 @@
 ---
-task: A64 - Run-Summary promotion Sub-Section: Carry Window-Filter Metadata
+task: A65 - Fix Failing Test + Harden capture_window Against Missing Capture Metadata
 version: 4.4.0
-stage: done
-owner: codex
-updated: 2026-07-14
+stage: dev
+owner: kimi-code
+updated: 2026-07-15
 deliverables:
   - HANDOFF.md
-  - docs/design/a61-simnow-observation-window-hardening.md
+  - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Fourth and final task of the 2026-07-14 SimNow-observation-window-hardening roadmap
-(`docs/design/a61-simnow-observation-window-hardening.md` §"A64"), promoted immediately after A63
-reached `done` (codex accepted on the first review round). Completing this task finishes the entire
-A61-A64 roadmap.
+First task of the 2026-07-14 third-party-audit remediation roadmap
+(`docs/design/a65-third-party-audit-remediation-roadmap.md` §"A65"), started immediately after the
+roadmap was designed (per the user's explicit choice to follow the audit's own priority order in
+full).
 
-**Finding #4 (re-verified 2026-07-14 by claude-code, exact function/field names confirmed by direct
-read, per the design doc's own requirement not to guess):** `simnow_run_summary.py`'s
-`build_run_summary` function (lines 230-271) builds a `"promotion"` sub-section (lines 263-269)
-from its `promotion_summary` parameter — which is populated at the CLI entry point (line 324) by
-`decide_promotion(ledger_records, observation_start_date=start_date)`, imported from
-`simnow_promotion_decision.py`. `decide_promotion`'s own output dict already carries
-`observation_start_date`/`excluded_before_start_count` (confirmed present in that module's
-`write_report`/summary-building logic, consumed by the A63-fixed daily brief via the separate
-`ledger_summary` path). But `build_run_summary`'s `"promotion"` sub-section only copies 5 specific
-fields from `promotion_summary` — `ready_to_expand`, `valid_observation_days`, `observed_days`,
-`promotion_blockers`, `top_blocking_actions` — and does NOT include
-`observation_start_date`/`excluded_before_start_count`, even though `promotion_summary` (the
-`decide_promotion` return value) already has them available. A future agent reading only the
-narrower `promotion` sub-section (a plausible read, since it most directly answers "can we promote
-yet") could lose the window basis entirely and misinterpret `valid_observation_days` counts without
-knowing they already exclude pre-window rows — the `ledger_summary` sub-section (fixed by A63) has
-this context, but `promotion` does not.
+**Re-verified 2026-07-15 by claude-code, still failing, line numbers unchanged:**
+`python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` produces
+`1 failed, 610 passed, 4 deselected`. The failure:
+`test_simnow_consistency_source.py::test_build_strategy_surface_from_captured_session_uses_real_
+callbacks` raises `KeyError: 'started_at'` inside `simnow_strategy_surface.py:40`'s
+`capture_window` function, called unconditionally from `build_strategy_surface_from_captured_
+session` at line 157.
 
-Full contract: `docs/design/a61-simnow-observation-window-hardening.md` §"A64 — Run-Summary
-`promotion` Sub-Section: Carry Window-Filter Metadata" (the authoritative design — this HANDOFF
-summarizes it).
+**Root cause (confirmed via `git log`/`git show`):** this call to `capture_window` was added by a
+separate, PARALLEL commit (`fb18b45e`, "A35: add optional historical DB auto-update to SimNow
+observation wrapper") — this is NOT related to this session's own A61-A64 work (which touched
+`simnow_strategy_surface.py`'s `build_strategy_surface_from_captured_session` for a different
+reason — the workflow-owned symbol filter). The `fb18b45e` commit added `window_start`/
+`window_end` fields to the captured-session surface's `meta`, but did not update the
+`test_simnow_consistency_source.py` fixture (dating to A41, well before `fb18b45e`), which
+constructs a capture dict with no `meta` key at all. Confirmed via direct read of
+`simnow_daily_capture.py` that PRODUCTION captures always populate `started_at`/`ended_at` — this
+is a test/robustness gap, not a live-capture risk, but it currently blocks a clean test run.
+
+Full contract: `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A65 — Fix Failing Test
++ Harden `capture_window` Against Missing Capture Metadata" (the authoritative design — this
+HANDOFF summarizes it).
 
 ## Goal
 
-Add `observation_start_date`/`excluded_before_start_count` to `build_run_summary`'s `"promotion"`
-sub-section (lines 263-269), sourced from the same `promotion` (i.e. `promotion_summary`) dict
-already available in that function — no new parameter, no new config key, purely additive metadata
-propagation mirroring the existing `_safe_ledger_summary` pattern's spirit (copy known-safe fields
-from an already-available dict).
+Make `capture_window` (and/or its caller `build_strategy_surface_from_captured_session`) tolerant
+of missing `started_at`/`ended_at` — either (a) `capture_window` returns a sentinel (e.g.
+`("", "")` or `(None, None)`) when either key is absent, with callers treating that as "window
+unavailable," or (b) `build_strategy_surface_from_captured_session` catches the missing-key case
+explicitly and omits `window_start`/`window_end` from its `meta` output. Pick whichever keeps
+`build_strategy_surface_from_capture` (the OTHER, older caller at line 65, which this task must
+NOT change the behavior of) unaffected. Additionally, decide whether
+`test_simnow_consistency_source.py`'s fixture should be updated to include `started_at`/
+`ended_at` (matching real production captures) in addition to, or instead of, making the function
+more tolerant.
 
 ## Acceptance Criteria
 
-- [x] A fixture `promotion_summary` (i.e. what `decide_promotion` would return) with
-      `observation_start_date`/`excluded_before_start_count` set produces a `build_run_summary`
-      output whose `"promotion"` sub-section also carries them (unit-tested).
-- [x] Existing run-summary tests pass byte-identical for their existing assertions.
-- [x] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes with ZERO
+      failures (currently `1 failed, 610 passed, 4 deselected`).
+- [ ] `build_strategy_surface_from_capture`'s (the pre-existing caller) own tests remain
+      byte-identical — this task must not change its behavior.
+- [ ] A fixture proves `capture_window`/`build_strategy_surface_from_captured_session` handles
+      missing `started_at`/`ended_at` gracefully (no crash), with the chosen semantic (sentinel
+      value or graceful omission) explicitly asserted.
+- [ ] No threshold tuning; no pre-2026-04-24 data; no SimNow order/cancel/send path changed; no
       `GOAL PASSED`.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a61-simnow-observation-window-hardening.md` §"A64". Fourth and
-   FINAL task of the A61-A64 roadmap — completing this closes out the entire
-   SimNow-observation-window-hardening wave.
-2. **Scope:** `examples/czsc_strategy/diagnostics/simnow_run_summary.py`'s `build_run_summary`
-   function only (the `"promotion"` dict literal at lines 263-269). Do not touch
-   `simnow_promotion_decision.py`/`decide_promotion` (already correct — it already produces these
-   fields; this task only widens what `build_run_summary` copies from it),
-   `simnow_daily_brief.py`/`ledger_summary` (already fixed by A63, separate path), `chan_strategy/
-   *.py`, or any SimNow order/cancel/send path.
-3. **Exact field names confirmed by direct read** (per this roadmap's own standing instruction not
-   to guess): the function is `build_run_summary` (not some other name), the sub-section key is
-   literally `"promotion"`, and the source is the `promotion` local variable (from the
-   `promotion_summary` parameter, defaulting to `{}`). Add
-   `promotion.get("observation_start_date", "")`/`promotion.get("excluded_before_start_count", 0)`
-   (or similar sensible defaults matching the existing fields' style in that same dict literal).
-4. **Test file:** `tests/unit/test_simnow_run_summary.py` already exists — add cases there, do not
-   create a duplicate.
+1. **Entry point:** `docs/design/a65-third-party-audit-remediation-roadmap.md` §"A65". First task
+   of a new 5-task roadmap (A65-A69) triaging the 2026-07-14 third-party audit's findings — read
+   the design doc's Background for the full picture, including why this bug is unrelated to this
+   session's own A61-A64 work.
+2. **Scope:** `examples/czsc_strategy/diagnostics/simnow_strategy_surface.py` (`capture_window`
+   and/or `build_strategy_surface_from_captured_session`) and
+   `examples/czsc_strategy/tests/unit/test_simnow_consistency_source.py`. Do not touch the other
+   changes from the parallel `fb18b45e` commit (`run_next_work.ps1`,
+   `simnow_run_summary.py`'s historical-DB-auto-update feature, etc.) beyond what's needed to fix
+   this one `KeyError` — this task is scoped to the test failure only.
+3. **Two callers of `capture_window`, only one should change behavior:**
+   `build_strategy_surface_from_capture` (line 65, pre-existing since A41-era work, its own tests
+   must stay byte-identical) and `build_strategy_surface_from_captured_session` (line 157, where
+   `fb18b45e` added the new, unguarded call). Whatever fix you choose must not alter the first
+   caller's behavior.
+4. **Don't silently paper over a genuinely-missing-metadata case in production** — if you choose
+   the "return a sentinel" approach, make sure "unavailable" is genuinely distinguishable from a
+   real window, not defaulted to a fake-but-plausible-looking value.
 5. **Guardrails (reject-on-violation):** no threshold tuning; no pre-2026-04-24 data; no SimNow
-   order/cancel/send paths touched; no `GOAL PASSED`; existing run-summary tests' assertions must
-   stay byte-identical (purely additive fields, not a reformat of existing ones).
+   order/cancel/send paths touched; no `GOAL PASSED`; `build_strategy_surface_from_capture`'s
+   existing tests must stay byte-identical.
 6. **Include a Manual-verification block with natively-run counts, and run `ruff check`
-   proactively before finishing** — please do NOT omit this section; most tasks in this roadmap
-   (A61, A63) omitted it in their first dev round, needing claude-code to add it before review —
-   A62 included it proactively and it helped nothing go unnoticed there either way, but including it
-   yourself still saves a round-trip on the mechanical side.
+   proactively before finishing** — this consistently correlates with one-round review acceptance.
 7. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A64 run-summary promotion window metadata implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`. **This is the last task in the
-   roadmap** — after this reaches `done`, the entire A61-A64 wave is complete.
-
-## Manual Verification (dev — natively-run counts)
-
-All acceptance commands run from `D:\repo\vnpy` on 2026-07-14 by kimi-code:
-
-- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → **598 passed, 4 deselected**.
-- `python tools/sync_check.py` → **PASS** (root gate version 4.4.0 consistent).
-- `python tools/sync_check.py --root examples/czsc_strategy` → **PASS** (czsc_strategy sub-project gate consistent).
-- `powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → **Preflight complete; live SimNow capture was not requested** (176 passed in preflight unit-test subset).
-- `ruff check examples/czsc_strategy/diagnostics/simnow_run_summary.py examples/czsc_strategy/tests/unit/test_simnow_run_summary.py` → **All checks passed!**
-
-Code changes: purely additive propagation of `observation_start_date` and `excluded_before_start_count` into `build_run_summary`'s `"promotion"` sub-section; no thresholds, no pre-2026-04-24 data, no SimNow order/cancel/send paths touched, no `GOAL PASSED`.
+   `python tools/handoff.py next --actor kimi-code --summary "A65 capture_window hardening + test fix implemented"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
 ## Decision Log
 
-- 2026-07-14 - A64 promoted from `docs/design/a61-simnow-observation-window-hardening.md`'s draft to
-  an active HANDOFF task, started immediately after A63 reached `done` (codex accepted on the first
-  review round). This is the final task of the A61-A64 roadmap.
-- 2026-07-14 - claude-code confirmed the exact function/field names by direct read (per the design
-  doc's own instruction not to guess): `build_run_summary` (`simnow_run_summary.py:230-271`)
-  produces the `"promotion"` sub-section (lines 263-269) from its `promotion` local variable
-  (sourced from `promotion_summary`, populated at the CLI entry point by `decide_promotion` from
-  `simnow_promotion_decision.py`). The sub-section currently copies only 5 fields, omitting
-  `observation_start_date`/`excluded_before_start_count` which `decide_promotion`'s own output
-  already carries.
+- 2026-07-15 - A65 promoted from `docs/design/a65-third-party-audit-remediation-roadmap.md`'s
+  draft to an active HANDOFF task, started immediately after the roadmap was designed. First task
+  of the A65-A69 third-party-audit remediation wave, per the user's explicit choice to follow the
+  audit's own priority order in full.
+- 2026-07-15 - claude-code re-verified the test failure is still present and line numbers
+  unchanged: `simnow_strategy_surface.py:40`'s `capture_window`, called unconditionally from
+  `build_strategy_surface_from_captured_session:157` (added by the unrelated, parallel `fb18b45e`
+  commit), raises `KeyError` against `test_simnow_consistency_source.py`'s pre-`fb18b45e` fixture.
+  Confirmed via `simnow_daily_capture.py` that production captures always populate the required
+  fields — this is a test/robustness gap, not a live-capture risk.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-14 | codex → claude-code | done → dev | A64 (run-summary promotion window metadata) promoted from SimNow-observation-window-hardening roadmap; handoff design->dev |
-| 2026-07-14 | kimi-code → codex | dev → review | A64 run-summary promotion window metadata implemented |
-| 2026-07-14 | codex → codex | review → done | A64 review accepted: promotion window metadata propagation verified; sync gates and ruff pass; pytest/preflight sandbox failures match documented WinError 5 tmp_path limitation, using recorded native counts |
+| 2026-07-15 | codex → claude-code | done → dev | A65 (fix failing test + harden capture_window) promoted from third-party audit remediation roadmap; handoff design->dev |
