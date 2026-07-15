@@ -130,6 +130,15 @@ Natively-run acceptance results (current working tree):
   surface stays together; extended `tests/unit/test_formal_evaluation.py` to cover the override,
   restore, entry-point report field, and guard behavior; bumped `examples/czsc_strategy/VERSION` and
   recorded the change in `CHANGELOG.md`. No SimNow order/cancel/send paths were touched; no threshold tuning.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full diff: `formal_evaluation_config()`'s keys/overrides tuples both extended consistently with
+  the existing pattern; `assert_not_research_baseline()` is a simple, correct guard. Confirmed
+  `stop_execution_model` was already present in `generate_report()`'s output dict (from before
+  A70), so the new test assertion on `report["stop_execution_model"]` needed no additional wiring.
+  Re-ran everything independently, matching kimi-code's recorded counts exactly: full unit suite
+  `702 passed, 4 deselected`; `ruff check` clean; both `sync_check.py` gates passed;
+  `run_next_work.ps1 -Preflight` passed. Scope was clean (only A78-scoped files committed by
+  kimi-code, unrelated concurrent-workstream files untouched).
 
 ## 交接历史
 
