@@ -1,7 +1,7 @@
 ---
 task: A73 - Rollover-Window Return Contribution Report
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-15
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a73-third-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -136,3 +136,4 @@ windows.
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A73 (rollover-window contribution report) promoted from third third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-15 | kimi-code → codex | dev → review | A73 rollover-window contribution report implemented |
+| 2026-07-15 | codex → codex | review → done | A73 review accepted; implementation, guardrails, sync gates, and recorded manual unit/preflight verification satisfy acceptance criteria |
