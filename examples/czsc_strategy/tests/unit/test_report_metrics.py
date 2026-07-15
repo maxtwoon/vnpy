@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 
@@ -90,3 +89,113 @@ def test_generate_report_sizing_caveat_is_none_for_risk():
             STRATEGY_CONFIG.pop("sizing_model", None)
         else:
             STRATEGY_CONFIG["sizing_model"] = saved
+
+
+def _set_config_keys(STRATEGY_CONFIG, overrides):
+    saved = {}
+    for key, value in overrides.items():
+        saved[key] = STRATEGY_CONFIG.get(key)
+        STRATEGY_CONFIG[key] = value
+    return saved
+
+
+def _restore_config_keys(STRATEGY_CONFIG, saved):
+    for key, value in saved.items():
+        if value is None:
+            STRATEGY_CONFIG.pop(key, None)
+        else:
+            STRATEGY_CONFIG[key] = value
+
+
+def test_generate_report_mode_label_research_baseline():
+    from chan_strategy.config import STRATEGY_CONFIG
+
+    saved = _set_config_keys(
+        STRATEGY_CONFIG,
+        {"sizing_model": "research", "limit_halt_model": "off", "portfolio_risk": "off"},
+    )
+    try:
+        engine = BacktestEngine("T", initial_capital=1000)
+        engine.equity_curve = [{"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0}]
+        engine.strategy = FakeStrategy([])
+        report = engine.generate_report()
+        assert report["mode_label"] == "RESEARCH_BASELINE"
+        assert report["limit_halt_model"] == "off"
+        assert report["portfolio_risk"] == "off"
+    finally:
+        _restore_config_keys(STRATEGY_CONFIG, saved)
+
+
+@pytest.mark.parametrize(
+    "overrides,expected_label",
+    [
+        ({"sizing_model": "risk"}, "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk)"),
+        ({"limit_halt_model": "enforce"}, "PARTIAL_PRODUCTION_FEATURES(limit_halt_model=enforce)"),
+        ({"portfolio_risk": "on"}, "PARTIAL_PRODUCTION_FEATURES(portfolio_risk=on)"),
+        (
+            {"sizing_model": "risk", "limit_halt_model": "enforce"},
+            "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce)",
+        ),
+        (
+            {"sizing_model": "risk", "portfolio_risk": "on"},
+            "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,portfolio_risk=on)",
+        ),
+        (
+            {"limit_halt_model": "aware", "portfolio_risk": "on"},
+            "PARTIAL_PRODUCTION_FEATURES(limit_halt_model=aware,portfolio_risk=on)",
+        ),
+        (
+            {"sizing_model": "risk", "limit_halt_model": "enforce", "portfolio_risk": "on"},
+            "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,portfolio_risk=on)",
+        ),
+    ],
+)
+def test_generate_report_mode_label_names_deviating_dimensions(overrides, expected_label):
+    from chan_strategy.config import STRATEGY_CONFIG
+
+    saved = _set_config_keys(STRATEGY_CONFIG, overrides)
+    try:
+        engine = BacktestEngine("T", initial_capital=1000)
+        engine.equity_curve = [{"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0}]
+        engine.strategy = FakeStrategy([])
+        report = engine.generate_report()
+        assert report["mode_label"] == expected_label
+    finally:
+        _restore_config_keys(STRATEGY_CONFIG, saved)
+
+
+def test_print_report_shows_mode_label_and_research_baseline_disclaimer(capsys):
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.equity_curve = [{"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0}]
+    engine.strategy = FakeStrategy([])
+    report = engine.generate_report()
+    engine.print_report(report)
+    out = capsys.readouterr().out
+    assert "模式标签: RESEARCH_BASELINE" in out
+    assert "本报告为 RESEARCH_BASELINE（研究基线），不构成生产/可交易证据" in out
+
+
+def test_print_report_shows_non_baseline_mode_label(capsys):
+    from chan_strategy.config import STRATEGY_CONFIG
+
+    saved = _set_config_keys(STRATEGY_CONFIG, {"sizing_model": "risk"})
+    try:
+        engine = BacktestEngine("T", initial_capital=1000)
+        engine.equity_curve = [
+            {
+                "dt": datetime(2024, 1, 1),
+                "equity": 1000,
+                "price": 1,
+                "positions": 0,
+                "total_open_margin": 0.0,
+                "margin_utilization_pct": 0.0,
+            }
+        ]
+        engine.strategy = FakeStrategy([])
+        report = engine.generate_report()
+        engine.print_report(report)
+        out = capsys.readouterr().out
+        assert "模式标签: PARTIAL_PRODUCTION_FEATURES(sizing_model=risk)" in out
+        assert "RESEARCH_BASELINE" not in out
+    finally:
+        _restore_config_keys(STRATEGY_CONFIG, saved)

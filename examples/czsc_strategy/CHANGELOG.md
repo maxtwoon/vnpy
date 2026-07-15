@@ -2,6 +2,20 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.5 — 2026-07-15
+
+- A70 默认回测报告强制标注 research/off 模式标签。
+  - `chan_strategy/backtest_engine.py` 的 `generate_report()` 新增 `mode_label` 与 `limit_halt_model` 字段；
+    `mode_label` 在纯默认配置（`sizing_model="research"`、`limit_halt_model="off"`、`portfolio_risk="off"`）下为
+    `"RESEARCH_BASELINE"`，任一维度偏离时显式命名该维度及当前值（如
+    `PARTIAL_PRODUCTION_FEATURES(sizing_model=risk)`）。
+  - `print_report()` 在报告最顶部打印 `mode_label`；当为 `"RESEARCH_BASELINE"` 时额外打印醒目免责提示：
+    "本报告为 RESEARCH_BASELINE（研究基线），不构成生产/可交易证据"。
+  - 新增单测覆盖全默认、各维度单独偏离及多维度组合偏离情形，断言 `generate_report()` 返回字典与
+    `print_report()` 的 stdout 输出。
+  - 不改动任何既有回测数值输出（`total_return_pct`、`sharpe_ratio` 等），不影响 SimNow 下单/撤单路径，
+    不涉及参数调优。
+
 ## 0.2.4 — 2026-07-15
 
 - A67 新增 `limit_halt_model="enforce"`（涨跌停/停牌不可成交回测模式）。

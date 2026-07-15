@@ -68,6 +68,39 @@ def _apply_symbol_position_overrides(pos_weights: dict[str, float], symbol: str)
     return updated
 
 
+def _compute_mode_label(
+    sizing_model: str,
+    limit_halt_model: str,
+    portfolio_risk: str,
+) -> str:
+    """Compute the backtest mode label from execution/risk config knobs.
+
+    The pure-default configuration (research sizing + limit/halt off +
+    portfolio risk off) is labeled RESEARCH_BASELINE so readers cannot
+    mistake the output for production-tradable results. Any deviation is
+    reported explicitly with the dimension name and current value.
+    """
+    defaults = {
+        "sizing": ("sizing_model", "research"),
+        "limit_halt": ("limit_halt_model", "off"),
+        "portfolio_risk": ("portfolio_risk", "off"),
+    }
+    actuals = {
+        "sizing": sizing_model,
+        "limit_halt": limit_halt_model,
+        "portfolio_risk": portfolio_risk,
+    }
+    deviations = [
+        (dim, actuals[dim])
+        for dim in ("sizing", "limit_halt", "portfolio_risk")
+        if actuals[dim] != defaults[dim][1]
+    ]
+    if not deviations:
+        return "RESEARCH_BASELINE"
+    parts = [f"{defaults[dim][0]}={value}" for dim, value in deviations]
+    return f"PARTIAL_PRODUCTION_FEATURES({','.join(parts)})"
+
+
 class BacktestEngine:
     """缠论择时策略回测引擎"""
 
@@ -633,20 +666,26 @@ class BacktestEngine:
         if not self.equity_curve:
             return {"error": "未执行回测"}
 
+        sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
+        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        portfolio_risk = STRATEGY_CONFIG.get("portfolio_risk", "off")
+
         # 基础信息
         report = {
             "symbol": self.symbol,
             "freq": self.freq,
-            "sizing_model": STRATEGY_CONFIG.get("sizing_model", "research"),
+            "sizing_model": sizing_model,
+            "limit_halt_model": limit_halt_model,
             "exit_event_semantics": STRATEGY_CONFIG.get("exit_event_semantics", "legacy"),
             "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model", "close"),
             "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
             "resonance_filter": STRATEGY_CONFIG.get("resonance_filter", "off"),
-            "portfolio_risk": STRATEGY_CONFIG.get("portfolio_risk", "off"),
+            "portfolio_risk": portfolio_risk,
             "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
             "traded_bars": len(self.equity_curve),
+            "mode_label": _compute_mode_label(sizing_model, limit_halt_model, portfolio_risk),
         }
 
         # 各子策略绩效
@@ -764,6 +803,10 @@ class BacktestEngine:
         print("\n" + "=" * 60)
         print("缠论择时策略回测报告")
         print("=" * 60)
+        mode_label = report.get("mode_label", "UNKNOWN")
+        print(f"模式标签: {mode_label}")
+        if mode_label == "RESEARCH_BASELINE":
+            print("[!] 本报告为 RESEARCH_BASELINE（研究基线），不构成生产/可交易证据。")
         print(f"标的: {report['symbol']}")
         print(f"频率: {report['freq']}")
         print(f"仓位模型: {report.get('sizing_model', 'research')}")

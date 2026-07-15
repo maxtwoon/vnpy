@@ -1,19 +1,19 @@
 ---
 task: A70 - Backtest Report research/off Mode Labeling
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a70-second-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -113,3 +113,4 @@ computed accurately without it).
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A70 (backtest report research/off mode labeling) promoted from second third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A70 mode_label/research-baseline labeling implemented |
