@@ -1,7 +1,7 @@
 ---
 task: A67 - Limit/Halt Unexecutable-Fill Backtest Mode
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-15
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -269,3 +269,4 @@ the modified file (clean), and preflight (189 passed).
 | 2026-07-15 | kimi-code → codex | dev → review | A67 limit/halt enforce mode implemented |
 | 2026-07-15 | codex → kimi-code | review → dev | 打回: root sync_check fails on project_version_freshness config path |
 | 2026-07-15 | kimi-code → codex | dev → review | A67 round 2: fixed sync_check.py encoding/arithmetic bugs blocking the gate |
+| 2026-07-15 | codex → codex | review → done | A67 review accepted |
