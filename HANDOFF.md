@@ -1,7 +1,7 @@
 ---
 task: A79 - Formal-Evaluation trading_calendar Daily Aggregation Default
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a79-fifth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -126,3 +126,4 @@ override: `daily_agg = "trading_calendar"`, following the exact same save/restor
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A79 (formal-evaluation trading_calendar daily_agg default) promoted from fifth third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A79 formal-evaluation trading_calendar daily_agg default implemented |
+| 2026-07-16 | codex → codex | review → done | A79 review accepted: daily_agg formal-evaluation override verified |
