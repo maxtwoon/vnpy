@@ -1,7 +1,7 @@
 ---
 task: A76 - Formal-Evaluation Rollover-Window Open-Gating
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-15
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a76-fourth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -163,3 +163,4 @@ Rationale for why the more aggressive "force-close positions in-window" option w
 |------|---------|----------|------|
 | 2026-07-15 | claude-code → kimi-code | design → dev | A76 (formal-evaluation rollover-window open-gating) promoted from fourth third-party audit remediation roadmap; handoff design->dev |
 | 2026-07-15 | kimi-code → codex | dev → review | A76 formal-evaluation rollover-window open-gating implemented |
+| 2026-07-15 | codex → codex | review → done | A76 review passed: verified rollover open gate only blocks new opens, leaves exits/risk logic intact, reports unavailable metadata state, VERSION/CHANGELOG bumped, sync gates pass; pytest/preflight accepted from Manual Verification due documented WinError 5 sandbox tmp_path limitation. |
