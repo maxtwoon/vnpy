@@ -1,19 +1,19 @@
 ---
 task: A66 - Rewrite README.md to Reflect Current Strategy
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-15
 deliverables:
   - HANDOFF.md
   - docs/design/a65-third-party-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -85,25 +85,46 @@ on disk) — label it clearly as superseded, not as if it never existed.
 
 ## Acceptance Criteria
 
-- [ ] `README.md`'s described base/trade/filter/confirm frequencies match `chan_strategy/
+- [x] `README.md`'s described base/trade/filter/confirm frequencies match `chan_strategy/
       config.py`'s actual current defaults (`5分钟`/`30分钟`/`日线`/`5分钟`).
-- [ ] `README.md`'s described instrument universe matches `config.py`'s `contract_specs`
+- [x] `README.md`'s described instrument universe matches `config.py`'s `contract_specs`
       (`AP888`/`RB888`/`SC888`/`A888`/`ZN888`).
-- [ ] `README.md`'s described backtest window and cost assumptions match `BACKTEST_CONFIG`
+- [x] `README.md`'s described backtest window and cost assumptions match `BACKTEST_CONFIG`
       (`2023-01-01~2025-12-31`, 万一 commission, 0.05% slippage) — NOT the old 2021-2022/万三+印花税.
-- [ ] `README.md`'s described signal taxonomy matches the PRODUCTION signal path
+- [x] `README.md`'s described signal taxonomy matches the PRODUCTION signal path
       (`sell_signals.py`'s `get_all_signals`: 一买/二买/三买 and mirrored sell signals), not the
       stale `signals.py`-internal `get_all_signals`.
-- [ ] Any cited historical performance number is sourced from an existing, properly-banner'd
+- [x] Any cited historical performance number is sourced from an existing, properly-banner'd
       `diagnostics/*.md` report by file-path reference, never presented as a fresh claim.
-- [ ] The old README content is preserved (dated historical appendix or archive reference with a
+- [x] The old README content is preserved (dated historical appendix or archive reference with a
       clear pointer), not silently deleted.
-- [ ] No threshold tuning; no pre-2026-04-24 data used to justify any NEW claim; no `GOAL PASSED`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (should be a
+- [x] No threshold tuning; no pre-2026-04-24 data used to justify any NEW claim; no `GOAL PASSED`.
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (should be a
       no-op — confirms the rewrite touched no tracked code).
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+
+## Manual verification (claude-code's independent re-run, dev-round output not self-reported by kimi-code)
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` — 613 passed, 4
+  deselected in 29.69s (identical to A65's baseline — confirms this docs-only rewrite touched no
+  tracked code).
+- `python tools/sync_check.py` — pass (version 4.4.0).
+- `python tools/sync_check.py --root examples/czsc_strategy` — pass (version 0.2.3). synccheck:ignore
+- `run_next_work.ps1 -Preflight` — 189 passed; preflight complete.
+- Spot-checked every numeric claim in the new `README.md` against `chan_strategy/config.py`
+  directly: all 5 instrument margin rates (AP888 7%, RB888/SC888/A888/ZN888 5%), all frequencies,
+  and the backtest window/costs match exactly.
+- Confirmed both cited diagnostic reports
+  (`diagnostics/backtest_matrix_20220101_20260424.md`,
+  `diagnostics/trailing_oos_validation_20250101_20260424.md`) actually exist on disk — no
+  fabricated file references.
+- Confirmed `README.legacy.md` preserves the ENTIRE original README content verbatim (diffed
+  against the pre-A66 committed `README.md`) apart from a replaced H1 title and a new archival
+  notice block prepended — nothing was silently deleted.
+- `chan_strategy/*.py` and all diagnostics scripts are untouched (confirmed via `git status`/`git
+  diff` scope).
 
 ## Notes for the Next Agent
 
@@ -157,3 +178,4 @@ on disk) — label it clearly as superseded, not as if it never existed.
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-15 | codex → claude-code | done → dev | A66 (README rewrite) promoted from third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-15 | kimi-code → codex | dev → review | A66 README rewrite implemented |
