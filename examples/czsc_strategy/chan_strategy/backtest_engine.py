@@ -56,9 +56,11 @@ def formal_evaluation_config():
     Formal evaluation uses real contract-multiplier/margin-constrained sizing
     (``sizing_model="risk"``), rejects fills at unexecutable limit/halt
     bands (``limit_halt_model="enforce"``), blocks new opens inside rollover
-    windows (``rollover_open_gating="on"``), and checks stop-loss against bar
-    extremes (``stop_execution_model="intrabar"``). The original config values
-    are saved and restored on exit, including when the wrapped code raises.
+    windows (``rollover_open_gating="on"``), checks stop-loss against bar
+    extremes (``stop_execution_model="intrabar"``), and maps night-session
+    bars past midnight to the next trading day (``daily_agg="trading_calendar"``).
+    The original config values are saved and restored on exit, including when
+    the wrapped code raises.
 
     This intentionally mutates the shared ``STRATEGY_CONFIG`` dict because
     ``BacktestEngine`` reads these knobs directly from the module-level dict
@@ -70,12 +72,14 @@ def formal_evaluation_config():
         "limit_halt_model",
         "rollover_open_gating",
         "stop_execution_model",
+        "daily_agg",
     )
     overrides = {
         "sizing_model": "risk",
         "limit_halt_model": "enforce",
         "rollover_open_gating": "on",
         "stop_execution_model": "intrabar",
+        "daily_agg": "trading_calendar",
     }
     saved: dict[str, str] = {}
     for key in keys:
@@ -1005,11 +1009,12 @@ def run_formal_evaluation(
 ) -> dict:
     """Run a single backtest under formal-evaluation defaults.
 
-    This entry point temporarily enables ``sizing_model="risk"`` and
-    ``limit_halt_model="enforce"`` for the duration of the run and restores
-    the original values afterward. It is the explicit "formal evaluation"
-    path recommended by the third-party audit without changing the library
-    defaults in ``config.py``.
+    This entry point temporarily enables ``sizing_model="risk"``,
+    ``limit_halt_model="enforce"``, ``rollover_open_gating="on"``,
+    ``stop_execution_model="intrabar"``, and ``daily_agg="trading_calendar"``
+    for the duration of the run and restores the original values afterward.
+    It is the explicit "formal evaluation" path recommended by the third-party
+    audit without changing the library defaults in ``config.py``.
     """
     with formal_evaluation_config():
         return run_single_backtest(

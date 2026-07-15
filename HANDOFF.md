@@ -1,19 +1,19 @@
 ---
 task: A79 - Formal-Evaluation trading_calendar Daily Aggregation Default
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a79-fifth-audit-remediation-roadmap.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -92,6 +92,16 @@ override: `daily_agg = "trading_calendar"`, following the exact same save/restor
    `python tools/handoff.py next --actor kimi-code --summary "A79 formal-evaluation trading_calendar daily_agg default implemented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`.
 
+## Manual Verification
+
+- `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` → 703 passed, 4 deselected.
+- `python tools/sync_check.py` → PASS (vnpy 4.4.0).
+- `python tools/sync_check.py --root examples/czsc_strategy` → PASS (project VERSION matches CHANGELOG).
+- `examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight` → preflight complete (191 SimNow workflow unit tests passed).
+- `ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/tests/unit/test_formal_evaluation.py` → All checks passed.
+- Full `ruff check .` still reports pre-existing lint issues in unrelated files (e.g. `docs/chanlunnew/`, `examples/czsc_strategy/_debug_zs.py`, `examples/czsc_strategy/_patch_backtest*.py`, `examples/czsc_strategy/chan_strategy/__init__.py`, `data_adapter.py`, `positions.py`, `utils.py`, `validation.py`, notebooks); no new issues were introduced by the A79-scoped edits.
+- `git status --short` confirms only A79-scoped files were modified (`VERSION`, `CHANGELOG.md`, `chan_strategy/backtest_engine.py`, `tests/unit/test_formal_evaluation.py`) in addition to the unrelated SimNow workstream files that were already modified before this task started.
+
 ## Decision Log
 
 - 2026-07-16 - Fifth third-party audit (70/100, unchanged from fourth round, no fatal items) scoped
@@ -101,9 +111,18 @@ override: `daily_agg = "trading_calendar"`, following the exact same save/restor
   remains architecture-scale (portfolio_risk/risk-sizing fusion). See design doc for full reasoning.
 - 2026-07-16 - A79 promoted from `docs/design/a79-fifth-audit-remediation-roadmap.md`'s draft to an
   active HANDOFF task. First of three tasks in this roadmap.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full diff: `formal_evaluation_config()`'s keys/overrides tuples both extended consistently with
+  the established pattern; kimi-code also updated `run_formal_evaluation()`'s docstring to list
+  all five overrides (incidentally addressing the fifth audit's low-severity "incomplete entry-
+  point docstring" finding as a natural side effect of the edit, not separately requested). Re-ran
+  everything independently, matching kimi-code's recorded counts exactly: full unit suite `703
+  passed, 4 deselected`; `ruff check` clean; both `sync_check.py` gates passed; `run_next_work.ps1
+  -Preflight` passed. Scope was clean (only A79-scoped files staged).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A79 (formal-evaluation trading_calendar daily_agg default) promoted from fifth third-party audit remediation roadmap; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A79 formal-evaluation trading_calendar daily_agg default implemented |

@@ -37,12 +37,14 @@ def test_formal_evaluation_config_sets_risk_enforce_and_rollover_gating():
     STRATEGY_CONFIG["limit_halt_model"] = "off"
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
     STRATEGY_CONFIG["stop_execution_model"] = "close"
+    STRATEGY_CONFIG["daily_agg"] = "natural"
 
     with formal_evaluation_config():
         assert STRATEGY_CONFIG["sizing_model"] == "risk"
         assert STRATEGY_CONFIG["limit_halt_model"] == "enforce"
         assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
         assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
+        assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
 
 
 def test_formal_evaluation_config_restores_original_values_on_success():
@@ -50,6 +52,7 @@ def test_formal_evaluation_config_restores_original_values_on_success():
     STRATEGY_CONFIG["limit_halt_model"] = "off"
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
     STRATEGY_CONFIG["stop_execution_model"] = "close"
+    STRATEGY_CONFIG["daily_agg"] = "natural"
 
     with formal_evaluation_config():
         pass
@@ -58,6 +61,7 @@ def test_formal_evaluation_config_restores_original_values_on_success():
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
     assert STRATEGY_CONFIG["stop_execution_model"] == "close"
+    assert STRATEGY_CONFIG["daily_agg"] == "natural"
 
 
 def test_formal_evaluation_config_restores_original_values_on_exception():
@@ -65,6 +69,7 @@ def test_formal_evaluation_config_restores_original_values_on_exception():
     STRATEGY_CONFIG["limit_halt_model"] = "off"
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
     STRATEGY_CONFIG["stop_execution_model"] = "close"
+    STRATEGY_CONFIG["daily_agg"] = "natural"
 
     class CustomError(Exception):
         pass
@@ -75,12 +80,14 @@ def test_formal_evaluation_config_restores_original_values_on_exception():
             assert STRATEGY_CONFIG["limit_halt_model"] == "enforce"
             assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
             assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
+            assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
             raise CustomError("boom")
 
     assert STRATEGY_CONFIG["sizing_model"] == "research"
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
     assert STRATEGY_CONFIG["stop_execution_model"] == "close"
+    assert STRATEGY_CONFIG["daily_agg"] == "natural"
 
 
 def test_formal_evaluation_config_restores_non_default_original_values():
@@ -89,17 +96,30 @@ def test_formal_evaluation_config_restores_non_default_original_values():
     STRATEGY_CONFIG["limit_halt_model"] = "aware"
     STRATEGY_CONFIG["rollover_open_gating"] = "on"
     STRATEGY_CONFIG["stop_execution_model"] = "intrabar"
+    STRATEGY_CONFIG["daily_agg"] = "trading_calendar"
 
     with formal_evaluation_config():
         assert STRATEGY_CONFIG["sizing_model"] == "risk"
         assert STRATEGY_CONFIG["limit_halt_model"] == "enforce"
         assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
         assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
+        assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
 
     assert STRATEGY_CONFIG["sizing_model"] == "risk"
     assert STRATEGY_CONFIG["limit_halt_model"] == "aware"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
     assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
+    assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
+
+
+def test_formal_evaluation_config_overrides_and_restores_daily_agg():
+    """Dedicated coverage for the A79 daily_agg trading_calendar override."""
+    STRATEGY_CONFIG["daily_agg"] = "natural"
+
+    with formal_evaluation_config():
+        assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
+
+    assert STRATEGY_CONFIG["daily_agg"] == "natural"
 
 
 # --------------------------------------------------------------- entry point behavior
@@ -115,6 +135,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
             "limit_halt_model": STRATEGY_CONFIG.get("limit_halt_model"),
             "rollover_open_gating": STRATEGY_CONFIG.get("rollover_open_gating"),
             "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model"),
+            "daily_agg": STRATEGY_CONFIG.get("daily_agg"),
         })
         return {
             "symbol": self.symbol,
@@ -134,6 +155,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
     assert STRATEGY_CONFIG["stop_execution_model"] == "close"
+    assert STRATEGY_CONFIG["daily_agg"] == "natural"
 
     report = run_formal_evaluation("AP888", table_name="ap888_1M_raw")
 
@@ -143,6 +165,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
     assert seen[0]["limit_halt_model"] == "enforce"
     assert seen[0]["rollover_open_gating"] == "on"
     assert seen[0]["stop_execution_model"] == "intrabar"
+    assert seen[0]["daily_agg"] == "trading_calendar"
 
     # The entry point returns the report from run_single_backtest.
     assert report["symbol"] == "AP888"
@@ -152,6 +175,7 @@ def test_run_formal_evaluation_uses_risk_and_enforce(monkeypatch):
     assert STRATEGY_CONFIG["limit_halt_model"] == "off"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
     assert STRATEGY_CONFIG["stop_execution_model"] == "close"
+    assert STRATEGY_CONFIG["daily_agg"] == "natural"
 
 
 def test_run_formal_evaluation_mode_label_is_non_baseline(monkeypatch):

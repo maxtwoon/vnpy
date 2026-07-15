@@ -2,6 +2,19 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.14 — 2026-07-16
+
+- A79 正式评估默认改为 trading_calendar 日线聚合。
+  - `chan_strategy/backtest_engine.py` 的 `formal_evaluation_config()` 在正式评估期间额外临时覆盖
+    `STRATEGY_CONFIG["daily_agg"] = "trading_calendar"`，运行结束后（含异常路径）无条件恢复原始值；
+    与已有的 `sizing_model="risk"`、`limit_halt_model="enforce"`、
+    `rollover_open_gating="on"`、`stop_execution_model="intrabar"` 共同构成正式评估五覆盖。
+  - 未修改 `chan_strategy/config.py` 默认字典（`daily_agg="natural"` 保持默认路径字节级不变），
+    未改动 `_resample_daily_trading_calendar()` 本身或任何信号计算逻辑。
+  - 新增/扩展单测 `tests/unit/test_formal_evaluation.py`：验证 `daily_agg` 覆盖生效、成功/异常后恢复、
+    非默认原始值保留、入口函数 `run_formal_evaluation()` 内 `daily_agg` 实际取值为 `"trading_calendar"`；
+    不依赖真实历史数据库。
+
 ## 0.2.13 — 2026-07-16
 
 - A78 正式评估默认改为 intrabar 止损执行模型，并新增 RESEARCH_BASELINE 消费护栏函数。
