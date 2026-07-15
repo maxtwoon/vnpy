@@ -1,7 +1,7 @@
 ---
 task: A82 - Fail-Closed Allow-List Fix for assert_not_research_baseline
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a82-sixth-audit-critical-fix.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -128,3 +128,4 @@ the one function fixes both.
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A82 (fail-closed allow-list fix for research-baseline guard) promoted from sixth audit critical fix; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A82 fail-closed allow-list fix for assert_not_research_baseline implemented |
+| 2026-07-16 | codex → codex | review → done | A82 review accepted: fail-closed mode_label allow-list verified; sandbox tmp_path WinError 5 handled per .synccheck manual verification note |
