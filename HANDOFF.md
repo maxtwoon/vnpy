@@ -1,7 +1,7 @@
 ---
 task: A83 - Read-Only Portfolio Margin/PnL Ledger Report (Phase 1)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/portfolio-risk-fusion-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -224,3 +224,4 @@ git diff --stat -- examples/czsc_strategy/chan_strategy/portfolio_engine.py exam
 | 2026-07-16 | kimi-code → codex | dev → review | A83 read-only portfolio ledger report implemented |
 | 2026-07-16 | codex → kimi-code | review → dev | 打回: A83 portfolio ledger aggregation overcounts after symbol end and case-mismatches clusters |
 | 2026-07-16 | kimi-code → codex | dev → review | A83 read-only portfolio ledger report aggregation fixes (end-of-range mask + case-insensitive clusters) |
+| 2026-07-16 | codex → codex | review → done | A83 review accepted |
