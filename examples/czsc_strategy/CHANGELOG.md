@@ -2,6 +2,30 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.22（2026-07-17）
+
+- A86 `BacktestEngine` 逐 bar 生成器抽取（外部权益/保证金注入点，A87 联合时钟前置，按
+  `docs/design/a85-joint-replay-design.md` 的 A86 范围执行）：
+  - `chan_strategy/backtest_engine.py`：原 `run()` 主循环改为嵌套在新方法
+    `bar_generator()` 内的 `_bar_loop()` 生成器，通过闭包捕获原有全部局部变量
+    （`nonlocal pending_signals, daily_bar_idx, h4_bar_idx, excluded_dates`），不新增方法参数、
+    不改动任何局部变量名与既有分支；在两个既有 `_compute_equity_and_margin()` 调用点
+    （`if risk_mode:` 内的 bar.open 开盘前 / bar.close 信号后）各插入一个 yield
+    （`"pre_open"` / `"post_bar"`，载荷 `(kind, dt, price, computed_equity, computed_margin)`），
+    外部驱动可 `.send((equity, total_open_margin))` 注入覆盖值，`.send(None)` 表示不覆盖、
+    沿用引擎自身计算值。生成器耗尽时经 `StopIteration.value` 返回回测报告。
+  - `run()` 变为 `bar_generator()` 的默认耗尽包装（全程 `send(None)`）；数据加载失败/
+    数据不足等早退路径仍返回同样的错误字典。真实数据（AP888，2024-01-01~2024-06-30，
+    `ap888_1M_raw`，783 根交易 bar、9 笔交易）在 research 与 risk 两种模式下
+    `equity_curve`/`signal_history`/report 重构前后逐字节一致（json 全精度浮点比较）。
+  - 新增 `tests/unit/test_a86_bar_generator.py` 5 项：research/risk 默认耗尽结果与
+    `run()` 完全一致、两个 yield 点严格交替且载荷形状固定、pre_open 注入 4x equity 精确改变
+    `Position._size_open()` 手数（按 sizing 公式断言，证明注入点真正到达开仓 sizing）、
+    错误字典早退路径与 `run()` 一致。单测总数 730 → 735，无既有测试结果改变。
+  - 未改动 `positions.py`、`portfolio_engine.py` 或任何既有测试断言；未触碰
+    `sizing_model="risk" + portfolio_risk="on"` 互斥 `NotImplementedError` 门控；未实现
+    A87 联合时钟驱动与 `PortfolioLedger`。
+
 ## 0.2.21 — 2026-07-16
 
 - A85 联合回放 + 共享 PortfolioLedger 算法边界设计文档定稿（设计-only，无生产代码）。

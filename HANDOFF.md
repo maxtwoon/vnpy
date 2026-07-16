@@ -1,19 +1,22 @@
 ---
 task: A86 - BacktestEngine per-bar generator extraction (external equity/margin injection point)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/backtest_engine.py
+  - examples/czsc_strategy/tests/unit/test_a86_bar_generator.py
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -172,13 +175,75 @@ task changes how `run()` is called.
   exists. Chose nested-generator-closure over method-parameter-hoisting specifically to minimize risk to
   the most heavily-tested code path in the project — hoisting ~15 loop-local variables into an explicit
   parameter list was assessed as needlessly increasing surface area for a subtle regression.
+- 2026-07-17 (kimi-code, dev) - A86 implemented per the design's nested-generator-closure shape:
+  `run()`'s per-bar loop now lives in `_bar_loop()` nested inside the new `bar_generator()`
+  method, closing over the original locals (`nonlocal pending_signals, daily_bar_idx,
+  h4_bar_idx, excluded_dates`); no loop-local variable was hoisted, renamed, or moved. Two
+  yield points were inserted inside `if risk_mode:` at the two pre-existing
+  `_compute_equity_and_margin()` call sites (`"pre_open"` at bar.open, `"post_bar"` at
+  bar.close), each accepting an optional `(equity, total_open_margin)` override via `.send()`.
+  `run()` is now a default-drain wrapper (`send(None)` throughout). One deliberate, minimal
+  completion of the design's drain snippet: the wrapper captures the report via
+  `except StopIteration as stop: return stop.value`, because the post-loop report generation
+  moved inside the generator to keep exactly one code path (the design's `except StopIteration:
+  pass` sketch had no way to return the report). Early setup failures (data load / insufficient
+  bars) still return the identical error dict — `bar_generator()` returns it directly and
+  `run()` passes it through. Verified byte-identical equity_curve/signal_history/report on real
+  data (AP888 2024-01-01~2024-06-30, 783 trade bars, 9 trades) in both research and risk
+  modes, and unit pass count 730 -> 735 (only the 5 new tests added; no existing test's
+  outcome changed). A87's joint-clock driver / PortfolioLedger intentionally not started.
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+All commands run natively on this machine (Windows PowerShell, repo `D:\repo\vnpy`).
+
+1. Real-data byte-identity (AP888, `ap888_1M_raw`, 2024-01-01~2024-06-30, 783 trade bars,
+   9 trades): dumped `report`/`equity_curve`/`signal_history` to JSON with the pre-change
+   engine, re-ran with the refactored engine, compared full-precision JSON serialization:
+   ```
+   mode=research byte-identical: True
+   mode=risk byte-identical: True
+   ```
+2. New generator tests:
+   ```
+   $ python -m pytest tests/unit/test_a86_bar_generator.py -q
+   .....                                                                    [100%]
+   5 passed in 0.12s
+   ```
+3. Full unit suite, post-change vs pre-change (HEAD engine temporarily swapped in,
+   encoding-safe, then restored):
+   ```
+   $ python -m pytest tests/unit -q -m "not realdb"            # post-change
+   735 passed, 4 deselected in 31.16s
+   $ python -m pytest tests/unit -q -m "not realdb" --ignore=tests/unit/test_a86_bar_generator.py  # pre-change HEAD engine
+   730 passed, 4 deselected in 31.60s
+   ```
+   735 = 730 + 5 new tests; no existing test's outcome changed.
+4. Sync gates:
+   ```
+   $ python tools/sync_check.py
+   [SYNC-CHECK] PASS: 版本与文档一致。   (exit=0)
+   $ python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = <czsc VERSION 文件新值>  (source: VERSION::)
+   [SYNC-CHECK] PASS: 版本与文档一致。   (exit=0)
+   $ ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/tests/unit/test_a86_bar_generator.py
+   All checks passed!
+   ```
+   (The czsc VERSION literal in the second sync_check line is elided above because the root
+   gate forbids non-4.4.0 version strings inside HANDOFF.md; the actual output showed the
+   bumped czsc VERSION value, and the root gate was re-run and passes after the elision.)
+5. Preflight:
+   ```
+   $ powershell -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight   # from examples/czsc_strategy/
+   ...
+   192 passed in 16.71s
+   ==> Preflight complete; live SimNow capture was not requested
+   preflight exit=0
+   ```
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-17 | claude-code → kimi-code | design → dev | A86 (BacktestEngine generator extraction) promoted; handoff design->dev |
+| 2026-07-17 | kimi-code → codex | dev → review | A86 BacktestEngine generator extraction completed |

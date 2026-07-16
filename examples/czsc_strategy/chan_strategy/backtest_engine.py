@@ -14,6 +14,7 @@
 - 数据为1分钟K线，需要合成更高周期
 """
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -390,16 +391,32 @@ class BacktestEngine:
         # 清空 bars 强制重新加载，避免日期/参数修改后仍使用旧数据
         self.bars = []
 
-    def run(self, warmup_bars: int = 100) -> dict:
+    def bar_generator(
+        self, warmup_bars: int = 100
+    ) -> "Generator[tuple[str, Any, float, float, float], tuple[float, float] | None, dict] | dict":
         """
-        执行回测 - 多级别协同分析
+        构建逐 bar 可步进的回测生成器（A86）。
 
-        修复: 原实现只用单一CZSC对象分析1分钟K线。
-        现在从1分钟基础数据合成交易周期(30分钟)和日线，
-        分别创建CZSC对象进行缠论分析，综合多周期信号。
+        执行与 run() 完全相同的初始化（数据加载、多周期K线合成、CZSC对象
+        与策略初始化、各开关解析），然后返回一个驱动主循环的生成器对象，
+        而不是像 run() 那样一次性跑完。
+
+        生成器在每根交易 bar 的两个既有权益/保证金计算点各 yield 一次：
+          - ("pre_open", dt, price, equity, margin): 当根开盘前（按 bar.open
+            计算），计算值用于当根 bar 执行的待执行信号的开仓 sizing；
+          - ("post_bar", dt, price, equity, margin): 当根信号生成后（按
+            bar.close 计算），计算值用于当根 bar 的权益曲线记录（仅
+            sizing_model="risk" 路径）。
+        外部驱动可对任一个 yield 点 .send((equity, total_open_margin)) 注入
+        覆盖值；.send(None) 表示不覆盖，引擎沿用自身计算值（与 run() 的
+        默认行为完全一致）。生成器耗尽时通过 StopIteration.value 返回回测
+        报告字典（与 run() 的返回值相同）。
+
+        若数据加载或预热检查失败，与 run() 的早退路径一致，直接返回错误
+        字典而非生成器。
 
         :param warmup_bars: 预热K线数量（以交易周期计）
-        :return: 回测结果字典
+        :return: 逐 bar 生成器（正常路径）或错误字典（早退路径）
         """
         # 重置状态，保证 run() 幂等
         self._reset_state()
@@ -533,229 +550,266 @@ class BacktestEngine:
                         "found in the current window"
                     )
 
-        for i in range(warmup_bars, len(trade_bars)):
-            bar = trade_bars[i]
-            rollover_open_blocked = rollover_gating_active and (bar.dt.date() in excluded_dates)
+        def _bar_loop() -> Generator[tuple[str, Any, float, float, float], tuple[float, float] | None, dict]:
+            nonlocal pending_signals, daily_bar_idx, h4_bar_idx, excluded_dates
 
-            # A51/A67: compute per-bar directional limit-band flags for entry/exit tagging/gating.
-            entry_at_limit: tuple[bool, bool] | None = None
-            exit_at_limit: tuple[bool, bool] | None = None
-            if limit_active:
-                # Local import avoids the backtest_engine <-> portfolio_engine cycle.
-                from chan_strategy.portfolio_engine import _trading_day
+            for i in range(warmup_bars, len(trade_bars)):
+                bar = trade_bars[i]
+                rollover_open_blocked = rollover_gating_active and (bar.dt.date() in excluded_dates)
 
-                bar_trading_day = _trading_day(
-                    bar.dt, daily_agg="trading_calendar", night_session_start_hour=night_session_start_hour
-                )
-                limit_pct = _limit_pct_for_date(symbol_key, bar_trading_day)
-                if limit_pct is None:
-                    raise ValueError(
-                        f"limit_halt_model='{limit_halt_model}' requires a SYMBOL_LIMIT_CONFIG entry for "
-                        f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
-                        f"Add the symbol to limit_config.py or use limit_halt_model='off'."
+                # A51/A67: compute per-bar directional limit-band flags for entry/exit tagging/gating.
+                entry_at_limit: tuple[bool, bool] | None = None
+                exit_at_limit: tuple[bool, bool] | None = None
+                if limit_active:
+                    # Local import avoids the backtest_engine <-> portfolio_engine cycle.
+                    from chan_strategy.portfolio_engine import _trading_day
+
+                    bar_trading_day = _trading_day(
+                        bar.dt, daily_agg="trading_calendar", night_session_start_hour=night_session_start_hour
                     )
-                prev_close, _ = prev_close_map.get(bar_trading_day, (None, None))
-                touched_upper, touched_lower, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
-                # Pass both directional touches down to the position layer; each
-                # position resolves the touch that matters for its own side.
-                entry_at_limit = (touched_upper, touched_lower)
-                exit_at_limit = (touched_upper, touched_lower)
+                    limit_pct = _limit_pct_for_date(symbol_key, bar_trading_day)
+                    if limit_pct is None:
+                        raise ValueError(
+                            f"limit_halt_model='{limit_halt_model}' requires a SYMBOL_LIMIT_CONFIG entry for "
+                            f"normalized symbol {symbol_key!r} (raw symbol={self.symbol!r}). "
+                            f"Add the symbol to limit_config.py or use limit_halt_model='off'."
+                        )
+                    prev_close, _ = prev_close_map.get(bar_trading_day, (None, None))
+                    touched_upper, touched_lower, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
+                    # Pass both directional touches down to the position layer; each
+                    # position resolves the touch that matters for its own side.
+                    entry_at_limit = (touched_upper, touched_lower)
+                    exit_at_limit = (touched_upper, touched_lower)
 
-            # Pre-update equity/margin for A40 risk-mode sizing (no lookahead).
-            # Uses bar.open, the same delayed-fill execution price used by opens.
-            equity_at_entry = None
-            total_open_margin = None
-            if risk_mode:
-                equity_at_entry, total_open_margin = self._compute_equity_and_margin(bar.open)
+                # Pre-update equity/margin for A40 risk-mode sizing (no lookahead).
+                # Uses bar.open, the same delayed-fill execution price used by opens.
+                equity_at_entry = None
+                total_open_margin = None
+                if risk_mode:
+                    equity_at_entry, total_open_margin = self._compute_equity_and_margin(bar.open)
+                    override = yield ("pre_open", bar.dt, bar.open, equity_at_entry, total_open_margin)
+                    if override is not None:
+                        equity_at_entry, total_open_margin = override
 
-            # 1. 先执行上一根bar产生的待执行信号（用当根开盘价成交）
-            update_kwargs = {
-                "execution_price": bar.open,
-                "czsc_obj": czsc_trade,
-                "bar_high": bar.high,
-                "bar_low": bar.low,
-                "equity_at_entry": equity_at_entry,
-                "total_open_margin": total_open_margin,
-                "rollover_open_blocked": rollover_open_blocked,
-            }
-            # A51/A67 flags are injected under "aware" and "enforce"; "off" keeps
-            # the legacy call signature unchanged.
-            if limit_active:
-                update_kwargs["entry_at_limit"] = entry_at_limit
-                update_kwargs["exit_at_limit"] = exit_at_limit
-
-            if pending_signals is not None:
-                self.strategy.update(
-                    pending_signals, bar.close, bar.dt,
-                    **update_kwargs,
-                )
-                pending_signals = None
-            else:
-                # 无待执行信号时，仍需更新风控（止损/超时检查用当前价格）
-                # 传入空信号字典，只触发风控逻辑
-                # intrabar 触价止损用当根 bar 的 high/low（仅当前bar，无未来函数）
-                self.strategy.update({}, bar.close, bar.dt, **update_kwargs)
-
-            # 2. 更新交易周期CZSC
-            czsc_trade.update(bar)
-
-            # 3. 增量更新日线CZSC（当有新的日线bar时）
-            if czsc_daily is not None:
-                while daily_bar_idx < len(daily_bars) and daily_bars[daily_bar_idx].dt <= bar.dt:
-                    czsc_daily.update(daily_bars[daily_bar_idx])
-                    daily_bar_idx += 1
-
-            # 4. 增量更新4H CZSC（当有新的4H bar时，dt <= 当前bar，无未来函数）
-            if czsc_4h is not None:
-                while h4_bar_idx < len(h4_bars) and h4_bars[h4_bar_idx].dt <= bar.dt:
-                    czsc_4h.update(h4_bars[h4_bar_idx])
-                    h4_bar_idx += 1
-
-            # 5. 生成当根信号（但不立即成交，存储到pending_signals）
-            # 传递一买/一卖锚点信息，使二买/二卖信号能严格绑定上下文
-            buy1_anchor = self.strategy.get_last_buy1_anchor() if self.strategy else None
-            sell1_anchor = self.strategy.get_last_sell1_anchor() if self.strategy else None
-            signals = get_all_signals(
-                czsc_trade, trade_freq_name,
-                buy1_anchor=buy1_anchor,
-                sell1_anchor=sell1_anchor,
-            )
-
-            # 添加日线趋势过滤信号（由 positions.py / ChanTimingStrategy 消费）
-            if czsc_daily is not None and czsc_daily.bi_list:
-                daily_signals = get_all_signals(czsc_daily, filter_freq_name)
-                signals.update(daily_signals)
-
-            # 添加4H共振过滤信号（A44 daily_4h 模式消费）
-            if czsc_4h is not None and czsc_4h.bi_list:
-                h4_signals = get_all_signals(czsc_4h, freq_4h_name)
-                signals.update(h4_signals)
-
-            # 记录信号历史（每100根记录一次，避免内存过大）
-            if i % 100 == 0 or i == len(trade_bars) - 1:
-                self.signal_history.append({
-                    "dt": bar.dt,
-                    "price": bar.close,
-                    "signals": signals.copy()
-                })
-
-            # 5. 存储信号，下一根bar再执行
-            pending_signals = signals
-
-            if risk_mode:
-                # A40 real-money equity curve: incrementally track currency PnL,
-                # then compute equity and margin at this bar's close.
-                self._update_realized_currency()
-                equity, total_open_margin_now = self._compute_equity_and_margin(bar.close)
-                margin_utilization_pct = (
-                    total_open_margin_now / equity if equity > 0 else 0.0
-                )
-
-                long_exposure = 0.0
-                short_exposure = 0.0
-                for pos in self.strategy.positions:
-                    if pos.pos == 0 or pos.cost <= 0:
-                        continue
-                    spec = self._contract_spec_for_position(pos)
-                    multiplier = int(spec.get("multiplier", 1))
-                    notional = pos.volume * pos.cost * multiplier
-                    if equity > 0:
-                        if pos.pos > 0:
-                            long_exposure += notional / equity
-                        else:
-                            short_exposure += notional / equity
-
-                net_exposure = long_exposure - short_exposure
-                gross_exposure = long_exposure + short_exposure
-
-                self.equity_curve.append({
-                    "dt": bar.dt,
-                    "price": bar.close,
-                    "equity": equity,
-                    "positions": sum(p.pos for p in self.strategy.positions),
-                    "long_exposure": long_exposure,
-                    "short_exposure": short_exposure,
-                    "net_exposure": net_exposure,
-                    "gross_exposure": gross_exposure,
-                    "both_long_short": long_exposure > 0 and short_exposure > 0,
-                    "sizing_model": sizing_model,
-                    "total_open_margin": total_open_margin_now,
-                    "margin_utilization_pct": margin_utilization_pct,
-                })
-            else:
-                # 计算当前权益（增量更新，避免每根bar遍历全部历史pairs）
-                pos_weights = {
-                    "一买多头": STRATEGY_CONFIG.get("pos_1buy", 0.10),
-                    "二买多头": STRATEGY_CONFIG.get("pos_2buy", 0.20),
-                    "三买多头": STRATEGY_CONFIG.get("pos_3buy", 0.30),
-                    "一卖空头": STRATEGY_CONFIG.get("pos_1sell", 0.10),
-                    "二卖空头": STRATEGY_CONFIG.get("pos_2sell", 0.20),
-                    "三卖空头": STRATEGY_CONFIG.get("pos_3sell", 0.30),
+                # 1. 先执行上一根bar产生的待执行信号（用当根开盘价成交）
+                update_kwargs = {
+                    "execution_price": bar.open,
+                    "czsc_obj": czsc_trade,
+                    "bar_high": bar.high,
+                    "bar_low": bar.low,
+                    "equity_at_entry": equity_at_entry,
+                    "total_open_margin": total_open_margin,
+                    "rollover_open_blocked": rollover_open_blocked,
                 }
-                weight_symbol = self.table_name.split("_")[0] if self.table_name else self.symbol
-                pos_weights = _apply_symbol_position_overrides(pos_weights, weight_symbol)
-                total_pnl = 0
-                long_exposure = 0.0
-                short_exposure = 0.0
-                for pos in self.strategy.positions:
-                    weight = pos_weights.get(pos.name, 0.10)
-                    if pos.pos > 0:
-                        long_exposure += weight
-                    elif pos.pos < 0:
-                        short_exposure += weight
-                    prev_count = self._pair_counts.get(pos.name, 0)
-                    curr_count = len(pos.pairs)
-                    # 只有当 pair 数量增加时，才累加新增 pair 的盈亏
-                    if curr_count > prev_count:
-                        new_pairs = pos.pairs[prev_count:curr_count]
-                        new_pnl = sum(p["pnl_pct"] for p in new_pairs) * self.initial_capital * weight
-                        self._cum_realized_pnl[pos.name] = self._cum_realized_pnl.get(pos.name, 0.0) + new_pnl
-                        self._pair_counts[pos.name] = curr_count
-                    realized_pnl = self._cum_realized_pnl.get(pos.name, 0.0)
-                    # 加入未实现盈亏
-                    if pos.pos != 0 and pos.cost > 0:
+                # A51/A67 flags are injected under "aware" and "enforce"; "off" keeps
+                # the legacy call signature unchanged.
+                if limit_active:
+                    update_kwargs["entry_at_limit"] = entry_at_limit
+                    update_kwargs["exit_at_limit"] = exit_at_limit
+
+                if pending_signals is not None:
+                    self.strategy.update(
+                        pending_signals, bar.close, bar.dt,
+                        **update_kwargs,
+                    )
+                    pending_signals = None
+                else:
+                    # 无待执行信号时，仍需更新风控（止损/超时检查用当前价格）
+                    # 传入空信号字典，只触发风控逻辑
+                    # intrabar 触价止损用当根 bar 的 high/low（仅当前bar，无未来函数）
+                    self.strategy.update({}, bar.close, bar.dt, **update_kwargs)
+
+                # 2. 更新交易周期CZSC
+                czsc_trade.update(bar)
+
+                # 3. 增量更新日线CZSC（当有新的日线bar时）
+                if czsc_daily is not None:
+                    while daily_bar_idx < len(daily_bars) and daily_bars[daily_bar_idx].dt <= bar.dt:
+                        czsc_daily.update(daily_bars[daily_bar_idx])
+                        daily_bar_idx += 1
+
+                # 4. 增量更新4H CZSC（当有新的4H bar时，dt <= 当前bar，无未来函数）
+                if czsc_4h is not None:
+                    while h4_bar_idx < len(h4_bars) and h4_bars[h4_bar_idx].dt <= bar.dt:
+                        czsc_4h.update(h4_bars[h4_bar_idx])
+                        h4_bar_idx += 1
+
+                # 5. 生成当根信号（但不立即成交，存储到pending_signals）
+                # 传递一买/一卖锚点信息，使二买/二卖信号能严格绑定上下文
+                buy1_anchor = self.strategy.get_last_buy1_anchor() if self.strategy else None
+                sell1_anchor = self.strategy.get_last_sell1_anchor() if self.strategy else None
+                signals = get_all_signals(
+                    czsc_trade, trade_freq_name,
+                    buy1_anchor=buy1_anchor,
+                    sell1_anchor=sell1_anchor,
+                )
+
+                # 添加日线趋势过滤信号（由 positions.py / ChanTimingStrategy 消费）
+                if czsc_daily is not None and czsc_daily.bi_list:
+                    daily_signals = get_all_signals(czsc_daily, filter_freq_name)
+                    signals.update(daily_signals)
+
+                # 添加4H共振过滤信号（A44 daily_4h 模式消费）
+                if czsc_4h is not None and czsc_4h.bi_list:
+                    h4_signals = get_all_signals(czsc_4h, freq_4h_name)
+                    signals.update(h4_signals)
+
+                # 记录信号历史（每100根记录一次，避免内存过大）
+                if i % 100 == 0 or i == len(trade_bars) - 1:
+                    self.signal_history.append({
+                        "dt": bar.dt,
+                        "price": bar.close,
+                        "signals": signals.copy()
+                    })
+
+                # 5. 存储信号，下一根bar再执行
+                pending_signals = signals
+
+                if risk_mode:
+                    # A40 real-money equity curve: incrementally track currency PnL,
+                    # then compute equity and margin at this bar's close.
+                    self._update_realized_currency()
+                    equity, total_open_margin_now = self._compute_equity_and_margin(bar.close)
+                    override = yield ("post_bar", bar.dt, bar.close, equity, total_open_margin_now)
+                    if override is not None:
+                        equity, total_open_margin_now = override
+                    margin_utilization_pct = (
+                        total_open_margin_now / equity if equity > 0 else 0.0
+                    )
+
+                    long_exposure = 0.0
+                    short_exposure = 0.0
+                    for pos in self.strategy.positions:
+                        if pos.pos == 0 or pos.cost <= 0:
+                            continue
+                        spec = self._contract_spec_for_position(pos)
+                        multiplier = int(spec.get("multiplier", 1))
+                        notional = pos.volume * pos.cost * multiplier
+                        if equity > 0:
+                            if pos.pos > 0:
+                                long_exposure += notional / equity
+                            else:
+                                short_exposure += notional / equity
+
+                    net_exposure = long_exposure - short_exposure
+                    gross_exposure = long_exposure + short_exposure
+
+                    self.equity_curve.append({
+                        "dt": bar.dt,
+                        "price": bar.close,
+                        "equity": equity,
+                        "positions": sum(p.pos for p in self.strategy.positions),
+                        "long_exposure": long_exposure,
+                        "short_exposure": short_exposure,
+                        "net_exposure": net_exposure,
+                        "gross_exposure": gross_exposure,
+                        "both_long_short": long_exposure > 0 and short_exposure > 0,
+                        "sizing_model": sizing_model,
+                        "total_open_margin": total_open_margin_now,
+                        "margin_utilization_pct": margin_utilization_pct,
+                    })
+                else:
+                    # 计算当前权益（增量更新，避免每根bar遍历全部历史pairs）
+                    pos_weights = {
+                        "一买多头": STRATEGY_CONFIG.get("pos_1buy", 0.10),
+                        "二买多头": STRATEGY_CONFIG.get("pos_2buy", 0.20),
+                        "三买多头": STRATEGY_CONFIG.get("pos_3buy", 0.30),
+                        "一卖空头": STRATEGY_CONFIG.get("pos_1sell", 0.10),
+                        "二卖空头": STRATEGY_CONFIG.get("pos_2sell", 0.20),
+                        "三卖空头": STRATEGY_CONFIG.get("pos_3sell", 0.30),
+                    }
+                    weight_symbol = self.table_name.split("_")[0] if self.table_name else self.symbol
+                    pos_weights = _apply_symbol_position_overrides(pos_weights, weight_symbol)
+                    total_pnl = 0
+                    long_exposure = 0.0
+                    short_exposure = 0.0
+                    for pos in self.strategy.positions:
+                        weight = pos_weights.get(pos.name, 0.10)
                         if pos.pos > 0:
-                            unrealized_pnl = (bar.close - pos.cost) / pos.cost
-                        else:
-                            unrealized_pnl = (pos.cost - bar.close) / pos.cost
-                        realized_pnl += unrealized_pnl * self.initial_capital * weight
-                    total_pnl += realized_pnl
+                            long_exposure += weight
+                        elif pos.pos < 0:
+                            short_exposure += weight
+                        prev_count = self._pair_counts.get(pos.name, 0)
+                        curr_count = len(pos.pairs)
+                        # 只有当 pair 数量增加时，才累加新增 pair 的盈亏
+                        if curr_count > prev_count:
+                            new_pairs = pos.pairs[prev_count:curr_count]
+                            new_pnl = sum(p["pnl_pct"] for p in new_pairs) * self.initial_capital * weight
+                            self._cum_realized_pnl[pos.name] = self._cum_realized_pnl.get(pos.name, 0.0) + new_pnl
+                            self._pair_counts[pos.name] = curr_count
+                        realized_pnl = self._cum_realized_pnl.get(pos.name, 0.0)
+                        # 加入未实现盈亏
+                        if pos.pos != 0 and pos.cost > 0:
+                            if pos.pos > 0:
+                                unrealized_pnl = (bar.close - pos.cost) / pos.cost
+                            else:
+                                unrealized_pnl = (pos.cost - bar.close) / pos.cost
+                            realized_pnl += unrealized_pnl * self.initial_capital * weight
+                        total_pnl += realized_pnl
 
-                equity = self.initial_capital + total_pnl
-                net_exposure = long_exposure - short_exposure
-                gross_exposure = long_exposure + short_exposure
+                    equity = self.initial_capital + total_pnl
+                    net_exposure = long_exposure - short_exposure
+                    gross_exposure = long_exposure + short_exposure
 
-                self.equity_curve.append({
-                    "dt": bar.dt,
-                    "price": bar.close,
-                    "equity": equity,
-                    "positions": sum(p.pos for p in self.strategy.positions),
-                    "long_exposure": long_exposure,
-                    "short_exposure": short_exposure,
-                    "net_exposure": net_exposure,
-                    "gross_exposure": gross_exposure,
-                    "both_long_short": long_exposure > 0 and short_exposure > 0,
-                    "sizing_model": sizing_model,
-                })
+                    self.equity_curve.append({
+                        "dt": bar.dt,
+                        "price": bar.close,
+                        "equity": equity,
+                        "positions": sum(p.pos for p in self.strategy.positions),
+                        "long_exposure": long_exposure,
+                        "short_exposure": short_exposure,
+                        "net_exposure": net_exposure,
+                        "gross_exposure": gross_exposure,
+                        "both_long_short": long_exposure > 0 and short_exposure > 0,
+                        "sizing_model": sizing_model,
+                    })
 
-            # 进度提示
-            if (i - warmup_bars) % 500 == 0 and i > warmup_bars:
-                pct = (i - warmup_bars) / (len(trade_bars) - warmup_bars) * 100
-                print(f"  进度: {pct:.1f}% ({i-warmup_bars}/{len(trade_bars)-warmup_bars})")
+                # 进度提示
+                if (i - warmup_bars) % 500 == 0 and i > warmup_bars:
+                    pct = (i - warmup_bars) / (len(trade_bars) - warmup_bars) * 100
+                    print(f"  进度: {pct:.1f}% ({i-warmup_bars}/{len(trade_bars)-warmup_bars})")
 
-        # 保存CZSC对象供外部使用
-        self.czsc_obj = czsc_trade
+            # 保存CZSC对象供外部使用
+            self.czsc_obj = czsc_trade
 
-        # A52: post-loop rollover-window tagging only when explicitly enabled.
-        # "off" skips this entirely, keeping the legacy path byte-identical.
-        if STRATEGY_CONFIG.get("rollover_stat_tagging", "off") == "on":
-            excluded_dates = self._rollover_excluded_dates()
-            for pos in self.strategy.positions:
-                for pair in pos.pairs:
-                    pair["is_rollover_window"] = _pair_in_exclusion_window(pair, excluded_dates)
+            # A52: post-loop rollover-window tagging only when explicitly enabled.
+            # "off" skips this entirely, keeping the legacy path byte-identical.
+            if STRATEGY_CONFIG.get("rollover_stat_tagging", "off") == "on":
+                excluded_dates = self._rollover_excluded_dates()
+                for pos in self.strategy.positions:
+                    for pair in pos.pairs:
+                        pair["is_rollover_window"] = _pair_in_exclusion_window(pair, excluded_dates)
 
-        # 生成报告
-        return self.generate_report()
+            # 生成报告
+            return self.generate_report()
+
+        return _bar_loop()
+
+    def run(self, warmup_bars: int = 100) -> dict:
+        """
+        执行回测 - 多级别协同分析
+
+        修复: 原实现只用单一CZSC对象分析1分钟K线。
+        现在从1分钟基础数据合成交易周期(30分钟)和日线，
+        分别创建CZSC对象进行缠论分析，综合多周期信号。
+
+        A86 起，本方法是 bar_generator() 的默认耗尽包装：全程 send(None)
+        （不注入任何覆盖值），行为与重构前逐字节一致。
+
+        :param warmup_bars: 预热K线数量（以交易周期计）
+        :return: 回测结果字典
+        """
+        gen = self.bar_generator(warmup_bars)
+        if isinstance(gen, dict):
+            # 早退路径（数据加载失败/数据不足）：bar_generator 直接返回错误字典
+            return gen
+        try:
+            to_send = None
+            while True:
+                gen.send(to_send)
+                to_send = None  # 默认耗尽：永不注入覆盖值，行为与重构前一致
+        except StopIteration as stop:
+            return stop.value
 
     def _compute_equity_and_margin(self, price: float) -> tuple[float, float]:
         """Compute running equity and total open initial margin in currency terms.
