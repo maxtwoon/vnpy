@@ -133,7 +133,7 @@ broader Phase 1/2/3 context if needed.
   independent acceptance-check script against real data; all five requested sanity checks passed
   (documented with actual numbers in `diagnostics/portfolio_ledger_acceptance_2026-07-16.md`).
   Committed the ledger JSON/Markdown and acceptance write-up as `git add -f`'d tracked evidence
-  (`diagnostics/` is gitignored). Bumped VERSION to 0.2.20.
+  (`diagnostics/` is gitignored). Bumped VERSION to 0.2.20 <!-- synccheck:ignore -->.
 - 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the full
   acceptance write-up and the table-name fix. Independently re-verified the PnL arithmetic by hand
   (33,595.59 − 74,395.27 + 0 − 15,113.73 − 9,550.17 = −65,463.58, matching the reported portfolio
