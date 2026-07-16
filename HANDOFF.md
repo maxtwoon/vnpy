@@ -1,19 +1,19 @@
 ---
 task: A85 - Joint Replay + Shared PortfolioLedger Design (design-only, no production code)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/a85-joint-replay-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -125,10 +125,36 @@ code to write. See the user's own acceptance criterion: "不写生产代码，�
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+```text
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+729 passed, 4 deselected in 31.61s
+
+$ python tools/sync_check.py
+[SYNC-CHECK] 配置: D:\repo\vnpy\.synccheck.yml
+[SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+[SYNC-CHECK][WARN] archive_dir 不存在: docs/archive/（仅提示，不 FAIL）
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK] 配置: D:\repo\vnpy\examples\czsc_strategy\.synccheck.yml
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.21  (source: VERSION::)  # synccheck:ignore
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ cd examples/czsc_strategy/diagnostics; .\run_next_work.ps1 -Preflight
+==> Compile SimNow capture script
+==> Run SimNow workflow unit tests
+191 passed in 17.16s
+==> Build pending replay backfill plan
+{"execute": false, ...}
+==> Preflight complete; live SimNow capture was not requested
+```
+
+备注：`run_next_work.ps1` 位于 `examples/czsc_strategy/diagnostics/`（当前工作树中 SimNow
+观察工作流的未提交文件），本 A85 任务未改动该文件；Preflight 结果仅作状态记录。
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A85 (joint-replay design doc) promoted for verification/finalization; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A85 joint-replay design verified/finalized; VERSION/CHANGELOG bumped; manual transition due to shell crash |

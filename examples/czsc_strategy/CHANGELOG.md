@@ -2,6 +2,22 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.21 — 2026-07-16
+
+- A85 联合回放 + 共享 PortfolioLedger 算法边界设计文档定稿（设计-only，无生产代码）。
+  - 在 `docs/design/a85-joint-replay-design.md` 中明确回答用户指定的 5 个设计问题：
+    联合时钟模型（自然分钟 outer-join，逐 bar 前向填充估值、不前向填充信号）、
+    共享账本状态（`PortfolioLedger` 字段与每个 tick 的 6 步更新顺序）、
+    开仓 gating 语义（总保证金/单品种/cluster cap 硬性拒绝 + daily loss limit 强平）、
+    信号执行顺序（`(symbol, strategy)` 字典序确定性强排）、
+    测试矩阵（10 项覆盖用户列出的 7 类场景）。
+  - 所有决策均追溯到现有代码（`PortfolioEngine._run_per_symbol()`、`_build_on_report()`、
+    `PortfolioCoordinator.allow_open()`/`on_bar()`/`_flatten_all()`、`_trading_day()`、
+    `Position._size_open()`）或现有测试行为，不臆造未经验证的新机制。
+  - 明确排除阶段三熔断动作决策与外部数据依赖问题；保留 `PortfolioEngine.run()` 的
+    `sizing_model="risk" + portfolio_risk="on"` 互斥 `NotImplementedError` 门控不变。
+  - 未改动 `chan_strategy/`、`diagnostics/` 任何生产代码，未改动任何既有测试断言。
+
 ## 0.2.20 — 2026-07-16
 
 - A84 组合账本真实数据验收 / sanity-check。
