@@ -1,7 +1,7 @@
 ---
 task: A86 - BacktestEngine per-bar generator extraction (external equity/margin injection point)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-17
 deliverables:
@@ -12,10 +12,10 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -247,3 +247,4 @@ All commands run natively on this machine (Windows PowerShell, repo `D:\repo\vnp
 |------|---------|----------|------|
 | 2026-07-17 | claude-code → kimi-code | design → dev | A86 (BacktestEngine generator extraction) promoted; handoff design->dev |
 | 2026-07-17 | kimi-code → codex | dev → review | A86 BacktestEngine generator extraction completed |
+| 2026-07-17 | codex → codex | review → done | A86 review passed: generator extraction scope, tests, sync gates, and guardrails verified |
