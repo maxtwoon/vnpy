@@ -1,19 +1,19 @@
 ---
 task: A83 - Read-Only Portfolio Margin/PnL Ledger Report (Phase 1)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/portfolio-risk-fusion-design.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -121,6 +121,33 @@ test. RESEARCH-ONLY banner required per A54 convention (`build_banner()`).
    decision) are explicitly out of scope and will be separate future tasks after this one is
    validated.
 
+## Review Findings (codex, 2026-07-16)
+
+Rejecting A83 for two aggregation correctness issues in
+`examples/czsc_strategy/diagnostics/portfolio_ledger_report.py`:
+
+1. `_build_ledger()` claims margins are forward-filled only within each symbol's own timestamp
+   range, but `df = df.ffill().fillna(0.0)` carries a symbol's last margin past its final bar when
+   another symbol has later timestamps. That can overstate portfolio total margin, max/final margin,
+   utilization, and cluster margin for mismatched symbol data ranges. Add a constructed fixture where
+   one symbol ends earlier than another and assert it contributes 0 after its final timestamp, then
+   mask each per-symbol series outside its own `[first_dt, last_dt]` range after forward fill.
+2. Per-cluster aggregation is not actually case-insensitive. `_symbol_clusters()` builds a
+   case-insensitive membership map, but `_build_ledger()` later uses
+   `member_symbols = [s for s in valid_symbols if s in members]`, so a lower-case requested symbol
+   such as `rb888` is excluded from `industrial_energy` while also not appearing in
+   `_uncategorized`. Reuse the case-insensitive cluster map, or normalize both sides, for the actual
+   `per_cluster` membership and add a test that exercises `_build_ledger()` with case-mismatched
+   symbols, not only `_symbol_clusters()`.
+
+Verification notes from review:
+- Targeted new tests passed: `python -m pytest examples/czsc_strategy/tests/unit/test_portfolio_ledger_report.py -q` -> 10 passed.
+- `ruff check examples/czsc_strategy/diagnostics/portfolio_ledger_report.py examples/czsc_strategy/tests/unit/test_portfolio_ledger_report.py` passed.
+- `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` passed.
+- Full unit suite and `run_next_work.ps1 -Preflight` hit the documented Windows sandbox
+  `tmp_path`/`PermissionError [WinError 5]` signature; per `.synccheck.yml`, use the recorded
+  manual verification block for those two items until the sandbox symlink issue is resolved.
+
 ## Decision Log
 
 - 2026-07-16 - User reviewed the portfolio-risk-fusion design doc and decided Q2 (lots vs. weights)
@@ -179,3 +206,4 @@ git diff --stat -- examples/czsc_strategy/chan_strategy/portfolio_engine.py exam
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A83 (Phase 1: read-only portfolio ledger report) promoted from portfolio-risk-fusion design doc; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A83 read-only portfolio ledger report implemented |
+| 2026-07-16 | codex → kimi-code | review → dev | 打回: A83 portfolio ledger aggregation overcounts after symbol end and case-mismatches clusters |
