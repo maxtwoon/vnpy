@@ -1,70 +1,84 @@
 ---
-task: A82 - Fail-Closed Allow-List Fix for assert_not_research_baseline
+task: A83 - Read-Only Portfolio Margin/PnL Ledger Report (Phase 1)
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
-  - docs/design/a82-sixth-audit-critical-fix.md
+  - docs/design/portfolio-risk-fusion-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-A sixth third-party audit (score 64/100, down from 70) surfaced the pipeline's first FATAL-tier
-finding since the third round: `assert_not_research_baseline()` (A78) and `unified_acceptance_gate()`
-(A81) are a **blocklist**, not a fail-closed allow-list. They only raise when
-`report.get("mode_label") == "RESEARCH_BASELINE"` exactly — any missing key, `None`, empty string,
-typo, or unrecognized value silently passes as "not research baseline." This is confirmed by
-claude-code directly: `tests/unit/test_formal_evaluation.py:222-226`
-(`test_assert_not_research_baseline_passes_on_other_labels`) and
-`tests/unit/test_a81_acceptance_gate.py:116-124` (`test_empty_mode_label_does_not_fail`) both
-explicitly assert that `{}` and `{"mode_label": ""}` currently PASS — these test assertions are
-the audit's own evidence of the gap, not a testing mistake.
+First phase of the portfolio-risk/risk-sizing unification work
+(`docs/design/portfolio-risk-fusion-design.md`), following the user's explicit decision on 2026-07-16:
+lots/real-margin accounting is the source of truth for a unified portfolio account (not
+weight-based); `risk_parity`/`cluster_gross_cap` remain as pre-trade budget/priority constraints,
+not final accounting. The user specified a three-phase rollout — this task is Phase 1 ONLY:
+a read-only ledger report, no gating, no changes to the existing
+`sizing_model="risk"` + `portfolio_risk="on"` `NotImplementedError` block.
 
-**This is a genuine design flaw claude-code introduced in A78/A81**, being fixed directly rather
-than deferred as "yet another audit finding to scope into a future roadmap." A dedicated design
-doc (`docs/design/a82-sixth-audit-critical-fix.md`) covers only this one fix — the sixth audit's
-other findings (mostly further variations on "more things should default to formal_evaluation_config()")
-are explicitly NOT being scoped into new tasks this round; claude-code will report status to the
-user after this fix lands rather than auto-opening a seventh roadmap.
+`PortfolioCoordinator.run()` (`chan_strategy/portfolio_engine.py:606-615`) raises
+`NotImplementedError` when both flags are `"on"`, but this check fires BEFORE
+`_run_per_symbol()` is called — confirmed by claude-code: `_run_per_symbol()`
+(`portfolio_engine.py:338`) is a plain per-symbol loop over independent `BacktestEngine.run()`
+calls, with no weight-coordination logic and no dependency on the gate. This means Phase 1 can be
+built as a **new, standalone diagnostic script** that calls each symbol's own `BacktestEngine.run()`
+directly (`sizing_model="risk"`), reads the margin/PnL data each engine already produces, and
+aggregates it into a portfolio-level view — without touching `PortfolioCoordinator.run()`,
+its existing gate, or any existing test.
 
-**Full contract**: `docs/design/a82-sixth-audit-critical-fix.md` (this HANDOFF summarizes it).
+**Full contract**: `docs/design/portfolio-risk-fusion-design.md` §"已确认的下一步（阶段一...）"
+(this HANDOFF summarizes it — read the full design doc for the complete background and the user's
+stated rationale before writing code).
 
 ## Goal
 
-Change `assert_not_research_baseline()` from "reject if it exactly matches the known-bad string"
-to "reject unless it matches a known-safe format." Confirmed by claude-code:
-`_compute_mode_label()` (`chan_strategy/backtest_engine.py`) only ever produces two string shapes:
-`"RESEARCH_BASELINE"` (all defaults) or `"PARTIAL_PRODUCTION_FEATURES(...)"` (any deviation). The
-fix: only the `"PARTIAL_PRODUCTION_FEATURES("`-prefixed shape should pass; everything else
-(missing key, `None`, empty string, `"RESEARCH_BASELINE"`, any unrecognized string) must raise.
+Add a new diagnostic script (e.g. `diagnostics/portfolio_ledger_report.py`) that, for a given set
+of symbols and date range, runs each symbol's own `BacktestEngine` independently with
+`sizing_model="risk"` (reusing the same per-symbol execution pattern as
+`PortfolioCoordinator._run_per_symbol()` — either by importing/calling that method directly, or by
+writing an equivalent loop if reuse proves awkward; dev's call, record the choice), then aggregates
+by timestamp across symbols into a read-only portfolio ledger:
 
-`unified_acceptance_gate()` (A81) reuses `assert_not_research_baseline()` via try/except, so fixing
-the one function fixes both.
+- Portfolio-level total margin occupied (sum of each symbol's `total_open_margin`, already present
+  in `generate_report()`'s output per A40).
+- Portfolio-level realized currency PnL (sum of each symbol's closed-trade `pnl_currency` from
+  `strategy.get_combined_trades()`).
+- Max portfolio margin utilization (portfolio total margin / initial capital, over the run).
+- Per-symbol margin/PnL breakdown.
+- Per-cluster margin breakdown, reusing `STRATEGY_CONFIG["corr_clusters"]`'s existing symbol
+  groupings (`config.py:149-151`) — do not invent a new clustering mechanism.
+
+**This is a measurement-only report** — no pass/fail threshold, no gating, no changes to any
+existing execution path. It must NOT touch `PortfolioCoordinator.run()`'s existing
+`NotImplementedError` gate, `_build_on_report()`'s weight-based coordination logic, or any existing
+test. RESEARCH-ONLY banner required per A54 convention (`build_banner()`).
 
 ## Acceptance Criteria
 
-- [ ] `assert_not_research_baseline()` raises `ValueError` for: `{}`, `{"mode_label": None}`,
-      `{"mode_label": ""}`, `{"mode_label": "RESEARCH_BASELINE"}`, `{"mode_label": "SOME_TYPO"}`.
-- [ ] `assert_not_research_baseline()` does NOT raise for
-      `{"mode_label": "PARTIAL_PRODUCTION_FEATURES(...)"}` (any concrete instance actually producible
-      by `_compute_mode_label()`).
-- [ ] `unified_acceptance_gate()` returns top-level `"fail"` for all the same "unknown/missing"
-      inputs above, via its existing reuse of `assert_not_research_baseline()`.
-- [ ] `test_formal_evaluation.py`'s `test_assert_not_research_baseline_passes_on_other_labels` is
-      corrected: the line asserting `{"mode_label": ""}` passes must be changed to assert it now
-      raises (this is fixing the bug's own evidence, not weakening test coverage).
-- [ ] `test_a81_acceptance_gate.py`'s `test_empty_mode_label_does_not_fail` is corrected the same
-      way — rename/rewrite to assert empty `mode_label` now returns `"fail"`.
-- [ ] No changes to `_compute_mode_label()` itself or any backtest numeric output.
+- [ ] New diagnostic script produces, for a set of symbols run independently with
+      `sizing_model="risk"`: portfolio-level total margin occupied over time, portfolio-level
+      realized currency PnL, max margin utilization, per-symbol breakdown, per-cluster breakdown
+      (using existing `corr_clusters` config).
+- [ ] The report clearly states it is a measurement-only aggregation of independently-run
+      per-symbol backtests — NOT a true joint/coordinated portfolio replay (that's Phase 2, out of
+      scope here). Do not word it in a way that implies this is already a unified account.
+- [ ] `PortfolioCoordinator.run()`'s existing `NotImplementedError` for
+      `sizing_model="risk"` + `portfolio_risk="on"` is completely untouched — still raises exactly
+      as before.
+- [ ] No changes to `_run_per_symbol()`, `_build_on_report()`, `_build_off_report()`, or any
+      existing test's assertions.
+- [ ] New unit tests using constructed fixtures (no real historical DB dependency) verify the
+      aggregation math (margin sum, PnL sum, cluster grouping) is correct.
 - [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
 - [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy`
       pass.
@@ -75,57 +89,51 @@ the one function fixes both.
 
 (dev = kimi-code must read this before writing code)
 
-1. **Entry point:** `docs/design/a82-sixth-audit-critical-fix.md`. This is a single, focused,
-   critical-severity fix — not part of a larger roadmap this time.
-2. **Scope:** `chan_strategy/backtest_engine.py`'s `assert_not_research_baseline()` only, plus
-   correcting the two existing test assertions named above that currently encode the bug as
-   "expected behavior." Do NOT touch `_compute_mode_label()`'s actual string-generation logic, any
-   SimNow order/cancel/send path, or any other diagnostic script (the sixth audit's other findings
-   are explicitly out of scope for this task).
-3. **Do not touch the unrelated files currently sitting modified in the working tree**
+1. **Entry point:** `docs/design/portfolio-risk-fusion-design.md` — read the full design doc,
+   including the background on why `sizing_model="risk"` and `portfolio_risk="on"` are currently
+   mutually exclusive, and the user's explicit phasing decision, before writing code. This HANDOFF
+   summarizes it but the design doc has the full reasoning.
+2. **Re-verify the technical claim yourself**: confirm `_run_per_symbol()`
+   (`portfolio_engine.py:338`) really doesn't touch the `NotImplementedError` gate before relying on
+   that assumption — read `PortfolioCoordinator.run()`'s current code directly.
+3. **Scope:** new `diagnostics/portfolio_ledger_report.py` (or similar name), plus a new test file
+   under `tests/unit/`. Do NOT modify `chan_strategy/portfolio_engine.py`,
+   `chan_strategy/backtest_engine.py`, or any signal-calculation logic. Do NOT touch any SimNow
+   order/cancel/send path.
+4. **Do not touch the unrelated files currently sitting modified in the working tree**
    (`diagnostics/ACCEPTANCE.md`, `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`, `WORK_LOG.md`,
    `run_next_work.ps1`, `simnow_20d_promotion_decision.md`,
    `tests/unit/test_run_next_work_wrapper.py`, `tests/unit/test_simnow_docs.py`) — these belong to
    a concurrent, unrelated SimNow-observation workstream. **Before committing, run
-   `git status --short` and confirm only your own A82-scoped files are staged.**
-4. **Guardrails:** no threshold tuning beyond the exact fix described; no SimNow order/cancel/send
-   paths touched; no `GOAL PASSED`; do not weaken test coverage — correcting a wrong assertion to
-   match fixed behavior is required, silently deleting the test is not acceptable.
-5. **Include a literal `## Manual Verification` heading** with natively-run counts (A77's and A81's
-   dev rounds both needed this pointed out — do not omit it again). Run `ruff check` proactively
-   before finishing.
-6. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A82 fail-closed allow-list fix for assert_not_research_baseline implemented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`.
+   `git status --short` and confirm only your own A83-scoped files are staged.**
+5. **Guardrails (reject-on-violation):** no gating/threshold logic (measurement only); no changes
+   to `PortfolioCoordinator`'s existing gate or coordination logic; no pre-2026-04-24 data for any
+   new parameter choice; no SimNow order/cancel/send paths touched; no `GOAL PASSED`; do not imply
+   this report is a true joint portfolio replay — it is an aggregation of independent per-symbol
+   runs, and the report text must say so honestly.
+6. **Include a literal `## Manual Verification` heading** with natively-run counts — this has been
+   a recurring omission across several recent tasks (A77, A81, A82 all needed it added mid-review);
+   include it proactively this time. Run `ruff check` proactively before finishing.
+7. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A83 read-only portfolio ledger report implemented"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`. This is Phase 1 of a
+   multi-phase effort — Phase 2 (joint replay + real gating) and Phase 3 (circuit-breaker action
+   decision) are explicitly out of scope and will be separate future tasks after this one is
+   validated.
 
 ## Decision Log
 
-- 2026-07-16 - Sixth third-party audit (64/100, down from 70, first fatal-tier finding since the
-  third round) surfaced a genuine design flaw claude-code introduced in A78/A81:
-  `assert_not_research_baseline()` is a blocklist, not a fail-closed allow-list. claude-code is
-  fixing this directly as A82 rather than scoping it into a larger roadmap — the sixth audit's
-  other findings (mostly repeated variations on "more diagnostics should default to formal
-  evaluation") are explicitly not being scoped this round; status will be reported to the user
-  after this fix lands.
-- 2026-07-16 - A82 promoted from `docs/design/a82-sixth-audit-critical-fix.md`'s draft to an
-  active HANDOFF task.
-- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
-  full diff: `assert_not_research_baseline()` now correctly checks
-  `mode_label.startswith("PARTIAL_PRODUCTION_FEATURES(")` as the sole allow-list condition,
-  rejecting missing/`None`/empty/unknown/`RESEARCH_BASELINE` values — exactly matching the design.
-  Confirmed the two test files' previously-bug-encoding assertions were correctly reversed (not
-  deleted): `test_assert_not_research_baseline_rejects_unknown_labels` now asserts rejection for
-  every unsafe input, and `test_a81_acceptance_gate.py` gained three new dedicated tests
-  (`test_empty_mode_label_fails`, `test_missing_mode_label_fails`, `test_none_mode_label_fails`)
-  replacing the one that previously asserted the opposite. Re-ran everything independently,
-  matching kimi-code's recorded counts exactly: full unit suite `717 passed, 4 deselected`; `ruff
-  check` clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed. Scope was
-  clean (only A82-scoped files staged).
+- 2026-07-16 - User reviewed the portfolio-risk-fusion design doc and decided Q2 (lots vs. weights)
+  in favor of lots/real-margin as the account source of truth, with `risk_parity`/`cluster_gross_cap`
+  demoted to pre-trade budget constraints. User specified the three-phase rollout (read-only ledger
+  → gating → circuit-breaker decision) and confirmed SimNow stays a separate read-only fact source.
+- 2026-07-16 - A83 promoted as Phase 1 of this rollout. claude-code confirmed the technical
+  implementation shape: a new standalone diagnostic script reusing per-symbol
+  `BacktestEngine.run()` execution, entirely avoiding `PortfolioCoordinator.run()`'s existing
+  `NotImplementedError` gate (which fires before `_run_per_symbol()` is even called).
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-16 | claude-code → kimi-code | design → dev | A82 (fail-closed allow-list fix for research-baseline guard) promoted from sixth audit critical fix; handoff design->dev |
-| 2026-07-16 | kimi-code → codex | dev → review | A82 fail-closed allow-list fix for assert_not_research_baseline implemented |
-| 2026-07-16 | codex → codex | review → done | A82 review accepted: fail-closed mode_label allow-list verified; sandbox tmp_path WinError 5 handled per .synccheck manual verification note |
+| 2026-07-16 | claude-code → kimi-code | design → dev | A83 (Phase 1: read-only portfolio ledger report) promoted from portfolio-risk-fusion design doc; handoff design->dev |
