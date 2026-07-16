@@ -1,0 +1,91 @@
+{
+  "per_symbol_AP888_metrics_match": true,
+  "per_symbol_RB888_metrics_match": true,
+  "per_symbol_SC888_metrics_match": true,
+  "per_symbol_A888_metrics_match": true,
+  "per_symbol_ZN888_metrics_match": true,
+  "all_per_symbol_metrics_match": true,
+  "total_pnl_match": true,
+  "max_total_open_margin_match": true,
+  "final_total_open_margin_match": true,
+  "max_margin_utilization_pct_match": true,
+  "ledger_length_match": true,
+  "rowwise_max_abs_diff": 0.0,
+  "rowwise_equal": true,
+  "max_margin_timestamp": "2025-09-25 23:59:00",
+  "max_margin_value": 64913.25,
+  "max_margin_contributors": {
+    "AP888": 34807.5,
+    "A888": 7942.0,
+    "ZN888": 22163.75
+  },
+  "margin_zero_outside_range": true,
+  "margin_range_details": {
+    "AP888": {
+      "first_dt": "2022-01-20 11:29:00",
+      "last_dt": "2026-04-24 14:59:00",
+      "zero_before_first": true,
+      "zero_after_last": true,
+      "overall_ok": true
+    },
+    "RB888": {
+      "first_dt": "2022-01-14 11:29:00",
+      "last_dt": "2026-04-24 22:59:00",
+      "zero_before_first": true,
+      "zero_after_last": true,
+      "overall_ok": true
+    },
+    "SC888": {
+      "first_dt": "2022-01-11 13:59:00",
+      "last_dt": "2026-04-24 23:59:00",
+      "zero_before_first": true,
+      "zero_after_last": true,
+      "overall_ok": true
+    },
+    "A888": {
+      "first_dt": "2022-01-14 11:29:00",
+      "last_dt": "2026-04-24 22:59:00",
+      "zero_before_first": true,
+      "zero_after_last": true,
+      "overall_ok": true
+    },
+    "ZN888": {
+      "first_dt": "2022-01-12 11:29:00",
+      "last_dt": "2026-04-24 23:59:00",
+      "zero_before_first": true,
+      "zero_after_last": true,
+      "overall_ok": true
+    }
+  },
+  "cluster_membership_case_insensitive": true,
+  "uppercase_mapping": {
+    "AP888": [],
+    "RB888": [
+      "industrial_energy"
+    ],
+    "SC888": [
+      "industrial_energy"
+    ],
+    "A888": [],
+    "ZN888": [
+      "industrial_energy"
+    ]
+  },
+  "lowercase_mapping": {
+    "ap888": [],
+    "rb888": [
+      "industrial_energy"
+    ],
+    "sc888": [
+      "industrial_energy"
+    ],
+    "a888": [],
+    "zn888": [
+      "industrial_energy"
+    ]
+  },
+  "cluster_industrial_energy_match": true,
+  "cluster__uncategorized_match": true,
+  "all_cluster_metrics_match": true,
+  "overall_accepted": true
+}

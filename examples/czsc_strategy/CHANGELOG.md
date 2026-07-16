@@ -2,6 +2,26 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.20 — 2026-07-16
+
+- A84 组合账本真实数据验收 / sanity-check。
+  - 修复 `diagnostics/portfolio_ledger_report.py` 在多表数据库（同时存在 `*_1M_raw` 与
+    `*_5M_raw`）下因 `_find_table()` 精确匹配歧义而失败的问题：新增 `_infer_table_names()`
+    根据运行频率 `freq` 自动选择 `{symbol}_1m_raw` / `{symbol}_5m_raw`，并允许用户通过
+    `table_names` 显式覆盖；保持默认参数不变。
+  - 对 `AP888`/`RB888`/`SC888`/`A888`/`ZN888`、窗口 `2022-01-01~2026-04-24`、
+    `sizing_model="risk"` 真实历史 SQLite 数据库完成 ledger 运行。
+  - 独立复算脚本 `diagnostics/portfolio_ledger_acceptance_check.py` 验证：组合总保证金与
+    单品种按时间戳对齐求和一致（行级最大差异 < 1e-6）；组合已实现货币 PnL 等于各品种 PnL
+    之和；最大保证金使用率时刻可追溯至具体品种；品种数据范围外保证金贡献为 0；cluster 成员
+    大小写不敏感；单品种关键指标（PnL / 最大保证金 / 最终保证金 / 交易次数）与 ledger 内部
+    复算一致。
+  - 将验收报告 `portfolio_ledger_report_20260716_094919.{json,md}` 与
+    `portfolio_ledger_acceptance_2026-07-16.md` 作为诊断证据 `git add -f` 跟踪。
+  - 未改动 `PortfolioCoordinator.run()` 的 `NotImplementedError` 门控、`_run_per_symbol()`、
+    `_build_on_report()`、`_build_off_report()` 或任何既有测试断言；未触碰 SimNow
+    下单/撤单路径；未新增任何 gating/threshold 逻辑。
+
 ## 0.2.19 — 2026-07-16
 
 - A83 修复组合账本聚合两处正确性问题（codex review 打回项）。

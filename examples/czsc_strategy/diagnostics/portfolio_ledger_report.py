@@ -37,6 +37,48 @@ from diagnostics.declassify_historical_reports import build_banner  # noqa: E402
 
 
 DEFAULT_SYMBOLS = ["AP888", "RB888", "SC888", "A888", "ZN888"]
+
+
+def _table_name_for_symbol(symbol: str, freq: str) -> str | None:
+    """Return the default raw table suffix for a symbol and frequency."""
+    norm = str(symbol).lower()
+    if freq in ("1", "1m", "1min"):
+        return f"{norm}_1m_raw"
+    if freq in ("5", "5m", "5min"):
+        return f"{norm}_5m_raw"
+    return None
+
+
+def _infer_table_names(
+    symbols: list[str], freq: str, db_path: str | None = None
+) -> dict[str, str]:
+    """Infer 1M/5M raw table names from the SQLite DB when not supplied.
+
+    Keeps the script self-contained on databases that follow the
+    ``{symbol}_{freq}m_raw`` naming convention while still allowing the caller
+    to override any mapping via ``table_names``.
+    """
+    path = db_path or SQLITE_DB_PATH
+    if not path or not Path(path).exists():
+        return {}
+    try:
+        from chan_strategy.data_adapter import SqliteDataAdapter
+    except Exception:
+        return {}
+
+    try:
+        adapter = SqliteDataAdapter(str(path))
+        tables = {t.lower(): t for t in adapter.get_tables()}
+    finally:
+        adapter.close()
+
+    mapping: dict[str, str] = {}
+    for symbol in symbols:
+        key = _table_name_for_symbol(symbol, freq)
+        if key and key in tables:
+            mapping[symbol] = tables[key]
+    return mapping
+
 DEFAULT_START = "2022-01-01"
 DEFAULT_END = "2026-04-24"
 
@@ -100,6 +142,10 @@ def _run_per_symbol_engines(
     ``STRATEGY_CONFIG["sizing_model"] == "risk"`` for the duration of the run
     and restores the previous value afterwards.
     """
+    resolved_table_names = {
+        **_infer_table_names(symbols, freq, db_path),
+        **(table_names or {}),
+    }
     engine = PortfolioEngine(
         symbols=symbols,
         freq=freq,
@@ -109,7 +155,7 @@ def _run_per_symbol_engines(
         commission_rate=commission_rate,
         slippage=slippage,
         db_path=db_path,
-        table_names=table_names or {},
+        table_names=resolved_table_names,
         enable_short=enable_short,
     )
     with _risk_sizing_config():
