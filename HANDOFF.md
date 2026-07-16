@@ -1,19 +1,19 @@
 ---
 task: A84 - Portfolio Ledger Report Acceptance / Sanity-Check
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/portfolio-risk-fusion-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -125,9 +125,61 @@ broader Phase 1/2/3 context if needed.
   2 design work begins.
 - 2026-07-16 - A84 promoted. claude-code confirmed the real historical SQLite DB is accessible on
   this machine at the path configured in `chan_strategy/config.py`.
+- 2026-07-16 (kimi-code dev) - Found and fixed a real bug while running the report against the real
+  DB: `_find_table()` couldn't disambiguate `{symbol}_1M_raw` vs `{symbol}_5M_raw` when both exist,
+  so the ledger initially failed for all five symbols. Added `_infer_table_names()` (small,
+  localized to `portfolio_ledger_report.py`) that picks the table matching `freq`, merged so
+  explicit caller-supplied `table_names` still take precedence. Ran the report and a separate
+  independent acceptance-check script against real data; all five requested sanity checks passed
+  (documented with actual numbers in `diagnostics/portfolio_ledger_acceptance_2026-07-16.md`).
+  Committed the ledger JSON/Markdown and acceptance write-up as `git add -f`'d tracked evidence
+  (`diagnostics/` is gitignored). Bumped VERSION to 0.2.20.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the full
+  acceptance write-up and the table-name fix. Independently re-verified the PnL arithmetic by hand
+  (33,595.59 − 74,395.27 + 0 − 15,113.73 − 9,550.17 = −65,463.58, matching the reported portfolio
+  total of −65,463.57 within rounding). Noted one honest nuance worth recording: the aggregation
+  cross-check in `portfolio_ledger_acceptance_check.py` reuses `_build_ledger()` itself (imported
+  directly) rather than a from-scratch alternate algorithm, so it verifies reproducibility of a
+  freshly-re-executed independent per-symbol backtest through the same aggregation code, not an
+  algorithmically independent re-derivation — the write-up discloses this candidly rather than
+  overclaiming, and the underlying per-symbol `BacktestEngine` runs genuinely are freshly re-executed
+  (not cached), which is what matters for catching data-flow/wiring mistakes. Spot-checked the
+  committed `portfolio_ledger_acceptance_check.json` matches the write-up's claimed results
+  (`overall_accepted: true` and all five sub-checks `true`). Confirmed no changes to
+  `portfolio_engine.py`/`backtest_engine.py` (`git diff --stat` empty on both) and scope was clean
+  (only A84-scoped files in kimi-code's commit, unrelated concurrent-workstream files untouched).
+  Re-ran everything independently, matching kimi-code's recorded counts: full unit suite `729
+  passed, 4 deselected`; `ruff check` clean; both `sync_check.py` gates passed; `run_next_work.ps1
+  -Preflight` passed.
+
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 729 passed, 4 deselected
+
+ruff check examples/czsc_strategy/diagnostics/portfolio_ledger_report.py \
+           examples/czsc_strategy/diagnostics/portfolio_ledger_acceptance_check.py
+# All checks passed
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete
+
+python -c "import json; d = json.load(open('examples/czsc_strategy/diagnostics/portfolio_ledger_acceptance_check.json', encoding='utf-8')); print(d['overall_accepted'])"
+# True — spot-checked the committed acceptance-check JSON matches the write-up's claimed verdict
+```
+
+Full detailed results with real numbers: `diagnostics/portfolio_ledger_acceptance_2026-07-16.md`.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A84 (portfolio ledger acceptance sanity-check) promoted; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A84 portfolio ledger acceptance sanity-check completed |
