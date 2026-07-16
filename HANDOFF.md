@@ -1,19 +1,19 @@
 ---
 task: A83 - Read-Only Portfolio Margin/PnL Ledger Report (Phase 1)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/portfolio-risk-fusion-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -131,9 +131,51 @@ test. RESEARCH-ONLY banner required per A54 convention (`build_banner()`).
   implementation shape: a new standalone diagnostic script reusing per-symbol
   `BacktestEngine.run()` execution, entirely avoiding `PortfolioCoordinator.run()`'s existing
   `NotImplementedError` gate (which fires before `_run_per_symbol()` is even called).
+- 2026-07-16 (kimi-code dev) - Implemented `diagnostics/portfolio_ledger_report.py`, calling
+  `PortfolioEngine._run_per_symbol()` directly (the correct class name — both `_run_per_symbol()`
+  and the `NotImplementedError`-raising `run()` are methods of `PortfolioEngine`, not the separate
+  `PortfolioCoordinator` helper class referenced imprecisely in this HANDOFF's earlier text;
+  claude-code verified this is still the correct bypass). Reuses `STRATEGY_CONFIG["corr_clusters"]`
+  for cluster grouping (case-insensitive symbol matching), forward-fills each symbol's margin
+  series within its own timestamp range before summing, and explicitly labels the report as an
+  aggregation of independent per-symbol runs, not a joint replay.
+- 2026-07-16 (claude-code independent verification, before triggering codex review) - Read the
+  full script and test file. Confirmed `_run_per_symbol_engines()` correctly bypasses
+  `PortfolioEngine.run()`'s `NotImplementedError` gate (line 611, unchanged) by calling
+  `_run_per_symbol()` directly; confirmed no changes to `portfolio_engine.py`, `backtest_engine.py`,
+  or any existing test file (`git diff --stat` on all three came back empty). Confirmed the
+  `_risk_sizing_config()` context manager restores `STRATEGY_CONFIG["sizing_model"]` via `finally`
+  (matching the established A74/A76/A78/A79 save/restore pattern). Re-ran everything independently:
+  full unit suite `727 passed, 4 deselected` (was 717 before this task — 10 new tests, all pass);
+  `ruff check` clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed.
+  Scope was clean (only A83-scoped files staged).
+
+## Manual Verification
+
+```text
+pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+# 727 passed, 4 deselected
+
+ruff check examples/czsc_strategy/diagnostics/portfolio_ledger_report.py \
+           examples/czsc_strategy/tests/unit/test_portfolio_ledger_report.py
+# All checks passed
+
+python tools/sync_check.py
+# PASS
+
+python tools/sync_check.py --root examples/czsc_strategy
+# PASS
+
+powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+# Preflight complete
+
+git diff --stat -- examples/czsc_strategy/chan_strategy/portfolio_engine.py examples/czsc_strategy/chan_strategy/backtest_engine.py
+# (empty — confirms the existing NotImplementedError gate and coordination logic are untouched)
+```
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A83 (Phase 1: read-only portfolio ledger report) promoted from portfolio-risk-fusion design doc; handoff design->dev |
+| 2026-07-16 | kimi-code → codex | dev → review | A83 read-only portfolio ledger report implemented |

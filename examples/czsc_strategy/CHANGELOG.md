@@ -2,6 +2,26 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.18 — 2026-07-16
+
+- A83 新增组合级真实保证金/PnL 只读账本报告（Phase 1）。
+  - 新增 `diagnostics/portfolio_ledger_report.py`：对给定品种列表与日期范围，以
+    `sizing_model="risk"` 独立运行每个品种自己的 `BacktestEngine`（复用
+    `PortfolioEngine._run_per_symbol`），然后按时间戳聚合各品种 `equity_curve` 中的
+    `total_open_margin` 与各品种已平仓 `pnl_currency`，产出组合级：总保证金占用序列、
+    已实现货币 PnL、最大保证金使用率、单品种占用/PnL 明细、按 `STRATEGY_CONFIG["corr_clusters"]`
+    分组的 cluster 占用明细。
+  - 报告为纯测量型输出，明确声明自己是“独立单品种回测的聚合”，不是真正的联合/协调组合
+    回放（Phase 2 工作）。不设置任何 pass/fail 阈值，不参与开仓拦截。
+  - 未改动 `PortfolioCoordinator.run()` 现有的 `sizing_model="risk"` +
+    `portfolio_risk="on"` 互斥 `NotImplementedError` 门控；未改动 `_run_per_symbol()`、
+    `_build_on_report()`、`_build_off_report()` 或任何既有测试断言；未触碰任何 SimNow
+    下单/撤单/发送路径。
+  - 新增单测 `tests/unit/test_portfolio_ledger_report.py`：使用构造 fixture 验证保证金求和、
+    PnL 求和、cluster 分组、错误品种处理、配置覆盖与恢复等逻辑；不依赖真实历史数据库。
+  - 报告顶部包含 RESEARCH-ONLY / NOT PROMOTION EVIDENCE 横幅，并在 Markdown 输出中包含
+    `## Manual Verification` 章节。
+
 ## 0.2.17 — 2026-07-16
 
 - A82 将 `assert_not_research_baseline()` 从 blocklist 改为 fail-closed allow-list（第六轮审核致命项修复）。
