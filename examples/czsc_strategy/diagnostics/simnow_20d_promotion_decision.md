@@ -15,10 +15,10 @@
 - ready_to_expand: `False`
 - observation_start_date: `2026-07-14`
 - excluded_before_start_count: `12`
-- observed_days: `2/20`
+- observed_days: `3/20`
 - valid_observation_days: `0/20`
 - pass_days: `0`
-- pending_days: `1`
+- pending_days: `2`
 - skipped_days: `0`
 - consistency_matched_days: `1`
 - warning_days: `0`
@@ -31,13 +31,13 @@
 | status | days |
 |---|---:|
 | halt | 1 |
-| pending | 1 |
+| pending | 2 |
 
 ## Pending / Skipped Reasons
 
 | reason | days |
 |---|---:|
-| historical_db_lag | 1 |
+| historical_db_lag | 2 |
 | no_actionable_events_on_either_side | 1 |
 
 ## Action Summary
@@ -46,6 +46,7 @@
 |---|---|---|---|---|---|
 | 2026-07-14 | halt | consecutive_loss_abs_pct | critical | 阈值触发：drawdown_abs_pct=1.2992%, consecutive_loss_days=6.0000days, consecutive_loss_abs_pct=0.1218%；建议检查风险敞口并复核阈值配置。 | False |
 | 2026-07-15 | pending | historical_db_lag | medium | 历史 DB 未覆盖当天；建议等待或执行 backfill。 | False |
+| 2026-07-16 | pending | historical_db_lag | medium | 历史 DB 未覆盖当天；建议等待或执行 backfill。 | False |
 
 ## Decision
 

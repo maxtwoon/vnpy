@@ -117,13 +117,13 @@ def test_kline_window_validation_allows_smoke_when_kline_update_skipped():
     assert "validation-finished" in output
 
 
-def test_formal_window_validation_rejects_night_session_when_ap888_enabled():
+def test_formal_window_validation_rejects_night_session_when_enabled_symbol_is_day_only():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
     command = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         assert_formal_window,
-        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' } }",
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE'; formal_sessions = @('day') } }",
         "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
         "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
     ])
@@ -133,7 +133,7 @@ def test_formal_window_validation_rejects_night_session_when_ap888_enabled():
 
     assert completed.returncode != 0
     assert "AP888" in output
-    assert "day-session" in output
+    assert "night session" in output
 
 
 def test_formal_window_validation_allows_day_session_when_ap888_enabled():
@@ -142,7 +142,7 @@ def test_formal_window_validation_allows_day_session_when_ap888_enabled():
     command = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         assert_formal_window,
-        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' } }",
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE'; formal_sessions = @('day') } }",
         "$now = [datetimeoffset]::Parse('2026-07-10T10:15:00+08:00')",
         "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
         "Write-Host 'window-finished'",
@@ -161,7 +161,7 @@ def test_formal_window_validation_allows_smoke_at_night():
     command = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         assert_formal_window,
-        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' } }",
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE'; formal_sessions = @('day') } }",
         "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
         "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $true -Now $now -ContractMap $contractMap",
         "Write-Host 'smoke-window-finished'",
@@ -174,13 +174,13 @@ def test_formal_window_validation_allows_smoke_at_night():
     assert "smoke-window-finished" in output
 
 
-def test_formal_window_validation_allows_night_when_ap888_disabled():
+def test_formal_window_validation_allows_night_when_enabled_symbols_allow_night():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
     command = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         assert_formal_window,
-        "$contractMap = @{ AP888 = @{ enabled = $false; exchange = 'CZCE' }; SC888 = @{ enabled = $true; exchange = 'INE' } }",
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE'; formal_sessions = @('day', 'night') }; SC888 = @{ enabled = $true; exchange = 'INE'; formal_sessions = @('night') } }",
         "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
         "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
         "Write-Host 'night-window-finished'",
@@ -191,6 +191,25 @@ def test_formal_window_validation_allows_night_when_ap888_disabled():
 
     assert completed.returncode == 0, output
     assert "night-window-finished" in output
+
+
+def test_formal_window_validation_allows_night_when_formal_sessions_missing():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert_formal_window = _extract_function(script_text, "Assert-FormalObservationWindow")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        assert_formal_window,
+        "$contractMap = @{ AP888 = @{ enabled = $true; exchange = 'CZCE' }; SC888 = @{ enabled = $true; exchange = 'INE' } }",
+        "$now = [datetimeoffset]::Parse('2026-07-10T21:48:02+08:00')",
+        "Assert-FormalObservationWindow -LiveCapture $true -SkipKlineUpdate $false -Now $now -ContractMap $contractMap",
+        "Write-Host 'default-night-window-finished'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert "default-night-window-finished" in output
 
 
 def test_live_capture_runs_daily_monitor_once_for_formal_ledger_write():

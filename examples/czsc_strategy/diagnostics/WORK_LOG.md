@@ -4124,3 +4124,272 @@ Result:
 ### Next Action
 
 The next formal daily run should use the aligned 1800-second command with historical DB update enabled. If replay readiness still lags after the update, keep the day as `pending/historical_db_lag` and use the backfill plan once DB coverage reaches the trade date.
+
+## 2026-07-16 Daily Observation Acceptance Run
+
+### Goal
+
+Execute the SimNow daily observation workflow for `2026-07-16`, keep the workflow read-only, and record whether the day counts toward the restarted 20-day ledger.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `191 passed`.
+
+Rejected by design:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The wrapper rejected the command because `300 < 30 * 60`.
+- This remains the documented formal-observation guard, not a code failure.
+
+Passed smoke rerun:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Generated/refreshed today's artifacts:
+  - `simnow_export_2026-07-16.json`
+  - `simnow_replay_2026-07-16.json`
+  - `simnow_record_2026-07-16.json`
+  - `simnow_report_2026-07-16.md`
+  - `simnow_run_summary_2026-07-16.json`
+  - `simnow_daily_brief_2026-07-16.md`
+  - `simnow_historical_db_update_2026-07-16.json`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17678`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=4`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Observed account activity remained contamination/audit evidence only:
+  - `account_contamination.detected=true`
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Historical DB update was skipped by the smoke path:
+  - `historical_db_update.status=skipped`
+  - `historical_db_update.reason=Smoke capture skips the formal historical DB auto update`
+- Same-day delayed replay was not ready:
+  - `delayed_replay.available=false`
+  - `latest_db_date=2026-07-14`
+  - `missing_or_lagged_symbols=[AP888,RB888,SC888,A888,ZN888]`
+- Formal day result:
+  - `record.status=pending`
+  - `record.reason=historical_db_lag`
+  - `record.threshold_status=unproven`
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+- 20-day ledger progress after the run:
+  - `observation_start_date=2026-07-14`
+  - `observed_days=3`
+  - `valid_observation_days=0`
+  - `pending_days=2`
+  - `halt_days=1`
+
+### Notes
+
+- The requested 300-second formal command still cannot count as a valid observation because the wrapper enforces the documented `1800`-second minimum unless `-SkipKlineUpdate` is used.
+- Today's smoke run is not a code failure. The day remains `pending/historical_db_lag`, which matches the acceptance rules for replay DB coverage lag.
+- No workflow orders were sent.
+
+### Next Action
+
+Run the next observation during an eligible session window with the formal 1800-second command when possible. If the historical DB still lags the trade date, keep the day as `pending/historical_db_lag` or backfill after DB coverage is available.
+
+## 2026-07-16 Daily Observation Follow-Up At 17:39 CST
+
+### Goal
+
+Re-run the daily read-only workflow during the post-close window, keep it in smoke mode, and reconcile the final status from the latest machine-readable run summary after the wrapper client timed out.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `191 passed`.
+- Pending replay backfill plan still shows `2026-07-15` and `2026-07-16` waiting for DB coverage.
+
+Executed smoke capture because the local time was `2026-07-16 17:39:12 +08:00`, outside the formal day-session window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+Observed wrapper follow-up timeout after the capture JSON was written. Completed the remaining read-only post-processing from the latest capture artifact:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py --date 2026-07-16
+python .\examples\czsc_strategy\diagnostics\simnow_daily_monitor.py --date 2026-07-16 --simnow-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-16.json --thresholds .\examples\czsc_strategy\diagnostics\simnow_risk_thresholds.json --record-json .\examples\czsc_strategy\diagnostics\simnow_record_2026-07-16.json --report-md .\examples\czsc_strategy\diagnostics\simnow_report_2026-07-16.md --replay-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-07-16.json
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+python .\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --report-md .\examples\czsc_strategy\diagnostics\simnow_20d_promotion_decision.md
+python .\examples\czsc_strategy\diagnostics\simnow_run_summary.py --date 2026-07-16 --out-dir .\examples\czsc_strategy\diagnostics --out-json .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-16.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --ledger-summary .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json --historical-db-update .\examples\czsc_strategy\diagnostics\simnow_historical_db_update_2026-07-16.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07-16 --run-summary .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-16.json --out-md .\examples\czsc_strategy\diagnostics\simnow_daily_brief_2026-07-16.md
+```
+
+### Outcomes
+
+- Updated/refreshed today's authoritative artifacts:
+  - `simnow_export_2026-07-16.json`
+  - `simnow_replay_readiness_2026-07-16.json`
+  - `simnow_replay_2026-07-16.json`
+  - `simnow_record_2026-07-16.json`
+  - `simnow_report_2026-07-16.md`
+  - `simnow_run_summary_2026-07-16.json`
+  - `simnow_daily_brief_2026-07-16.md`
+  - `simnow_ledger_summary.json`
+- Latest smoke capture produced no usable market snapshot:
+  - `ticks=0`
+  - `contracts_count=0`
+  - `accounts=0`
+  - `positions=0`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=0`
+- Latest capture logs show repeated `097` disconnects and no snapshot, so the final record was reclassified from the earlier same-day `pending/historical_db_lag` row to the newer `skipped/ctp_disconnect_097_no_snapshot`.
+- Read-only safety still passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Historical DB update stayed skipped because this was a smoke run:
+  - `historical_db_update.status=skipped`
+- Delayed replay remains unavailable for same-day validation:
+  - `latest_db_date=2026-07-14`
+  - `missing_or_lagged_symbols=[AP888,RB888,SC888,A888,ZN888]`
+- Final machine-readable conclusion from `simnow_run_summary_2026-07-16.json`:
+  - `automation_status=skipped`
+  - `automation_exit_code=10`
+  - `automation_reason=ctp_disconnect_097_no_snapshot`
+  - `automation_action=no valid market data / rerun next valid session`
+- 20-day ledger progress after the upsert:
+  - `observed_days=3`
+  - `valid_observation_days=0`
+  - `pending_days=1`
+  - `skipped_days=1`
+  - `halt_days=1`
+
+### Notes
+
+- This follow-up supersedes the earlier same-date `pending/historical_db_lag` conclusion because the later `17:39 +08:00` smoke capture is the newest run for `2026-07-16`, and the final status must come from the refreshed `simnow_run_summary_2026-07-16.json`.
+- The wrapper client timed out while post-processing, but the capture JSON had already been written and the remaining read-only artifact generation completed successfully without reconnecting to SimNow.
+- The day does not count toward the 20-day gate and this is not treated as a code failure.
+
+### Next Action
+
+Run the next observation during the next valid session window with the formal 1800-second command. Keep `2026-07-16` as `skipped` unless a newer same-date run replaces the ledger row.
+
+## 2026-07-16 Daily Observation Follow-Up At 23:02 CST
+
+### Goal
+
+Run one more same-date read-only smoke capture during the late-night session, refresh the formal daily artifacts, and confirm the final machine-readable status from the newest `simnow_run_summary_2026-07-16.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `191 passed`.
+- Pending replay backfill plan still shows `2026-07-15` waiting for DB coverage.
+
+Executed smoke capture because the local time was `2026-07-16 23:01:23 +08:00`, outside the formal 1800-second acceptance window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Updated/refreshed today's authoritative artifacts:
+  - `simnow_export_2026-07-16.json`
+  - `simnow_record_2026-07-16.json`
+  - `simnow_report_2026-07-16.md`
+  - `simnow_run_summary_2026-07-16.json`
+  - `simnow_daily_brief_2026-07-16.md`
+  - `simnow_historical_db_update_2026-07-16.json`
+  - `simnow_ledger_summary.json`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17348`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=842`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Observed account activity remained contamination/audit evidence only:
+  - `account_contamination.detected=true`
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Historical DB update stayed skipped because this was a smoke run:
+  - `historical_db_update.status=skipped`
+- Same-day delayed replay was still not ready:
+  - `delayed_replay.available=false`
+  - `latest_db_date=2026-07-14`
+  - `missing_or_lagged_symbols=[AP888,RB888,SC888,A888,ZN888]`
+- Final machine-readable conclusion from the newest `simnow_run_summary_2026-07-16.json`:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=historical_db_lag`
+  - `automation_action=resolve pending gate before counting`
+- 20-day ledger progress after the upsert:
+  - `observed_days=3`
+  - `valid_observation_days=0`
+  - `pending_days=2`
+  - `skipped_days=0`
+  - `halt_days=1`
+
+### Notes
+
+- This late-night rerun supersedes the earlier same-date `skipped/ctp_disconnect_097_no_snapshot` result because the newer same-date record successfully connected, queried contracts, received ticks, and rewrote the formal ledger row for `2026-07-16`.
+- The day still does not count toward the 20-day gate because replay readiness remains blocked by `historical_db_lag`, not because of a code failure.
+- No workflow orders were sent.
+
+### Next Action
+
+Run the next observation during the next valid session window with the formal 1800-second command. Keep `2026-07-16` as `pending/historical_db_lag` unless a newer same-date run replaces the ledger row again.

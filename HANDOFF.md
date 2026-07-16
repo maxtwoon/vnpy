@@ -1,7 +1,7 @@
 ---
 task: A85 - Joint Replay + Shared PortfolioLedger Design (design-only, no production code)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a85-joint-replay-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -158,3 +158,4 @@ $ cd examples/czsc_strategy/diagnostics; .\run_next_work.ps1 -Preflight
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A85 (joint-replay design doc) promoted for verification/finalization; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A85 joint-replay design verified/finalized; VERSION/CHANGELOG bumped; manual transition due to shell crash |
+| 2026-07-16 | codex → codex | review → done | A85 review passed; design doc, version/changelog, sync gates, and sandbox-exception manual verification accepted |

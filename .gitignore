@@ -21,6 +21,7 @@ dist
 *.local
 .pytest_cache
 .pytest_tmp
+.tmp
 
 # VeighNa
 .vntrader

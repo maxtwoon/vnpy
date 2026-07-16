@@ -97,35 +97,78 @@ function Assert-FormalObservationWindow {
         return
     }
 
-    $RequiresDaySession = $false
-    if ($ContractMap -is [System.Collections.IDictionary]) {
-        if ($ContractMap.Contains("AP888")) {
-            $Row = $ContractMap["AP888"]
-            if ($null -ne $Row) {
-                if ($Row -is [System.Collections.IDictionary]) {
-                    $RequiresDaySession = [bool]$Row["enabled"]
-                } elseif ($Row.PSObject.Properties.Name -contains "enabled") {
-                    $RequiresDaySession = [bool]$Row.enabled
-                }
-            }
-        }
-    } elseif ($ContractMap.PSObject.Properties.Name -contains "AP888") {
-        $Row = $ContractMap.AP888
-        if ($null -ne $Row -and $Row.PSObject.Properties.Name -contains "enabled") {
-            $RequiresDaySession = [bool]$Row.enabled
-        }
-    }
-
-    if (-not $RequiresDaySession) {
-        return
-    }
-
     $LocalNow = $Now.ToLocalTime()
     $TimeOfDay = $LocalNow.TimeOfDay
     $DaySessionStart = [timespan]::Parse("08:45:00")
     $DaySessionEnd = [timespan]::Parse("15:30:00")
-    if ($TimeOfDay -lt $DaySessionStart -or $TimeOfDay -gt $DaySessionEnd) {
-        throw "Formal observation window rejected: AP888 is enabled and requires a day-session capture; current local time is $($LocalNow.ToString('yyyy-MM-dd HH:mm:ss zzz')). Use -SkipKlineUpdate for a smoke test or run during the day session."
+
+    $CurrentSession = "night"
+    if ($TimeOfDay -ge $DaySessionStart -and $TimeOfDay -le $DaySessionEnd) {
+        $CurrentSession = "day"
+    }
+
+    $BlockingSymbols = [System.Collections.Generic.List[string]]::new()
+    $Entries = @()
+    if ($ContractMap -is [System.Collections.IDictionary]) {
+        $Entries = $ContractMap.GetEnumerator()
+    } else {
+        $Entries = $ContractMap.PSObject.Properties
+    }
+
+    foreach ($Entry in $Entries) {
+        if ($ContractMap -is [System.Collections.IDictionary]) {
+            $Symbol = [string]$Entry.Key
+            $Row = $Entry.Value
+        } else {
+            $Symbol = [string]$Entry.Name
+            $Row = $Entry.Value
+        }
+
+        if ($null -eq $Row) {
+            continue
+        }
+
+        $Enabled = $false
+        if ($Row -is [System.Collections.IDictionary]) {
+            if ($Row.Contains("enabled")) {
+                $Enabled = [bool]$Row["enabled"]
+            }
+        } elseif ($Row.PSObject.Properties.Name -contains "enabled") {
+            $Enabled = [bool]$Row.enabled
+        }
+        if (-not $Enabled) {
+            continue
+        }
+
+        $AllowedSessions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $FormalSessions = $null
+        if ($Row -is [System.Collections.IDictionary]) {
+            if ($Row.Contains("formal_sessions")) {
+                $FormalSessions = $Row["formal_sessions"]
+            }
+        } elseif ($Row.PSObject.Properties.Name -contains "formal_sessions") {
+            $FormalSessions = $Row.formal_sessions
+        }
+
+        if ($null -eq $FormalSessions) {
+            [void]$AllowedSessions.Add("day")
+            [void]$AllowedSessions.Add("night")
+        } else {
+            foreach ($Session in @($FormalSessions)) {
+                if ($null -ne $Session) {
+                    [void]$AllowedSessions.Add([string]$Session)
+                }
+            }
+        }
+
+        if (-not $AllowedSessions.Contains($CurrentSession)) {
+            [void]$BlockingSymbols.Add($Symbol)
+        }
+    }
+
+    if ($BlockingSymbols.Count -gt 0) {
+        $BlockingList = [string]::Join(", ", $BlockingSymbols)
+        throw "Formal observation window rejected: enabled symbols [$BlockingList] do not allow the $CurrentSession session; current local time is $($LocalNow.ToString('yyyy-MM-dd HH:mm:ss zzz')). Use -SkipKlineUpdate for a smoke test or run during an allowed session."
     }
 }
 
