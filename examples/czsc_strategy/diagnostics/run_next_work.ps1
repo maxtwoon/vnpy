@@ -8,6 +8,7 @@ param(
     [int]$ReplayTimeoutSeconds = 1200,
     [int]$MinKlineBarsPerSymbol = 30,
     [switch]$UpdateHistoricalDb,
+    [switch]$SkipHistoricalDbUpdate,
     [string]$HistoricalDbUpdateCommand = 'powershell.exe -ExecutionPolicy Bypass -File "D:\repo\ssquant\auto_update.ps1"',
     [int]$HistoricalDbUpdateTimeoutSeconds = 14400,
     [string]$Date = "",
@@ -161,6 +162,12 @@ if ($CaptureTimeoutSeconds -le 0) {
     $CaptureTimeoutSeconds = $DurationSeconds + 180
 }
 
+$ShouldUpdateHistoricalDb = $UpdateHistoricalDb.IsPresent -or (
+    $LiveCapture.IsPresent -and
+    -not $SkipKlineUpdate.IsPresent -and
+    -not $SkipHistoricalDbUpdate.IsPresent
+)
+
 Assert-KlineCoverageWindow `
     -LiveCapture $LiveCapture.IsPresent `
     -SkipKlineUpdate $SkipKlineUpdate.IsPresent `
@@ -232,7 +239,7 @@ if ($Preflight -and -not $LiveCapture) {
 if ($LiveCapture) {
     Write-Step "Run historical DB auto update"
     $HistoricalDbUpdateStartedAt = (Get-Date).ToString("o")
-    if ($UpdateHistoricalDb) {
+    if ($ShouldUpdateHistoricalDb) {
         try {
             Invoke-CheckedProcess `
                 -Label "Run historical DB auto update command" `
@@ -264,13 +271,19 @@ if ($LiveCapture) {
             throw "Historical DB auto update failed: $_"
         }
     } else {
+        $HistoricalDbUpdateReason = "Historical DB auto update skipped"
+        if ($SkipKlineUpdate.IsPresent) {
+            $HistoricalDbUpdateReason = "Smoke capture skips the formal historical DB auto update"
+        } elseif ($SkipHistoricalDbUpdate.IsPresent) {
+            $HistoricalDbUpdateReason = "SkipHistoricalDbUpdate switch set"
+        }
         $HistoricalDbUpdatePayload = [ordered]@{
             status = "skipped"
             exit_code = $null
             command = $HistoricalDbUpdateCommand
             started_at = $HistoricalDbUpdateStartedAt
             ended_at = (Get-Date).ToString("o")
-            reason = "UpdateHistoricalDb switch not set"
+            reason = $HistoricalDbUpdateReason
         }
         $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
     }

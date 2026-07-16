@@ -106,9 +106,19 @@ def test_automation_prompt_documents_optional_historical_db_update():
     text = _prompt_text()
 
     assert "-UpdateHistoricalDb" in text
+    assert "-LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb" in text
     assert "simnow_historical_db_update_YYYY-MM-DD.json" in text
     assert "historical_db_update.status" in text
     assert "historical_db_update.exit_code" in text
+
+
+def test_automation_prompt_uses_historical_db_update_in_formal_daily_run():
+    text = _prompt_text()
+
+    assert (
+        "powershell -ExecutionPolicy Bypass -File .\\examples\\czsc_strategy\\diagnostics\\run_next_work.ps1 "
+        "-LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb"
+    ) in text
 
 
 def test_automation_prompt_reports_account_contamination_separately():

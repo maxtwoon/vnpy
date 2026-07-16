@@ -36,20 +36,26 @@
 3. 如果预检通过，运行正式只读观察采集：
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30
-   ```
-
-   If the historical replay DB is updated by this workflow, use the optional
-   pre-capture update switch:
-
-   ```powershell
    powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
    ```
 
+   This is the default daily acceptance command. It explicitly enables the
+   pre-capture historical replay DB update so the formal run has the best
+   chance to clear same-day replay readiness.
+
    If the historical DB update is already handled by an external scheduled
-   task, omit `-UpdateHistoricalDb`. In both cases the workflow must write
+   task and you need to bypass the wrapper's default formal update behavior,
+   use the explicit skip switch:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -SkipHistoricalDbUpdate
+   ```
+
+   Formal live captures now update the historical DB by default unless
+   `-SkipHistoricalDbUpdate` is set. In all cases the workflow must write
    `simnow_historical_db_update_YYYY-MM-DD.json`; its status is `passed` when
-   the optional update succeeds and `skipped` when the switch is not set.
+   the update succeeds and `skipped` when the formal run explicitly skips it
+   or the command is a smoke capture.
 
 4. 检查 `run_next_work.ps1 -LiveCapture` 是否正常退出，并确认以下两个**核心工件**已生成：
    - `examples\czsc_strategy\diagnostics\simnow_run_summary_YYYY-MM-DD.json`（唯一机器判定来源）

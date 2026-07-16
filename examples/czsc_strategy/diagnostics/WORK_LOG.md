@@ -3893,3 +3893,234 @@ python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07
 ### Next Action
 
 Run the next read-only observation during a valid session window. The repaired code path is now ready to observe whether a real active-session capture still produces any replay mismatch or threshold halt.
+
+## 2026-07-14 Daily Observation Rerun With Active Data
+
+### Goal
+
+Re-run the repaired read-only SimNow smoke workflow again and confirm the end-to-end wrapper now handles a non-skipped day without manual summary regeneration.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `189 passed`.
+
+Executed smoke rerun:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- The repaired wrapper completed artifact generation automatically even though the final day result was non-pass.
+- Generated/refreshed today's artifacts:
+  - `simnow_export_2026-07-14.json`
+  - `simnow_replay_2026-07-14.json`
+  - `simnow_record_2026-07-14.json`
+  - `simnow_report_2026-07-14.md`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_run_summary_2026-07-14.json`
+  - `simnow_daily_brief_2026-07-14.md`
+  - `simnow_ledger_summary.json`
+  - `simnow_historical_db_update_2026-07-14.json`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17705`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=991`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Strategy-surface comparison result:
+  - `consistency.matched=true`
+  - `consistency.reason=no_actionable_events_on_either_side`
+  - The earlier `event_surface_mismatch` did not recur.
+- Account contamination was limited to a pre-existing external active position:
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Formal day result:
+  - `record.status=halt`
+  - `record.reason=consecutive_loss_abs_pct`
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+- The remaining blocker is now clearly the replay risk threshold, not the live/replay comparison path:
+  - halt metric: `consecutive_loss_abs_pct`
+  - warning metrics: `drawdown_abs_pct`, `consecutive_loss_days`
+- 20-day progress after the rerun:
+  - `observation_start_date=2026-07-14`
+  - `observed_days=1`
+  - `valid_observation_days=0`
+  - `halt_days=1`
+
+### Notes
+
+- This rerun confirms the execution fixes worked:
+  - captured-session comparisons no longer degrade into the old full-day replay mismatch;
+  - `halt` summaries now expose the threshold breach reason;
+  - the wrapper now generates summary artifacts automatically on `halt`.
+- The shell command still returns a non-zero process exit because the wrapper intentionally exits with the automation halt code after generating artifacts. This is expected behavior, not a wrapper crash.
+
+### Next Action
+
+Manual review is still required for the replay risk halt on `consecutive_loss_abs_pct`. Do not count the day toward the 20-day gate until that stop condition is understood or accepted.
+
+## 2026-07-15 Daily Observation Acceptance Run
+
+### Goal
+
+Execute the SimNow daily observation workflow for `2026-07-15`, keep the workflow read-only, and record whether the day counts toward the restarted 20-day ledger.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `189 passed`.
+
+Rejected by design:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300
+```
+
+Result:
+
+- The wrapper rejected the command because `300 < 30 * 60`.
+- This remains the documented formal-observation guard, not a code failure.
+
+Passed smoke rerun:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 300 -SkipKlineUpdate
+```
+
+### Outcomes
+
+- Generated/refreshed today's artifacts:
+  - `simnow_export_2026-07-15.json`
+  - `simnow_replay_2026-07-15.json`
+  - `simnow_record_2026-07-15.json`
+  - `simnow_report_2026-07-15.md`
+  - `simnow_run_summary_2026-07-15.json`
+  - `simnow_daily_brief_2026-07-15.md`
+  - `simnow_historical_db_update_2026-07-15.json`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17705`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=4`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Observed account activity remained contamination/audit evidence only:
+  - `account_contamination.detected=true`
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Historical DB update was not requested:
+  - `historical_db_update.status=skipped`
+- Same-day delayed replay was not ready:
+  - `delayed_replay.available=false`
+  - `latest_db_date=2026-07-14`
+  - `missing_or_lagged_symbols=[AP888,RB888,SC888,A888,ZN888]`
+- Formal day result:
+  - `record.status=pending`
+  - `record.reason=historical_db_lag`
+  - `record.threshold_status=unproven`
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+- 20-day ledger progress after the run:
+  - `observation_start_date=2026-07-14`
+  - `observed_days=2`
+  - `valid_observation_days=0`
+  - `pending_days=1`
+  - `halt_days=1`
+
+### Notes
+
+- The requested 300-second formal command still cannot count as a valid observation because the wrapper enforces the documented `1800`-second minimum unless `-SkipKlineUpdate` is used.
+- Today's smoke run is not a code failure. The day remains `pending/historical_db_lag`, which matches the acceptance rules for replay DB coverage lag.
+- No workflow orders were sent.
+
+### Next Action
+
+Run the next observation during an eligible session window with the formal 1800-second command when possible. If the historical DB still lags the trade date, keep the day as `pending/historical_db_lag` or backfill after DB coverage is available.
+
+## 2026-07-15 Formal Daily Flow Alignment Fix
+
+### Goal
+
+Remove the recurring mismatch between the daily automation instruction and the wrapper gates, and make the formal observation path update the historical replay DB by default before capture.
+
+### Changes
+
+- Updated `run_next_work.ps1`.
+  - Added `-SkipHistoricalDbUpdate` as the explicit opt-out switch.
+  - Formal `-LiveCapture` runs now default to the historical DB update step unless the run is a smoke capture or `-SkipHistoricalDbUpdate` is set.
+  - Kept `-UpdateHistoricalDb` as a compatible explicit opt-in alias.
+  - Improved skipped-update reasons so smoke captures and explicit skips are distinguishable in `simnow_historical_db_update_YYYY-MM-DD.json`.
+- Updated `AUTOMATION_PROMPT.md`.
+  - The formal daily acceptance command now uses `-DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+  - Added the explicit formal opt-out example with `-SkipHistoricalDbUpdate`.
+- Updated `NEXT_WORK.md` and `ACCEPTANCE.md`.
+  - Aligned the formal daily command and historical DB update semantics with the wrapper behavior.
+- Updated regression tests.
+  - Added coverage proving formal live capture defaults to the historical DB update path.
+  - Added coverage proving the prompt documents the formal `-UpdateHistoricalDb` command.
+
+### Verification
+
+Passed targeted regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_simnow_docs.py -q
+```
+
+Result:
+
+- `53 passed`
+
+Passed formal wrapper preflight:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `191 passed`.
+
+### Next Action
+
+The next formal daily run should use the aligned 1800-second command with historical DB update enabled. If replay readiness still lags after the update, keep the day as `pending/historical_db_lag` and use the backfill plan once DB coverage reaches the trade date.

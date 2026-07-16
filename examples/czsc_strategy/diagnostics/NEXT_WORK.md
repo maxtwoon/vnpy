@@ -67,13 +67,13 @@ powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\ru
 Read-only live capture for a valid observation attempt:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
 ```
 
-Read-only live capture with the optional pre-capture historical replay DB update:
+Read-only live capture with the formal historical replay DB update skipped:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -SkipHistoricalDbUpdate
 ```
 
 Short read-only smoke test that is not eligible for a valid daily observation:
@@ -135,4 +135,4 @@ python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py -
 
 - A34 restarts the formal 20-day observation cycle from `2026-07-14`. Existing ledger rows are preserved as audit evidence, but `simnow_ledger_summary.py`, `simnow_daily_monitor.py`, and `simnow_promotion_decision.py` count only rows on or after the configured `observation_start_date`.
 
-- A35 adds an optional historical replay DB update step to the formal wrapper. If `-UpdateHistoricalDb` is provided, the configured update command runs before SimNow capture and writes `simnow_historical_db_update_YYYY-MM-DD.json`; otherwise the artifact records `status=skipped`. The run summary and daily brief expose this status, but SimNow remains read-only and no account PnL is used as strategy PnL.
+- A35 adds a formal historical replay DB update step to the read-only wrapper. Formal `-LiveCapture` runs now update the configured DB by default before SimNow capture and write `simnow_historical_db_update_YYYY-MM-DD.json`; `-SkipHistoricalDbUpdate` keeps an explicit opt-out path. The run summary and daily brief expose this status, but SimNow remains read-only and no account PnL is used as strategy PnL.

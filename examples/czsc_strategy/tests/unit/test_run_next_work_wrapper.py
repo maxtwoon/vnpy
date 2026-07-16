@@ -390,13 +390,24 @@ def test_historical_db_update_runs_before_capture_when_enabled():
     assert update_index < capture_index
 
 
-def test_historical_db_update_is_optional_and_skipped_by_default():
+def test_historical_db_update_can_be_explicitly_skipped():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     update_index = script_text.index("Run historical DB auto update")
     update_block = script_text[update_index:update_index + 1800]
-    assert "if ($UpdateHistoricalDb)" in update_block
+    assert "[switch]$SkipHistoricalDbUpdate" in script_text
+    assert "$ShouldUpdateHistoricalDb" in update_block
+    assert "if ($ShouldUpdateHistoricalDb)" in update_block
     assert "$HistoricalDbUpdateJson" in update_block
     assert "skipped" in update_block
+
+
+def test_formal_live_capture_defaults_to_historical_db_update():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "$ShouldUpdateHistoricalDb = $UpdateHistoricalDb.IsPresent -or (" in script_text
+    assert "$LiveCapture.IsPresent" in script_text
+    assert "-not $SkipKlineUpdate.IsPresent" in script_text
+    assert "-not $SkipHistoricalDbUpdate.IsPresent" in script_text
 
 
 def test_run_summary_receives_historical_db_update_argument():

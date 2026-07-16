@@ -119,12 +119,12 @@ The run summary JSON embeds a safe aggregate copy of `simnow_ledger_summary.json
 
 ## Historical DB Update Artifact
 
-The formal wrapper supports an optional pre-capture historical replay DB update through `run_next_work.ps1 -LiveCapture -UpdateHistoricalDb`. This step is read-only with respect to SimNow and must run before the SimNow capture when enabled.
+The formal wrapper supports a pre-capture historical replay DB update through `run_next_work.ps1 -LiveCapture`. This step is read-only with respect to SimNow and must run before the SimNow capture for formal observation runs unless `-SkipHistoricalDbUpdate` is explicitly used. `-UpdateHistoricalDb` remains accepted as an explicit opt-in alias for the same formal update path.
 
 Every formal `-LiveCapture` run must write `simnow_historical_db_update_YYYY-MM-DD.json`:
 
-- when `-UpdateHistoricalDb` is set and the update command succeeds, the artifact must report `status=passed`, `exit_code=0`, and `started_at` / `ended_at`;
-- when `-UpdateHistoricalDb` is not set, the artifact must report `status=skipped` and explain that the switch was not set;
+- when the formal update runs and the update command succeeds, the artifact must report `status=passed`, `exit_code=0`, and `started_at` / `ended_at`;
+- when `-SkipHistoricalDbUpdate` is set or the command is a smoke capture, the artifact must report `status=skipped` and explain why the formal update was skipped;
 - when the update command fails, the wrapper must write the failure artifact and stop before the SimNow capture; that run must not count as a valid observation day.
 
 `simnow_run_summary_YYYY-MM-DD.json` must include a safe `historical_db_update` section with at least `status`, `exit_code`, `started_at`, and `ended_at`. The daily brief must include the same historical DB update status for human review. The update command must not contain secrets, and the run summary sensitive-data scanner must still reject passwords, auth codes, API keys, account IDs, or masked broker settings.
