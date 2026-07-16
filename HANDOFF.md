@@ -7,7 +7,6 @@ updated: 2026-07-17
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/backtest_engine.py
-  - examples/czsc_strategy/tests/unit/test_backtest_engine_bar_loop.py
 blockers: []
 last_transition_kind: next
 last_transition_actor: claude-code
