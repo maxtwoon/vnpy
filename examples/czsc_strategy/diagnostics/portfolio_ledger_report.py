@@ -138,6 +138,7 @@ def _build_ledger(
 
     per_symbol: dict[str, Any] = {}
     symbol_margin_series: dict[str, pd.Series] = {}
+    symbol_margin_range: dict[str, tuple[datetime, datetime]] = {}
     symbol_realized_pnl: dict[str, float] = {}
     symbol_errors: dict[str, str] = {}
 
@@ -166,6 +167,7 @@ def _build_ledger(
             margins = [float(e.get("total_open_margin", 0.0)) for e in curve]
             series = pd.Series(margins, index=index, name=symbol)
             symbol_margin_series[symbol] = series
+            symbol_margin_range[symbol] = (series.index[0], series.index[-1])
             max_margin = float(series.max()) if not series.empty else 0.0
             final_margin = float(series.iloc[-1]) if not series.empty else 0.0
         else:
@@ -184,7 +186,12 @@ def _build_ledger(
     ledger_rows: list[dict[str, Any]] = []
     if symbol_margin_series:
         df = pd.concat(symbol_margin_series.values(), axis=1).sort_index()
-        df = df.ffill().fillna(0.0)
+        df = df.ffill()
+        mask = pd.DataFrame(False, index=df.index, columns=df.columns)
+        for s in valid_symbols:
+            first_dt, last_dt = symbol_margin_range[s]
+            mask[s] = (df.index >= first_dt) & (df.index <= last_dt)
+        df = df.where(mask, 0.0).fillna(0.0)
         portfolio_margin = df.sum(axis=1)
         for dt, total_margin in portfolio_margin.items():
             margin_util = total_margin / initial_capital if initial_capital > 0 else 0.0
@@ -210,8 +217,10 @@ def _build_ledger(
     )
 
     per_cluster: dict[str, Any] = {}
-    for cluster_name, members in corr_clusters.items():
-        member_symbols = [s for s in valid_symbols if s in members]
+    for cluster_name, _members in corr_clusters.items():
+        member_symbols = [
+            s for s in valid_symbols if cluster_name in cluster_map.get(s, [])
+        ]
         if not member_symbols:
             per_cluster[cluster_name] = {
                 "symbols": [],
@@ -440,12 +449,12 @@ def write_outputs(payload: dict[str, Any], out_dir: Path, stamp: str) -> tuple[P
             "python diagnostics/portfolio_ledger_report.py --verbose",
             "```",
             "",
-            "Counts from a native run (to be filled after execution):",
+            "Counts from the report run:",
             "",
-            "- Symbols run: __",
-            "- Portfolio ledger rows: __",
-            "- Total realized currency PnL: __",
-            "- Max margin utilization (%): __",
+            f"- Symbols run: {len(payload['symbols'])}",
+            f"- Portfolio ledger rows: {len(payload['ledger'])}",
+            f"- Total realized currency PnL: {summary['total_realized_pnl_currency']:,.2f}",
+            f"- Max margin utilization (%): {summary['max_margin_utilization_pct'] * 100:.2f}",
             "",
         ]
     )

@@ -237,3 +237,44 @@ def test_methodology_states_independent_aggregation():
     assert "independently-run" in note
     assert "NOT a true joint" in note
     assert payload["methodology"]["sizing_model"] == "risk"
+
+
+def test_margin_not_carried_past_symbol_end():
+    """A symbol's last margin must not be projected after its final bar."""
+    results = {
+        "S1": _make_result("S1", [10_000.0, 12_000.0, 14_000.0], []),
+        "S2": _make_result("S2", [5_000.0, 6_000.0], []),
+    }
+    # S2 only has bars at dt=0 and dt=1.
+    results["S2"]["engine"].equity_curve = [
+        {"dt": _dt(0), "total_open_margin": 5_000.0},
+        {"dt": _dt(1), "total_open_margin": 6_000.0},
+    ]
+
+    payload = _build_ledger(results, 100_000.0, {})
+
+    ledger = {row["dt"]: row["total_open_margin"] for row in payload["ledger"]}
+    assert ledger[_dt(0).isoformat(sep=" ")] == pytest.approx(15_000.0)
+    assert ledger[_dt(1).isoformat(sep=" ")] == pytest.approx(18_000.0)
+    # S2 ended at dt=1; its contribution at dt=2 must be zero.
+    assert ledger[_dt(2).isoformat(sep=" ")] == pytest.approx(14_000.0)
+    assert payload["portfolio_summary"]["final_total_open_margin"] == pytest.approx(
+        14_000.0
+    )
+
+
+def test_cluster_grouping_is_case_insensitive_in_build_ledger():
+    """Cluster membership in _build_ledger is case-insensitive for symbols."""
+    results = {
+        "rb888": _make_result("rb888", [10_000.0, 20_000.0], []),
+        "zn888": _make_result("zn888", [5_000.0, 8_000.0], []),
+    }
+    clusters = {"industrial_energy": ["RB888", "ZN888"]}
+
+    payload = _build_ledger(results, 1_000_000.0, clusters)
+
+    cluster = payload["per_cluster"]["industrial_energy"]
+    assert set(cluster["symbols"]) == {"rb888", "zn888"}
+    assert cluster["max_total_open_margin"] == pytest.approx(28_000.0)
+    assert cluster["final_total_open_margin"] == pytest.approx(28_000.0)
+    assert "_uncategorized" not in payload["per_cluster"]

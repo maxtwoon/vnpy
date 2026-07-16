@@ -1,19 +1,19 @@
 ---
 task: A83 - Read-Only Portfolio Margin/PnL Ledger Report (Phase 1)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-16
 deliverables:
   - HANDOFF.md
   - docs/design/portfolio-risk-fusion-design.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -176,12 +176,28 @@ Verification notes from review:
   full unit suite `727 passed, 4 deselected` (was 717 before this task — 10 new tests, all pass);
   `ruff check` clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight` passed.
   Scope was clean (only A83-scoped files staged).
+- 2026-07-16 (kimi-code fix round) - Fixed both codex-reported bugs: (1) added
+  `symbol_margin_range` tracking per symbol and applied `df.where(mask, 0.0)` after `ffill()` so a
+  symbol's margin correctly zeroes out past its own final timestamp instead of persisting; (2) the
+  per-cluster loop now filters via `cluster_map.get(s, [])` (the case-insensitive map already built
+  by `_symbol_clusters()`) instead of the case-sensitive `s in members` check. Also filled in the
+  markdown report's "Manual Verification" placeholder counts with actual computed values instead of
+  leaving `__` blanks.
+- 2026-07-16 (claude-code independent verification, before triggering codex re-review) - Read both
+  fixes in full: the margin-range mask correctly zeroes contributions outside `[first_dt, last_dt]`
+  per symbol; the cluster fix correctly reuses the case-insensitive map. Confirmed the two new
+  tests (`test_margin_not_carried_past_symbol_end`, `test_cluster_grouping_is_case_insensitive_in_build_ledger`)
+  precisely target the reported bugs and would have failed against the pre-fix code. Re-ran
+  everything independently, matching kimi-code's recorded counts: full unit suite `729 passed, 4
+  deselected`; `ruff check` clean; both `sync_check.py` gates passed; `run_next_work.ps1 -Preflight`
+  passed. Scope was clean (only A83-scoped files staged).
 
 ## Manual Verification
 
 ```text
 pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
-# 727 passed, 4 deselected
+# 729 passed, 4 deselected (after fixing the two codex-reported bugs: forward-fill leak past
+# symbol end, and cluster case-insensitivity)
 
 ruff check examples/czsc_strategy/diagnostics/portfolio_ledger_report.py \
            examples/czsc_strategy/tests/unit/test_portfolio_ledger_report.py
@@ -207,3 +223,4 @@ git diff --stat -- examples/czsc_strategy/chan_strategy/portfolio_engine.py exam
 | 2026-07-16 | claude-code → kimi-code | design → dev | A83 (Phase 1: read-only portfolio ledger report) promoted from portfolio-risk-fusion design doc; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A83 read-only portfolio ledger report implemented |
 | 2026-07-16 | codex → kimi-code | review → dev | 打回: A83 portfolio ledger aggregation overcounts after symbol end and case-mismatches clusters |
+| 2026-07-16 | kimi-code → codex | dev → review | A83 read-only portfolio ledger report aggregation fixes (end-of-range mask + case-insensitive clusters) |

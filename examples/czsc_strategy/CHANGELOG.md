@@ -2,6 +2,21 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.19 — 2026-07-16
+
+- A83 修复组合账本聚合两处正确性问题（codex review 打回项）。
+  - `diagnostics/portfolio_ledger_report.py` 的 `_build_ledger()` 在按时间戳对齐各品种保证金序列后，
+    先对每根 bar 前向填充（ffill），再用每品种自身 `[first_dt, last_dt]` 的布尔掩码把范围外
+    的值置为 `0.0`，避免某一品种最后一根 bar 的保证金被延续到后续品种仍有数据的时间段，
+    导致组合总保证金、最大保证金使用率及 cluster 保证金被高估。
+  - cluster 分组时复用 `_symbol_clusters()` 建立的 case-insensitive 映射，确保请求符号大小写
+    与 `STRATEGY_CONFIG["corr_clusters"]` 配置不一致（如 `rb888` 对应配置中的 `RB888`）时仍能被
+    正确归入对应 cluster，而不是被错误排除或划入 `_uncategorized`。
+  - 新增单测覆盖：品种提前结束后不再继续贡献保证金、`_build_ledger()` 内部 cluster 成员判断
+    大小写不敏感。
+  - 未改动 `PortfolioCoordinator.run()` 的 `NotImplementedError` 门控、`_run_per_symbol()`、
+    `_build_on_report()`、`_build_off_report()` 或任何既有测试断言；未触碰 SimNow 下单/撤单路径。
+
 ## 0.2.18 — 2026-07-16
 
 - A83 新增组合级真实保证金/PnL 只读账本报告（Phase 1）。
