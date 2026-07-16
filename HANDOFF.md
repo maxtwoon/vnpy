@@ -1,7 +1,7 @@
 ---
 task: A84 - Portfolio Ledger Report Acceptance / Sanity-Check
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-16
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/portfolio-risk-fusion-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -183,3 +183,4 @@ Full detailed results with real numbers: `diagnostics/portfolio_ledger_acceptanc
 |------|---------|----------|------|
 | 2026-07-16 | claude-code → kimi-code | design → dev | A84 (portfolio ledger acceptance sanity-check) promoted; handoff design->dev |
 | 2026-07-16 | kimi-code → codex | dev → review | A84 portfolio ledger acceptance sanity-check completed |
+| 2026-07-16 | codex → codex | review → done | A84 portfolio ledger acceptance review passed |
