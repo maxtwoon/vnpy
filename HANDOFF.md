@@ -1,8 +1,8 @@
 ---
 task: A88 - Joint-clock replay real-data acceptance / sanity-check
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
@@ -13,11 +13,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -200,3 +200,4 @@ python -m ruff check examples/czsc_strategy/diagnostics/joint_replay_acceptance_
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-17 | claude-code → kimi-code | design → dev | A88 (joint replay real-data acceptance) promoted; handoff design->dev |
+| 2026-07-17 | kimi-code → codex | dev → review | A88 joint replay real-data acceptance completed |
