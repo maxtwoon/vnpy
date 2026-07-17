@@ -1,133 +1,227 @@
 ---
-task: A86 - BacktestEngine per-bar generator extraction (external equity/margin injection point)
+task: A87 - Joint-clock portfolio replay + PortfolioLedger + open-gating (block-new-opens scope)
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
-  - examples/czsc_strategy/chan_strategy/backtest_engine.py
-  - examples/czsc_strategy/tests/unit/test_a86_bar_generator.py
-  - examples/czsc_strategy/VERSION
-  - examples/czsc_strategy/CHANGELOG.md
+  - examples/czsc_strategy/chan_strategy/portfolio_ledger.py
+  - examples/czsc_strategy/chan_strategy/portfolio_engine.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-Per the user's explicit go-ahead ("按照建议执行", 2026-07-17) after reviewing claude-code's scope/effort
-estimate for A85's Phase 2 implementation, the work is split into three tasks: **A86** (this task,
-lowest-risk first step), **A87** (joint-clock driver + `PortfolioLedger` + gating, built on A86), **A88**
-(real-data acceptance check, mirroring A84's pattern). This task is A86 only — do not attempt A87/A88.
+A86 (`done`) added `BacktestEngine.bar_generator()`: a generator exposing two yield points per bar
+(`"pre_open"` at `bar.open`, `"post_bar"` at `bar.close`), each carrying `(kind, dt, price,
+computed_equity, computed_margin)` and accepting an optional `(equity, total_open_margin)` override via
+`.send()`. `run()` is unchanged (default-drains with `.send(None)` throughout). This task, A87, builds the
+actual joint/coordinated portfolio replay on top of that injection point, replacing the
+`NotImplementedError` at `portfolio_engine.py:610-615` (`sizing_model="risk"` + `portfolio_risk="on"`).
 
-`docs/design/a85-joint-replay-design.md` (accepted, `done`) decided the joint clock must drive multiple
-symbols' bar processing in lockstep, feeding each symbol a *shared, portfolio-level* `equity`/
-`total_open_margin` at each tick instead of each symbol's own 100%-capital view. Today,
-`BacktestEngine.run()` (`chan_strategy/backtest_engine.py:393-758`) is a single monolithic per-bar loop
-(`for i in range(warmup_bars, len(trade_bars)):` at line 536) that always computes its own
-`equity_at_entry`/`total_open_margin` via `self._compute_equity_and_margin()` (line 760) at exactly two
-points: line 569 (pre-open, using `bar.open`) and line 649 (post-signal, using `bar.close`, only inside
-`if risk_mode:`). `Position._size_open()` (`positions.py:1004`) already accepts `equity_at_entry`/
-`total_open_margin` as parameters and already rejects opens when the injected equity/margin implies
-insufficient headroom — so once a *shared* value can be fed in at those two points, the existing
-position-sizing/margin-cap logic in `positions.py` will organically enforce joint gating **without any
-change to `positions.py` itself**. claude-code confirmed this by reading `_open_long`/`_open_short`/
-`_size_open` directly.
+**Scope decision made with the user before promoting this task (2026-07-17)**: while designing this task,
+claude-code found that A85's original decision ("daily loss limit breach → block new opens AND
+immediately flatten all open positions") cannot be implemented purely through A86's equity/margin
+injection point — forcing an already-open `Position` closed requires a new externally-triggerable
+close primitive that doesn't exist yet (A86 only built an equity/margin read-and-override point, not a
+force-close point). The user explicitly chose: **A87 implements block-new-opens only; forced liquidation
+on breach is deferred to a separate future task (tentatively "A89")**, not implemented here. Do not
+attempt to force-close positions in this task.
 
-**The missing piece is purely mechanical**: `run()`'s loop currently cannot be paused/resumed bar-by-bar
-by an external driver — it runs start-to-finish in one call. A87's joint-clock driver needs to advance
-multiple `BacktestEngine` instances in lockstep (process symbol A's bar at timestamp T, then symbol B's
-bar at timestamp T, before either moves to T+1), computing the shared ledger state between each step.
-That requires `run()`'s loop to become **externally steppable**.
+### The core mechanism (why no `positions.py` changes are needed)
+
+`Position._size_open()` (`positions.py:1004-1050`) already computes:
+```python
+margin_cap = equity * max_margin_pct
+...
+if pre_open_margin + volume * required_margin_for_one > margin_cap:
+    max_fit = floor((margin_cap - pre_open_margin) / required_margin_for_one)
+    volume = max_fit if max_fit >= 1 else 0  # 0 means the open is skipped entirely
+```
+`equity` and `pre_open_margin` come directly from whatever `equity_at_entry`/`total_open_margin` the
+caller injected. This means:
+- Feeding the **true portfolio-wide** `equity` (currency, PnL-based) and `total_open_margin` (currency,
+  sum of every symbol's occupied margin) at the `"pre_open"` yield makes the **existing**
+  `max_margin_pct` config key act as a **total-portfolio margin cap** automatically — no new config key,
+  no new logic, this falls out of feeding real shared numbers into code that already exists.
+- To additionally enforce a **per-symbol cap** or **cluster cap** or **daily-loss-limit-active** block —
+  none of which `_size_open()` natively distinguishes — feed a **deliberately saturated**
+  `total_open_margin` value (`= equity * max_margin_pct`, i.e. "pretend the total cap is already fully
+  used") instead of the true value, for exactly the symbols/ticks where one of those additional
+  constraints is breached. `_size_open()`'s existing formula then rejects the open (`max_fit <= 0`)
+  without needing to know *why* — the "why" is recorded separately in `blocked_opens` for diagnostics.
+  This is the **entire gating mechanism** for this task: real numbers when nothing is breached, a
+  saturated number when something is. No other code path is available or should be invented.
 
 ## Goal
 
-Convert the per-bar loop body currently inside `run()` (lines 536-757) into a **generator**, with **two
-`yield` points** — one right before each of the two existing `self._compute_equity_and_margin(...)` calls
-(line 569 and line 649) — so an external driver can `.send()` in a `(equity, total_open_margin)` override
-tuple instead of letting the engine compute its own. `run()` itself becomes a thin wrapper that fully
-drains the generator with `gen.send(None)` at every step (meaning "no override, compute internally as
-before") — this must reproduce **exactly** today's behavior, byte-for-byte, since nothing outside this
-task changes how `run()` is called.
+### 1. New file: `chan_strategy/portfolio_ledger.py` — `PortfolioLedger` class
 
-### Precise implementation shape (do not deviate — this specific shape avoids the biggest risk)
+Tracks shared portfolio state across all symbols during the joint replay. Constructor takes `symbols`,
+`initial_capital`, `corr_clusters` (reuse `STRATEGY_CONFIG["corr_clusters"]`, same case-insensitive
+matching as A83's `_symbol_clusters()` — reuse that helper, don't reimplement), and reads
+`max_margin_pct`, `max_symbol_margin_pct` (**new** config key, default `1.0`), `cluster_gross_cap`,
+`daily_loss_limit_pct` from `STRATEGY_CONFIG`.
 
-- **Do NOT extract the loop into a separate class method with an explicit parameter list.** The loop body
-  currently closes over ~15 local variables from `run()`'s setup section (`trade_bars`, `czsc_trade`,
-  `czsc_daily`, `czsc_4h`, `daily_bars`, `daily_bar_idx`, `h4_bars`, `h4_bar_idx`, `trade_freq_name`,
-  `filter_freq_name`, `sizing_model`, `risk_mode`, `limit_active`, `prev_close_map`, `symbol_limit`,
-  `rollover_gating_active`, `excluded_dates`, `pending_signals`, etc.). Hoisting all of these into method
-  parameters or instance attributes is exactly the kind of large, error-prone refactor that risks a subtle
-  behavior change in the project's most heavily-tested code path. Instead:
-- **Define the generator as a nested function inside `run()`** (e.g. `def _bar_loop():` defined after line
-  535, before the current `for i in range(...)` statement), so it captures all of `run()`'s existing
-  locals via normal Python closure — no parameter list needed, no local variable renamed or moved.
-  Convert the existing `for i in range(warmup_bars, len(trade_bars)):` loop (currently at module level
-  inside `run()`) to live inside this nested function, unchanged internally except for the two inserted
-  `yield` statements described below.
-- **Yield point 1** (replaces line 569's direct call): where the code currently does
-  `equity_at_entry, total_open_margin = self._compute_equity_and_margin(bar.open)` inside `if risk_mode:`,
-  change to:
-  ```python
-  equity_at_entry, total_open_margin = self._compute_equity_and_margin(bar.open)
-  override = yield ("pre_open", bar.dt, bar.open, equity_at_entry, total_open_margin)
-  if override is not None:
-      equity_at_entry, total_open_margin = override
-  ```
-- **Yield point 2** (replaces line 649's direct call): where the code currently does
-  `equity, total_open_margin_now = self._compute_equity_and_margin(bar.close)` inside `if risk_mode:`,
-  apply the same pattern with a `"post_bar"` tag instead of `"pre_open"`.
-- **`run()`'s driving loop** (replaces the old bare `for i in range(...)` at the top level of `run()`):
-  ```python
-  gen = _bar_loop()
-  try:
-      to_send = None
-      while True:
-          gen.send(to_send)
-          to_send = None  # default drain: no override, ever — behavior must be identical to today
-  except StopIteration:
-      pass
-  ```
-  This is the **default-drain wrapper**; it must produce byte-identical output to the current code for
-  every existing test, since `to_send` is always `None`.
-- **Public step interface for a future external driver (A87)**: expose the generator itself via a new
-  method, e.g. `BacktestEngine.bar_generator(self, warmup_bars=100)` that does everything `run()`'s setup
-  currently does (lines 393-535, unchanged) and then `return`s the nested generator object instead of
-  draining it — so A87's future joint-clock driver can call `engine.bar_generator()`, get the generator,
-  and manually alternate `.send(...)` calls across multiple engines. **Do not implement the joint driver
-  itself in this task** — just expose this generator-returning method; `run()` should internally call it
-  and drain it for its own use, so there is exactly one code path for the loop, not two copies.
-- Everything before line 536 (data loading, CZSC init, config resolution) and everything after line 757
-  (post-loop rollover tagging, `generate_report()`) stays **completely unchanged** — only the loop body
-  itself becomes a generator with two yield points.
+**Note on reusing `max_margin_pct`/`cluster_gross_cap`/`daily_loss_limit_pct`**: these keys are already
+consumed by the *weight-based* `PortfolioCoordinator` (`portfolio_engine.py:84`) when
+`portfolio_risk="on"` + `sizing_model!="risk"`. `PortfolioLedger` reinterprets the same key names in
+*margin/currency* terms for the `sizing_model="risk"` + `portfolio_risk="on"` path. This is safe and
+intentional, not an oversight: the two paths are strictly mutually exclusive (gated by `sizing_model`),
+so at any given config snapshot only one interpretation is ever active. Document this explicitly in the
+class docstring so a future reader isn't confused by the dual meaning.
+
+State fields (updated once per symbol-tick, see driver algorithm below):
+- `equity: float` — shared, currency-based: `initial_capital + sum_over_symbols(pnl_contribution)`
+  where `pnl_contribution = computed_equity_from_yield - initial_capital` (each engine is constructed
+  with the *same* `initial_capital` as the portfolio, matching A83/A84's already-verified methodology —
+  do not divide capital per symbol).
+- `margin_by_symbol: dict[symbol, float]` — each symbol's most recent `computed_margin` from its own
+  `"post_bar"` yield (zero if the symbol hasn't started yet).
+- `margin_total: float` — `sum(margin_by_symbol.values())`.
+- `margin_by_cluster: dict[cluster, float]` — sum of `margin_by_symbol` for members of each cluster,
+  using the case-insensitive membership map (reuse `_symbol_clusters()` from
+  `diagnostics/portfolio_ledger_report.py` — import it, don't duplicate).
+- `trading_day: date | None`, `day_start_equity: float`, `daily_loss_limit_active: bool` — day-rollover
+  bookkeeping, using `_trading_day()` (`portfolio_engine.py:32`) with the existing `daily_agg` config,
+  same as `PortfolioCoordinator._new_trading_day()`.
+
+Methods:
+- `update_trading_day(dt)`: call once per tick (before processing any symbol at that `dt`); if the
+  trading day changed, reset `daily_loss_limit_active = False` and `day_start_equity = self.equity`
+  (the equity as of the previous tick's close).
+- `update_equity(pnl_contributions: dict[symbol, float])`: recompute `self.equity` from all known
+  per-symbol pnl contributions (call after every symbol's `"post_bar"` yield in a tick, since `equity`
+  is shared and any symbol's PnL affects it).
+- `update_symbol_margin(symbol, margin)`: set `margin_by_symbol[symbol]`, recompute `margin_total` and
+  `margin_by_cluster`.
+- `check_daily_loss_limit()`: after `update_equity`, if `day_start_equity > 0` and
+  `(equity - day_start_equity) / day_start_equity <= -daily_loss_limit_pct` and not already active, set
+  `daily_loss_limit_active = True` and record the trigger (dt, equity, day_pnl_pct) in a
+  `loss_limit_triggers: list[dict]` diagnostic list. **Do not flatten anything** — this task's scope is
+  block-new-opens only (see Background).
+- `pre_open_injection_for(symbol) -> tuple[float, float, str | None]`: returns
+  `(equity, total_open_margin, blocked_reason)` to feed into that symbol's `"pre_open"` yield override.
+  `blocked_reason` is `None` normally (feed real `self.equity`/`self.margin_total`). If
+  `daily_loss_limit_active`, or `margin_by_symbol[symbol] > equity * max_symbol_margin_pct`, or any
+  cluster containing `symbol` has `margin_by_cluster[cluster] > equity * cluster_gross_cap`, return
+  `(self.equity, self.equity * max_margin_pct, <one short string identifying the specific reason>)` —
+  the saturated value that forces `_size_open()` to reject. Check daily-loss-limit first, then
+  per-symbol, then cluster (first true reason wins, for a deterministic `blocked_reason` string when
+  multiple are simultaneously breached).
+
+### 2. `PortfolioEngine._build_joint_report()` (new method in `portfolio_engine.py`)
+
+Driver algorithm (implement exactly this shape):
+
+1. Build one `BacktestEngine` per symbol (same constructor args as `_run_per_symbol()` uses today —
+   reuse that construction logic, don't duplicate it). For each, call `engine.bar_generator(warmup_bars)`
+   (default `warmup_bars=100`, matching `run()`'s default — do not hardcode a different value).
+   If the result `isinstance(..., dict)` (data-load error), record it in `symbol_errors` exactly as
+   `_run_per_symbol()` does today and exclude that symbol from the joint loop entirely.
+2. For every successfully-started generator, prime it with `next(gen)` (equivalent to the first
+   `.send(None)`) to get its first `"pre_open"` yield. Store `pending[symbol] = (kind, dt, price,
+   computed_equity, computed_margin)` for each; store `None` for any symbol whose generator raised
+   `StopIteration` immediately (should not happen in practice given the length checks in `run()`, but
+   handle it defensively — treat as `symbol_errors[symbol] = "empty_bar_generator"`).
+3. Instantiate one `PortfolioLedger(successful_symbols, self.initial_capital, corr_clusters)`.
+4. Loop while any `pending[symbol]` is not `None`:
+   a. `current_dt = min(item[1] for item in pending.values() if item is not None)`.
+   b. `ledger.update_trading_day(current_dt)`.
+   c. For each symbol with `pending[symbol][1] == current_dt`, **in sorted(symbol) order** (deterministic
+      tie-break, same rationale as A85 §4 — dictionary order over the full processing unit, since this
+      driver operates at bar granularity rather than per-signal granularity):
+      - The pending item's `kind` must be `"pre_open"` here (a symbol only reaches `current_dt` freshly;
+        if this invariant is ever violated, that's a bug — assert it).
+      - `equity, margin, reason = ledger.pre_open_injection_for(symbol)`. If `reason is not None`,
+        append `{"dt": current_dt, "symbol": symbol, "reason": reason}` to a `blocked_opens: list[dict]`
+        diagnostic list (this is *speculative* — it does not guarantee an open was actually attempted
+        this tick, only that *if* one was attempted it would have been forced to fail; that's fine, it
+        mirrors how `PortfolioCoordinator.blocked_opens` already works — a record of gating pressure,
+        not a proof of a specific rejected signal).
+      - `item = gen.send((equity, margin))` — resumes the generator; it must yield `"post_bar"` for the
+        *same* `current_dt` next (same-bar semantics, no waiting on other symbols in between the two
+        yields of one bar).
+      - At the `"post_bar"` yield: `ledger.update_symbol_margin(symbol, item[4])` (the *actual* resulting
+        margin, reflecting whatever the pre_open injection allowed or blocked), then recompute pnl
+        contribution `item[3] - engine.initial_capital` and call `ledger.update_equity(...)` with all
+        symbols' latest known contributions (keep a `pnl_contributions: dict[symbol, float]` alongside
+        the loop, update this symbol's entry, pass the full dict each time).
+      - Send the *shared* `(ledger.equity, ledger.margin_total)` back at the `"post_bar"` yield too —
+        `item2 = gen.send((ledger.equity, ledger.margin_total))` — so the engine's own recorded
+        `equity_curve` entry reflects the portfolio view, not this symbol's standalone 100%-capital view
+        (this is what makes the joint replay's reported equity curve meaningfully different from A83's
+        independent-aggregation ledger).
+      - `ledger.check_daily_loss_limit()`.
+      - The generator now either yields `"pre_open"` for this symbol's *next* bar (store it in
+        `pending[symbol]`) or raises `StopIteration` (its `.value` is that symbol's final report dict —
+        store it in `symbol_reports[symbol]`, set `pending[symbol] = None`).
+5. After the loop, assemble the joint report: `portfolio_risk="on"`, `sizing_model="risk"`,
+   `initial_capital`, `period`, `symbols`, `symbol_reports`, `symbol_errors`, a combined `equity_curve`
+   (one entry per unique `current_dt` processed, using `ledger.equity`/`ledger.margin_total` as recorded
+   at the *last* symbol processed for that tick — since `ledger.equity` is shared/converged by the end of
+   each tick's symbol loop, this is well-defined), `pairs` (every symbol's `get_combined_trades()`,
+   tagged with `symbol`, sorted by `open_dt` — same shape as `_build_off_report()`/`_build_on_report()`
+   already produce, for downstream compatibility), `blocked_opens`, `loss_limit_triggers` (from the
+   ledger). **Do not include a `flat_events` field** — there is nothing to report since this task doesn't
+   flatten anything; if useful, note in the report that forced liquidation is out of scope
+   (`"flatten_on_breach": "not_implemented_see_A89"` or similar — dev's call on exact key name, just
+   don't imply flattening happened).
+
+### 3. Wire into `run()`
+
+Replace the `NotImplementedError` block at `portfolio_engine.py:610-615` with:
+```python
+if sizing_model == "risk" and portfolio_risk == "on":
+    return self._build_joint_report()
+```
+Keep the two existing branches (`_run_per_symbol()` + `_build_off_report()`/`_build_on_report()`)
+completely unchanged for every other config combination.
+
+### 4. Config
+
+Add `max_symbol_margin_pct` to `STRATEGY_CONFIG` in `chan_strategy/config.py` with default `1.0`
+(matching A85 §3's justification: a new constraint defaults to the least restrictive value — "a symbol
+may use up to 100% of equity," i.e. no tighter than today's single-symbol behavior — until a user
+explicitly configures it tighter; do not invent a stricter default not requested by any user).
 
 ## Acceptance Criteria
 
-- [ ] `BacktestEngine.run()` produces byte-identical `equity_curve`/`trades`/report output to before this
-      change, on every existing test and on a real-data smoke run (compare a report field-by-field, not
-      just "tests still green" — equity_curve values must match to full float precision, not just
-      approximately).
-- [ ] A new `bar_generator()` (or equivalently named) method exists that returns the same generator
-      `run()` uses internally, exposing exactly two yield points (`"pre_open"` and `"post_bar"`) tagged
-      with `(kind, dt, price, computed_equity, computed_margin)`, accepting an optional
-      `(equity, total_open_margin)` override via `.send()`.
-- [ ] A new test file demonstrates: (a) fully-draining the generator with `.send(None)` throughout
-      reproduces the exact same `equity_curve`/report as calling `run()` directly on the same engine
-      config; (b) sending a deliberately different `(equity, total_open_margin)` override at a `pre_open`
-      yield changes the resulting `Position._size_open()` lot sizing for that bar (proving the injection
-      point actually reaches position sizing, not just a dead parameter).
-- [ ] No change to `positions.py`, `portfolio_engine.py`, or any existing test's assertions.
-- [ ] No change to the `sizing_model="risk" + portfolio_risk="on"` `NotImplementedError` gate in
-      `portfolio_engine.py:610-615` — this task does not touch portfolio-level code at all, only
-      `BacktestEngine`.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes with the exact same
-      pass count as before this change plus the new test file's tests (no existing test's outcome changes).
+- [ ] `PortfolioLedger` correctly aggregates `equity` (currency, from PnL contributions, not
+      double-counting `initial_capital`) and `margin_total`/`margin_by_cluster` (currency sums),
+      verified with constructed fixtures (same `FakeEngine`-less style as A86's tests — drive real
+      `bar_generator()` calls on small synthetic bar fixtures, not pre-computed curves, since this task
+      tests the *live* injection interaction, not post-hoc aggregation like A83/A84 did).
+- [ ] Feeding true shared `equity`/`margin_total` at `"pre_open"` makes `max_margin_pct` act as a
+      total-portfolio cap: construct a fixture where two symbols' combined margin would exceed
+      `equity * max_margin_pct` and confirm the second symbol's open is reduced/rejected by the existing
+      `_size_open()` logic (no `positions.py` change, just confirm the existing formula does this).
+- [ ] Per-symbol cap (`max_symbol_margin_pct`) rejects a symbol's own new opens once its own margin share
+      exceeds the configured fraction of equity, even when total portfolio margin has headroom.
+- [ ] Cluster cap (`cluster_gross_cap`) rejects a new open when the symbol's cluster's combined margin
+      would exceed the cap, using case-insensitive cluster membership (reuse, don't reimplement, A83's
+      `_symbol_clusters()`).
+- [ ] Daily-loss-limit: once breached, new opens are blocked for the remainder of that trading day for
+      *every* symbol (not just the one that triggered it); the block clears at the next trading-day
+      rollover (`_trading_day()`); **no position is force-closed** (explicitly test that existing open
+      positions are left alone — this proves the scope boundary is respected, not just "tests pass").
+- [ ] Forward-fill/zero-outside-range semantics for a symbol's margin contribution are correct when that
+      symbol has fewer bars than others (mirrors A83's `test_margin_not_carried_past_symbol_end`, applied
+      to the live joint driver instead of a post-hoc ledger).
+- [ ] `sizing_model="risk"` + `portfolio_risk="off"`, and `sizing_model!="risk"` + `portfolio_risk="on"`
+      (the pre-existing weight-based path) are both **byte-identical** to before this task — this task
+      only adds a new branch, it does not touch the other two.
+- [ ] No changes to `positions.py`, `backtest_engine.py`, or any existing test's assertions.
+- [ ] No forced position closure anywhere in this task's code (per the scope decision above).
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes, existing pass count
+      unchanged plus new tests.
 - [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
 - [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
 - [ ] VERSION/CHANGELOG bumped.
@@ -137,114 +231,53 @@ task changes how `run()` is called.
 
 (dev = kimi-code must read this before starting)
 
-1. **This is the highest-risk task in the current A85/A86/A87/A88 sequence** — it touches the single most
-   heavily-tested code path in the project (every existing acceptance/regression test depends on
-   `BacktestEngine.run()`'s exact numeric output). Go slowly. Diff the generated `equity_curve` against a
-   pre-change baseline run on at least one real symbol before considering this done, not just "pytest is
-   green" — pytest fixtures may not exercise every code branch (e.g. `risk_mode=False` legacy path,
-   `resonance_filter="daily_4h"`, `limit_active`, `rollover_gating_active` all have separate branches
-   inside the loop that must all still work identically inside the generator).
-2. **Follow the exact nested-generator-closure shape described above.** Do not hoist loop-local variables
-   into method parameters or instance attributes — that's a bigger, riskier refactor than necessary and
-   is explicitly NOT what this task asks for.
-3. **Do not implement A87's joint-clock driver or `PortfolioLedger` in this task.** This task's only job
-   is making `BacktestEngine`'s loop externally steppable and proving the injection point reaches position
-   sizing. The actual multi-symbol coordination is A87, not yet promoted.
+1. **This is the most novel/complex task in the A85→A88 sequence.** Read A86's actual implementation
+   (`chan_strategy/backtest_engine.py`'s `bar_generator()`/`run()`) and its test file
+   (`tests/unit/test_a86_bar_generator.py`) first, to understand exactly what the two yield points give
+   you before writing the driver — do not guess at `bar_generator()`'s behavior from this HANDOFF alone.
+2. **The gating mechanism is entirely "feed true numbers, or feed a saturated number to force reject."**
+   Do not invent a second gating mechanism (e.g. don't try to intercept `strategy.update()` calls or
+   modify `positions.py`) — everything routes through the two numbers `_size_open()` already consumes.
+3. **Do not implement forced liquidation / flatten-on-breach** — this was explicitly descoped by the user
+   for this task (see Background). If you find yourself needing to close a position from outside an
+   engine, stop and record the gap in the Decision Log rather than inventing a new close primitive —
+   that's a signal this task's scope was misunderstood.
 4. **Do not touch the unrelated files currently sitting modified in the working tree**
    (`diagnostics/ACCEPTANCE.md`, `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`, `WORK_LOG.md`,
    `run_next_work.ps1`, `simnow_20d_promotion_decision.md`,
    `tests/unit/test_run_next_work_wrapper.py`, `tests/unit/test_simnow_docs.py`) — these belong to a
    concurrent, unrelated SimNow-observation workstream. **Before committing, run `git status --short`
-   and confirm only your own A86-scoped files are staged.**
+   and confirm only your own A87-scoped files are staged.**
 5. **Include a literal `## Manual Verification` heading** — required every time; do not omit it.
 6. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A86 BacktestEngine generator extraction completed"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`. If the transactional command itself
-   crashes for environment reasons (this has happened before on this machine), do not manually hand-edit
-   HANDOFF.md's stage/owner fields to bypass it — leave the working tree with your changes uncommitted
-   and note the failure in the Decision Log; claude-code will verify and commit properly.
+   `python tools/handoff.py next --actor kimi-code --summary "A87 joint-clock replay + PortfolioLedger completed"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`. If the command itself crashes for
+   environment reasons (this has happened on this machine on both A85 and A86), do not manually
+   hand-edit HANDOFF.md's stage/owner fields to bypass it — leave the working tree with your changes
+   uncommitted and note the failure in the Decision Log; claude-code will verify and commit properly.
 
 ## Decision Log
 
-- 2026-07-17 - User reviewed claude-code's A85-implementation scope/effort estimate and explicitly said
-  to proceed per the recommended 3-task split (A86 → A87 → A88), starting now.
-- 2026-07-17 (claude-code, design) - Read `BacktestEngine.run()` in full (lines 393-758) to scope A86
-  precisely. Confirmed the two exact call sites needing injection (line 569 pre-open, line 649 post-bar)
-  and confirmed `Position._size_open()` already honors injected `equity_at_entry`/`total_open_margin` for
-  margin-cap rejection, meaning A87 will not need to touch `positions.py` at all once this injection point
-  exists. Chose nested-generator-closure over method-parameter-hoisting specifically to minimize risk to
-  the most heavily-tested code path in the project — hoisting ~15 loop-local variables into an explicit
-  parameter list was assessed as needlessly increasing surface area for a subtle regression.
-- 2026-07-17 (kimi-code, dev) - A86 implemented per the design's nested-generator-closure shape:
-  `run()`'s per-bar loop now lives in `_bar_loop()` nested inside the new `bar_generator()`
-  method, closing over the original locals (`nonlocal pending_signals, daily_bar_idx,
-  h4_bar_idx, excluded_dates`); no loop-local variable was hoisted, renamed, or moved. Two
-  yield points were inserted inside `if risk_mode:` at the two pre-existing
-  `_compute_equity_and_margin()` call sites (`"pre_open"` at bar.open, `"post_bar"` at
-  bar.close), each accepting an optional `(equity, total_open_margin)` override via `.send()`.
-  `run()` is now a default-drain wrapper (`send(None)` throughout). One deliberate, minimal
-  completion of the design's drain snippet: the wrapper captures the report via
-  `except StopIteration as stop: return stop.value`, because the post-loop report generation
-  moved inside the generator to keep exactly one code path (the design's `except StopIteration:
-  pass` sketch had no way to return the report). Early setup failures (data load / insufficient
-  bars) still return the identical error dict — `bar_generator()` returns it directly and
-  `run()` passes it through. Verified byte-identical equity_curve/signal_history/report on real
-  data (AP888 2024-01-01~2024-06-30, 783 trade bars, 9 trades) in both research and risk
-  modes, and unit pass count 730 -> 735 (only the 5 new tests added; no existing test's
-  outcome changed). A87's joint-clock driver / PortfolioLedger intentionally not started.
+- 2026-07-17 - User authorized proceeding with the A86→A87→A88 implementation sequence.
+- 2026-07-17 (claude-code, design) - While scoping A87, found that A85's original "block new opens AND
+  flatten all positions" daily-loss-limit action cannot be built purely on A86's equity/margin injection
+  point — forced position closure needs a new close primitive A86 did not build. Flagged this to the user
+  via AskUserQuestion rather than silently descoping. User chose: A87 implements block-new-opens only;
+  forced liquidation is a separate future task (tentatively "A89"), not attempted here.
+- 2026-07-17 (claude-code, design) - Confirmed `Position._size_open()`'s existing margin-cap formula
+  (`positions.py:1038-1048`) needs no changes: feeding true shared equity/margin makes `max_margin_pct`
+  act as a total-portfolio cap "for free," and feeding a deliberately saturated `total_open_margin` value
+  is sufficient to implement per-symbol cap, cluster cap, and daily-loss-limit rejection without touching
+  `positions.py` at all. Designed `PortfolioLedger` and the joint-clock driver algorithm around this
+  single mechanism to keep the implementation surface as small as possible for a task already carrying
+  meaningful complexity/risk.
 
 ## Manual Verification
 
-All commands run natively on this machine (Windows PowerShell, repo `D:\repo\vnpy`).
-
-1. Real-data byte-identity (AP888, `ap888_1M_raw`, 2024-01-01~2024-06-30, 783 trade bars,
-   9 trades): dumped `report`/`equity_curve`/`signal_history` to JSON with the pre-change
-   engine, re-ran with the refactored engine, compared full-precision JSON serialization:
-   ```
-   mode=research byte-identical: True
-   mode=risk byte-identical: True
-   ```
-2. New generator tests:
-   ```
-   $ python -m pytest tests/unit/test_a86_bar_generator.py -q
-   .....                                                                    [100%]
-   5 passed in 0.12s
-   ```
-3. Full unit suite, post-change vs pre-change (HEAD engine temporarily swapped in,
-   encoding-safe, then restored):
-   ```
-   $ python -m pytest tests/unit -q -m "not realdb"            # post-change
-   735 passed, 4 deselected in 31.16s
-   $ python -m pytest tests/unit -q -m "not realdb" --ignore=tests/unit/test_a86_bar_generator.py  # pre-change HEAD engine
-   730 passed, 4 deselected in 31.60s
-   ```
-   735 = 730 + 5 new tests; no existing test's outcome changed.
-4. Sync gates:
-   ```
-   $ python tools/sync_check.py
-   [SYNC-CHECK] PASS: 版本与文档一致。   (exit=0)
-   $ python tools/sync_check.py --root examples/czsc_strategy
-   [SYNC-CHECK][OK] 版本单一真相 = <czsc VERSION 文件新值>  (source: VERSION::)
-   [SYNC-CHECK] PASS: 版本与文档一致。   (exit=0)
-   $ ruff check examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/tests/unit/test_a86_bar_generator.py
-   All checks passed!
-   ```
-   (The czsc VERSION literal in the second sync_check line is elided above because the root
-   gate forbids non-4.4.0 version strings inside HANDOFF.md; the actual output showed the
-   bumped czsc VERSION value, and the root gate was re-run and passes after the elision.)
-5. Preflight:
-   ```
-   $ powershell -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight   # from examples/czsc_strategy/
-   ...
-   192 passed in 16.71s
-   ==> Preflight complete; live SimNow capture was not requested
-   preflight exit=0
-   ```
+(dev to fill in with actual command output before requesting review)
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-17 | claude-code → kimi-code | design → dev | A86 (BacktestEngine generator extraction) promoted; handoff design->dev |
-| 2026-07-17 | kimi-code → codex | dev → review | A86 BacktestEngine generator extraction completed |
-| 2026-07-17 | codex → codex | review → done | A86 review passed: generator extraction scope, tests, sync gates, and guardrails verified |
+| 2026-07-17 | claude-code → kimi-code | design → dev | A87 (joint-clock replay + PortfolioLedger, block-new-opens scope) promoted; handoff design->dev |
