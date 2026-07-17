@@ -2,6 +2,22 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.25（2026-07-17）
+
+- A89 熔断强平设计文档核验与定稿（纯文档变更，未改任何 `chan_strategy/` / `diagnostics/`
+  生产代码、未改任何既有测试断言）：
+  - 对 `docs/design/a89-forced-liquidation-design.md` 的全部代码引用逐一核对当前代码库：
+    `positions.py:2122` `ChanTimingStrategy.flatten_all_positions()` 存在且全库零调用点（grep 确认）、
+    `portfolio_ledger.py:141` `check_daily_loss_limit()` / `:111` `update_trading_day()` 准确；
+    修正两处行号漂移——`PortfolioCoordinator.flat_events` 为 `portfolio_engine.py:125`（原写 :124）、
+    `PortfolioCoordinator._flatten_all()` 为 `portfolio_engine.py:283`（原写 :282），并补充
+    `flat_events` 追加逻辑位于 `portfolio_engine.py:291-299`、协调器版本字段另含 `weight`。
+  - 收紧"用哪个价格强平"一节表述：固定止损实际走 `_close_long(stop_fill, dt, "止损")`，
+    其中 `_stop_fill()`（`positions.py:893`）在默认 `stop_execution_model="close"` 下返回值即当根
+    bar 收盘价——明确该结论成立的前提，消除实现者误读空间。
+  - 四个设计决策区（平仓原语形态、强平价格、跨品种时序、重新触发机制）均已含明确决策+理由，
+    无开放式问句遗留；`docs/design/` 下无既有 `AGENTS.md` 需同步。
+
 ## 0.2.24（2026-07-17）
 
 - A88 联合时钟回放真实数据验收 / sanity-check（沿 A83→A84 模式，对 A87 联合回放做真实数据

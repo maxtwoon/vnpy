@@ -23,7 +23,7 @@ def flatten_all_positions(self, price: float, dt: datetime, reason: str = "flatt
 这个方法**已经存在**（复用现有 `_close_long`/`_close_short`，与既有平仓、PnL 记账、`trades`/`pairs` 记录逻辑
 完全一致，不需要发明任何新的平仓/记账算法），但代码库里**没有任何调用点**（`grep` 确认为零）——推测是
 更早的任务（P8b/A48 权重版 `PortfolioCoordinator` 时期）预先写好，但当时的 `PortfolioCoordinator._flatten_all()`
-（`portfolio_engine.py:282`）操作的是协调器自己的权重敞口簿记，从未真正调用到 engine 层，所以这个方法
+（`portfolio_engine.py:283`）操作的是协调器自己的权重敞口簿记，从未真正调用到 engine 层，所以这个方法
 被遗忘了。
 
 **这意味着 A89 不需要新建平仓原语**——需要设计的只是：联合驱动器在什么时刻、对哪些品种、用什么价格
@@ -42,10 +42,11 @@ def flatten_all_positions(self, price: float, dt: datetime, reason: str = "flatt
 ### 2. 用哪个价格强平
 
 **决策：用触发时刻该品种自己当前 bar 的收盘价（`bar.close`），与止损/超时平仓已有的"当根 bar 立即
-按 `close` 价平仓，不delay到下一根 bar"惯例完全一致**（对照 `positions.py:733-750` 止损/超时平仓都是
-`_close_long(price, dt, "止损")`，这里的 `price` 就是 `update()` 收到的当根 bar 收盘价，不是下一根开盘
-价）。强平是风险动作，不是新开仓，理应遵循与止损/超时相同的"立即执行"惯例，不应该采用新开仓
-"延迟一根 bar 成交"的惯例。
+按 `close` 价平仓，不 delay 到下一根 bar"惯例完全一致**（对照 `positions.py:733-750`：移动止损与超时
+平仓直接以当根 bar 收盘价 `_close_long(price, dt, ...)` 成交；固定止损走 `_close_long(stop_fill, dt, "止损")`，
+而 `_stop_fill()`（`positions.py:893`）在默认 `stop_execution_model="close"` 下返回值就是当根 bar 收盘价
+`price`，不是下一根开盘价）。强平是风险动作，不是新开仓，理应遵循与止损/超时相同的"立即执行"惯例，
+不应该采用新开仓"延迟一根 bar 成交"的惯例。
 
 ### 3. 强平的作用范围与跨品种时序（本设计的核心难点）
 
@@ -73,8 +74,10 @@ def flatten_all_positions(self, price: float, dt: datetime, reason: str = "flatt
   事件在不同品种身上生效的物理时刻略有先后（毫秒级 tick 粒度下通常就是下一根 bar），但这正是"联合
   回放但保留每个品种自己的数据节奏"这一架构本身的题中之义，不是缺陷。
 - **是否需要在 `blocked_opens` 之外，新增一个 `flat_events` 诊断列表**：是，参照
-  `PortfolioCoordinator.flat_events`（`portfolio_engine.py:124`）的既有字段命名和形状
-  （`dt`/`symbol`/`strategy`/`open_dt`/`open_price`/`flat_price`），联合版本的 `flat_events` 记录每一笔
+  `PortfolioCoordinator.flat_events`（`portfolio_engine.py:125`，追加逻辑见 `_flatten_all()` 的
+  `portfolio_engine.py:291-299`）的既有字段命名和形状
+  （`dt`/`symbol`/`strategy`/`open_dt`/`open_price`/`flat_price`，协调器版本另带权重簿记专用的 `weight`
+  字段，联合版本不需要），联合版本的 `flat_events` 记录每一笔
   被强平仓位的品种、strategy 名、开仓价、强平价、强平原因。
 
 ### 4. 重新触发/解除机制

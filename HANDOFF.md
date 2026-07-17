@@ -98,6 +98,13 @@ injecting a no-lookahead violation into a lagging symbol's own replay.
 - 2026-07-17 - User asked whether to stand up a design task for A89 (forced liquidation) before any
   implementation; claude-code recommended yes and outlined the four open questions in chat. User said to
   proceed.
+- 2026-07-17 (kimi-code, dev) - Verified/finalized the design doc: all code references cross-checked against
+  the current tree; fixed two drifted line numbers (`flat_events` portfolio_engine.py:124→125,
+  `_flatten_all()` :282→283) and tightened the which-price section (fixed stop actually goes through
+  `_stop_fill()`, which equals bar close only under the default `stop_execution_model="close"`). No production
+  code or test assertions touched. VERSION 0.2.24→0.2.25 with CHANGELOG entry. All gates pass (754 unit
+  tests, both sync_check runs, preflight). Note: `run_next_work.ps1` actually lives under
+  `examples/czsc_strategy/diagnostics/`, not directly under `examples/czsc_strategy/`.
 - 2026-07-17 (claude-code, design) - Wrote `docs/design/a89-forced-liquidation-design.md`. Key finding:
   `ChanTimingStrategy.flatten_all_positions()` already exists (`positions.py:2122`) with zero callers —
   A89's implementation will not need a new close primitive, only correct driver-side timing. Decided
@@ -107,7 +114,40 @@ injecting a no-lookahead violation into a lagging symbol's own replay.
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+```text
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+754 passed, 4 deselected in 35.21s
+
+$ python tools/sync_check.py
+[SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+[SYNC-CHECK] PASS: 版本与文档一致。   (exit 0)
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.25  (source: VERSION::)
+[SYNC-CHECK] PASS: 版本与文档一致。   (exit 0)
+
+$ .\diagnostics\run_next_work.ps1 -Preflight        # 脚本实际位于 diagnostics/ 子目录
+195 passed in 19.63s
+==> Preflight complete; live SimNow capture was not requested   (exit 0)
+
+$ git status --short   # A89 范围确认
+ M docs/design/a89-forced-liquidation-design.md      ← 本任务（行号漂移修正+表述收紧）
+ M examples/czsc_strategy/CHANGELOG.md               ← 本任务（0.2.25 条目）
+ M examples/czsc_strategy/VERSION                    ← 本任务（0.2.24→0.2.25）
+ M HANDOFF.md                                        ← 本任务（本节+决策记录）
+ M examples/czsc_strategy/diagnostics/WORK_LOG.md    ← 非本任务（SimNow 并行工作流，未动）
+ M examples/czsc_strategy/diagnostics/run_next_work.ps1  ← 非本任务（同上，未动）
+ M examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md  ← 非本任务（同上，未动）
+ M examples/czsc_strategy/tests/unit/test_run_next_work_wrapper.py      ← 非本任务（同上，未动）
+?? (repo 根目录若干 diagnostics_*.md / a80_codex_manual.db*)  ← 非本任务，未动
+```
+
+代码引用核验明细（均对当前工作树实测）：`positions.py:2122` `flatten_all_positions()` 存在且
+`grep -r flatten_all_positions examples/czsc_strategy` 仅命中定义行（零调用点）；`portfolio_ledger.py:141`
+`check_daily_loss_limit()`、`:111` `update_trading_day()`、`:122` 日切重置 `daily_loss_limit_active=False`
+准确；`portfolio_engine.py:687-690` 确认联合驱动按 `sorted(symbol)` 处理同 tick 品种；发现并修正两处行号
+漂移（`flat_events` :124→:125、`_flatten_all()` :282→:283）；收紧强平价格一节——固定止损实际经
+`_stop_fill()`（`positions.py:893`），默认 `stop_execution_model="close"` 下返回当根 bar 收盘价，已写明前提。
 
 ## 交接历史
 
