@@ -1,8 +1,8 @@
 ---
 task: A87 - Joint-clock portfolio replay + PortfolioLedger + open-gating (block-new-opens scope)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: done
+owner: codex
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
@@ -15,11 +15,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -349,3 +349,5 @@ report inline; confirmed `git status --short` shows only A87-scoped files.
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-17 | claude-code → kimi-code | design → dev | A87 (joint-clock replay + PortfolioLedger, block-new-opens scope) promoted; handoff design->dev |
+| 2026-07-17 | kimi-code → codex | dev → review | A87 joint-clock replay + PortfolioLedger completed (dev->review, committed by claude-code after environment timeout) |
+| 2026-07-17 | codex → codex | review → done | A87 review passed |
