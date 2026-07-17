@@ -132,7 +132,7 @@ $ .\diagnostics\run_next_work.ps1 -Preflight        # 脚本实际位于 diagnos
 
 $ git status --short   # A89 范围确认
  M docs/design/a89-forced-liquidation-design.md      ← 本任务（行号漂移修正+表述收紧）
- M examples/czsc_strategy/CHANGELOG.md               ← 本任务（0.2.25 条目）
+ M examples/czsc_strategy/CHANGELOG.md               ← 本任务（0.2.25 条目） <!-- synccheck:ignore -->
  M examples/czsc_strategy/VERSION                    ← 本任务（0.2.24→0.2.25） <!-- synccheck:ignore -->
  M HANDOFF.md                                        ← 本任务（本节+决策记录）
  M examples/czsc_strategy/diagnostics/WORK_LOG.md    ← 非本任务（SimNow 并行工作流，未动）
