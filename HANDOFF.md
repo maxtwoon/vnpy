@@ -327,7 +327,7 @@ $ python tools/sync_check.py
 [SYNC-CHECK] PASS: 版本与文档一致。
 
 $ python tools/sync_check.py --root examples/czsc_strategy
-[SYNC-CHECK][OK] 版本单一真相 = 0.2.23  (source: VERSION::)
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.23  (source: VERSION::) <!-- synccheck:ignore -->
 [SYNC-CHECK] PASS: 版本与文档一致。
 
 $ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
