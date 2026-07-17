@@ -86,6 +86,9 @@ STRATEGY_CONFIG = {
     "sizing_model": "research",           # "research" (legacy, default) | "risk"
     "risk_per_trade_pct": 0.005,          # fraction of equity risked per trade (0.5%)
     "max_margin_pct": 0.50,               # cap on total open initial margin vs equity
+    "max_symbol_margin_pct": 1.0,         # A87 joint replay only: per-symbol margin cap as a
+                                          # fraction of shared portfolio equity (1.0 = no tighter
+                                          # than legacy single-symbol behavior)
     "equity_mode": "fixed",               # "fixed" (running realized+unrealized off initial_capital)
                                           # | "compound" (documented, NOT implemented; raises NotImplementedError)
 

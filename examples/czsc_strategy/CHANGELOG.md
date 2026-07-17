@@ -2,6 +2,49 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.23（2026-07-17）
+
+- A87 联合时钟组合回放 + `PortfolioLedger` + 开仓 gating（范围：仅拦截新开仓，不强平）：
+  - 新增 `chan_strategy/portfolio_ledger.py`：`PortfolioLedger` 在联合回放循环内维护共享的
+    货币量纲组合状态——`equity = initial_capital + Σ各品种PnL贡献`（本金只计一次，各品种引擎
+    与组合共用同一 `initial_capital`，沿用 A83/A84 已验证方法）、`margin_by_symbol`/
+    `margin_total`/`margin_by_cluster`（cluster 成员复用 A83 `_symbol_clusters()` 大小写不敏感
+    匹配）、`trading_day`/`day_start_equity`/`daily_loss_limit_active` 日切簿记（复用
+    `_trading_day()` 与既有 `daily_agg` 配置）。`pre_open_injection_for()` 无违约时返回真实
+    共享 `(equity, margin_total)`；触发日亏上限/单品种上限/cluster 上限（按此优先级，首个命中
+    为准）时返回饱和保证金 `(equity, equity*max_margin_pct, reason)`，迫使
+    `Position._size_open()` 既有公式拒开——gating 完全经由既有 sizing 公式的两个既有输入完成，
+    未改 `positions.py`。类文档中显式说明 `max_margin_pct`/`cluster_gross_cap`/
+    `daily_loss_limit_pct` 在权重版（`PortfolioCoordinator`）与货币版（本类）两条互斥路径下的
+    双重含义。
+  - `chan_strategy/portfolio_engine.py`：新增 `_build_joint_report()` 联合时钟驱动——每品种一个
+    `BacktestEngine.bar_generator()`（默认 warmup_bars=100，与 `run()` 一致），按时间戳并集推进、
+    同 tick 按 `sorted(symbol)` 确定性处理；`pre_open` 注入共享/饱和值，`post_bar` 回写共享
+    `(equity, margin_total)` 使各引擎自身记录的权益曲线反映组合视图；品种数据结束后其保证金
+    贡献按 A83 语义不再结转（下一 tick 起清零）、PnL 贡献冻结于最后已知值；数据加载失败品种
+    记入 `symbol_errors` 并排除出联合循环。抽出 `_make_symbol_engine()` 供 `_run_per_symbol()`
+    与联合驱动共用（纯抽取，行为不变）；`run()` 中 `sizing_model="risk" + portfolio_risk="on"`
+    的 `NotImplementedError` 分支按设计替换为 `_build_joint_report()`，其余两个分支完全不变。
+  - 联合报告字段：`portfolio_risk="on"`/`sizing_model="risk"`/`symbol_reports`/`symbol_errors`/
+    联合 `equity_curve`（每唯一 tick 一条）/`pairs`/`blocked_opens`/`loss_limit_triggers`；
+    不含 `flat_events`，以 `flatten_on_breach="not_implemented_see_A89"` 显式标注本任务不强平
+    （2026-07-17 用户决策：A87 仅拦截新开仓，强平留待后续任务，暂定 A89）。
+  - `chan_strategy/config.py`：`STRATEGY_CONFIG` 新增 `max_symbol_margin_pct`（默认 1.0，即
+    不严于单品种既有行为，遵循新约束默认最宽松纪律）。
+  - 新增 `tests/unit/test_a87_joint_replay.py` 16 项：账本聚合/日切重置/触发记录/注入优先级；
+    真实 `bar_generator()` 驱动下——总保证金上限使第二品种开仓被既有公式缩减（250→150 手）、
+    单品种上限在总保证金有余量时拦截其新开仓、cluster 上限大小写不敏感拦截同 cluster 品种、
+    日亏限制当日对全部品种拦截新开仓且次日解除（触发的唯一平仓来自策略自身止损）、触发时
+    不强平任何持仓、品种结束保证金不越界（A83 语义在联合驱动上的复验）、数据错误品种排除、
+    无信号冒烟、`run()` 四种配置组合路由。
+  - 更新 `tests/unit/test_portfolio_risk.py`：原 `test_run_rejects_risk_sizing_with_portfolio_risk_on`
+    断言的 `NotImplementedError` 被本任务按设计移除，该测试改为
+    `test_run_routes_risk_sizing_with_portfolio_risk_on_to_joint_replay`（断言新路由）；这是本任务
+    唯一改动的既有测试断言，已在 HANDOFF 决策记录中说明理由。
+  - 未改动 `positions.py`、`backtest_engine.py`；`sizing_model="risk"+portfolio_risk="off"` 与
+    `sizing_model!="risk"+portfolio_risk="on"` 两条既有路径行为不变（既有快照/回归测试通过）。
+    单测总数 735 → 751。
+
 ## 0.2.22（2026-07-17）
 
 - A86 `BacktestEngine` 逐 bar 生成器抽取（外部权益/保证金注入点，A87 联合时钟前置，按

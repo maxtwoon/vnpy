@@ -7,6 +7,12 @@ updated: 2026-07-17
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/portfolio_engine.py
+  - examples/czsc_strategy/chan_strategy/portfolio_ledger.py
+  - examples/czsc_strategy/chan_strategy/config.py
+  - examples/czsc_strategy/tests/unit/test_a87_joint_replay.py
+  - examples/czsc_strategy/tests/unit/test_portfolio_risk.py
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
 last_transition_actor: claude-code
@@ -270,10 +276,73 @@ explicitly configures it tighter; do not invent a stricter default not requested
   `positions.py` at all. Designed `PortfolioLedger` and the joint-clock driver algorithm around this
   single mechanism to keep the implementation surface as small as possible for a task already carrying
   meaningful complexity/risk.
+- 2026-07-17 (kimi-code, dev) - A87 implemented per the design. Implementation decisions, all inside
+  the design's constraints:
+  (a) `PortfolioLedger` takes an optional `config` param defaulting to `STRATEGY_CONFIG` (mirrors
+  `PortfolioCoordinator`) for test isolation; cluster membership reuses
+  `diagnostics.portfolio_ledger_report._symbol_clusters()` via a **lazy import** (a top-level import
+  would be circular: diagnostics -> portfolio_engine -> portfolio_ledger); `_trading_day` is lazily
+  imported from `portfolio_engine` for the same reason.
+  (b) Symbol-end margin zeroing timing: the HANDOFF driver sketch did not state *when* an ended
+  symbol's margin stops counting. Implemented A83's exact semantics: the symbol's own final bar still
+  records its real margin, and the margin is zeroed from the first joint tick *after* its final bar
+  (pinned by `test_symbol_margin_not_carried_past_symbol_end`). Its PnL contribution stays frozen at
+  the last known value — equivalent to the A85 design's "mark to last price, then treat as realized"
+  rule, without inventing any close primitive.
+  (c) `blocked_opens` / `loss_limit_triggers` entries use `dt.isoformat(sep=" ")` strings (the sketch
+  wrote raw `current_dt`); this matches `PortfolioCoordinator`'s existing diagnostic lists and is
+  JSON-safe. The flatten scope-marker key is `"flatten_on_breach": "not_implemented_see_A89"`
+  (dev's-call key name per Goal §5); there is deliberately no `flat_events` field.
+  (d) **Only existing-test change (unavoidable, design-sanctioned)**:
+  `test_run_rejects_risk_sizing_with_portfolio_risk_on` asserted the exact `NotImplementedError` this
+  task removes by design (Goal §3). Keeping it unchanged would leave a permanently failing test, so it
+  was replaced by `test_run_routes_risk_sizing_with_portfolio_risk_on_to_joint_replay` asserting the new
+  routing. No other existing test's assertions were touched; `positions.py` and `backtest_engine.py`
+  are untouched.
+  (e) Extracted `_make_symbol_engine()` from `_run_per_symbol()` (pure extraction, behavior-identical)
+  to satisfy "reuse that construction logic, don't duplicate it" — the `off`/weight-`on` branches route
+  through the same construction code as before (covered by the existing snapshot/regression tests plus
+  the new `test_run_routes_all_config_combinations`).
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+(kimi-code's dev round completed the implementation and got all gates green, but its final
+`handoff.py next` transaction hit the pipeline's 3600s timeout right at the finish line while rewriting
+this section — same environment-timing issue seen on A85/A86. claude-code independently re-ran every
+command below from a clean shell before committing.)
+
+```text
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+751 passed, 4 deselected in 45.41s
+
+$ ruff check examples/czsc_strategy/chan_strategy/portfolio_engine.py \
+             examples/czsc_strategy/chan_strategy/portfolio_ledger.py \
+             examples/czsc_strategy/chan_strategy/config.py \
+             examples/czsc_strategy/tests/unit/test_a87_joint_replay.py \
+             examples/czsc_strategy/tests/unit/test_portfolio_risk.py
+All checks passed!
+
+$ python tools/sync_check.py
+[SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.23  (source: VERSION::)
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+$ powershell -ExecutionPolicy Bypass -File examples/czsc_strategy/diagnostics/run_next_work.ps1 -Preflight
+==> Run SimNow workflow unit tests
+192 passed in 16.95s
+==> Preflight complete; live SimNow capture was not requested
+```
+
+Independent code review by claude-code before committing: read `portfolio_ledger.py` (187 lines) and the
+`_build_joint_report()` driver in full; confirmed the gating mechanism uses only the documented
+true-vs-saturated equity/margin injection (no `positions.py` changes, no force-close anywhere); confirmed
+the one existing-test change (`test_run_rejects_risk_sizing_with_portfolio_risk_on` →
+`test_run_routes_risk_sizing_with_portfolio_risk_on_to_joint_replay`) is the unavoidable, design-sanctioned
+update the Decision Log describes, using a monkeypatched sentinel rather than re-testing the full joint
+report inline; confirmed `git status --short` shows only A87-scoped files.
 
 ## 交接历史
 

@@ -399,17 +399,19 @@ def test_run_portfolio_backtest_entry_point_accepts_table_names(monkeypatch):
     assert calls[1] == ("S2", {"table_name": "s2_custom"})
 
 
-def test_run_rejects_risk_sizing_with_portfolio_risk_on():
-    """``sizing_model='risk'`` combined with ``portfolio_risk='on'`` raises immediately
-    instead of producing mismatched weight-based and currency-based accounting."""
+def test_run_routes_risk_sizing_with_portfolio_risk_on_to_joint_replay(monkeypatch):
+    """A87: ``sizing_model='risk'`` combined with ``portfolio_risk='on'`` no longer
+    raises ``NotImplementedError``; it routes to the joint-clock replay
+    (:meth:`PortfolioEngine._build_joint_report`)."""
     STRATEGY_CONFIG.update({
         "sizing_model": "risk",
         "portfolio_risk": "on",
     })
+    sentinel = {"portfolio_risk": "on", "sizing_model": "risk", "route": "joint"}
+    monkeypatch.setattr(PortfolioEngine, "_build_joint_report", lambda self: sentinel)
 
     engine = PortfolioEngine(["S1"], start_date="2024-01-01", end_date="2024-01-02")
-    with pytest.raises(NotImplementedError):
-        engine.run()
+    assert engine.run() is sentinel
 
 
 def test_run_allows_risk_sizing_with_portfolio_risk_off():

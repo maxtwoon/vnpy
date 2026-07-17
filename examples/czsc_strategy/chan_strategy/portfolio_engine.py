@@ -26,6 +26,7 @@ import pandas as pd
 
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG
+from chan_strategy.portfolio_ledger import PortfolioLedger
 from chan_strategy.positions import _research_symbol_key
 
 
@@ -335,22 +336,26 @@ class PortfolioEngine:
         self.table_names = table_names or {}
         self.enable_short = enable_short
 
+    def _make_symbol_engine(self, symbol: str) -> BacktestEngine:
+        """Construct the per-symbol BacktestEngine (shared by all replay modes)."""
+        return BacktestEngine(
+            symbol=symbol,
+            freq=self.freq,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            initial_capital=self.initial_capital,
+            commission_rate=self.commission_rate,
+            slippage=self.slippage,
+            db_path=self.db_path,
+            table_name=self.table_names.get(symbol),
+            enable_short=self.enable_short,
+        )
+
     def _run_per_symbol(self) -> dict[str, dict[str, Any]]:
         """Run an independent BacktestEngine for every symbol."""
         results: dict[str, dict[str, Any]] = {}
         for symbol in self.symbols:
-            engine = BacktestEngine(
-                symbol=symbol,
-                freq=self.freq,
-                start_date=self.start_date,
-                end_date=self.end_date,
-                initial_capital=self.initial_capital,
-                commission_rate=self.commission_rate,
-                slippage=self.slippage,
-                db_path=self.db_path,
-                table_name=self.table_names.get(symbol),
-                enable_short=self.enable_short,
-            )
+            engine = self._make_symbol_engine(symbol)
             report = engine.run()
             if "error" in report:
                 results[symbol] = {"engine": engine, "report": report, "error": report["error"]}
@@ -603,16 +608,174 @@ class PortfolioEngine:
             "sizing_caveat": sizing_caveat,
         }
 
+    def _build_joint_report(self) -> dict[str, Any]:
+        """Run the A87 joint-clock replay (``sizing_model='risk' + portfolio_risk='on'``).
+
+        Steps every symbol's :meth:`BacktestEngine.bar_generator` through a
+        single merged clock (union of bar timestamps, sorted; per-tick ties
+        broken by ``sorted(symbol)``).  A shared :class:`PortfolioLedger`
+        tracks currency-based equity and margin across symbols; each
+        ``"pre_open"`` yield receives either the true shared
+        ``(equity, total_open_margin)`` — which makes the existing
+        ``max_margin_pct`` act as a total-portfolio cap — or a deliberately
+        saturated value that forces ``Position._size_open()`` to reject the
+        open when the daily loss limit, the per-symbol cap or a cluster cap
+        is breached.  Scope is block-new-opens only: no position is ever
+        force-closed here (forced liquidation is deferred to A89).
+        """
+        engines: dict[str, BacktestEngine] = {}
+        generators: dict[str, Any] = {}
+        pending: dict[str, Any] = {}
+        symbol_reports: dict[str, dict[str, Any]] = {}
+        symbol_errors: dict[str, str] = {}
+
+        # 1-2. Build one engine per symbol (same construction as
+        # _run_per_symbol), start its bar generator with run()'s default
+        # warmup, and prime it to its first "pre_open" yield.
+        for symbol in self.symbols:
+            engine = self._make_symbol_engine(symbol)
+            gen = engine.bar_generator()  # default warmup_bars=100, same as run()
+            if isinstance(gen, dict):
+                # Data-load error path, recorded exactly as _run_per_symbol does.
+                symbol_reports[symbol] = gen
+                symbol_errors[symbol] = gen.get("error", "unknown")
+                continue
+            engines[symbol] = engine
+            generators[symbol] = gen
+            try:
+                pending[symbol] = next(gen)
+            except StopIteration as stop:  # defensive; length checks make this unlikely
+                pending[symbol] = None
+                symbol_errors[symbol] = "empty_bar_generator"
+                symbol_reports[symbol] = (
+                    stop.value if isinstance(stop.value, dict) else {"error": "empty_bar_generator"}
+                )
+
+        successful_symbols = [s for s in self.symbols if s in generators]
+        if not successful_symbols:
+            return {
+                "portfolio_risk": "on",
+                "sizing_model": "risk",
+                "error": "no symbol produced valid equity curve",
+                "symbol_errors": symbol_errors,
+                "symbol_reports": symbol_reports,
+            }
+
+        # 3. One shared ledger across all successfully-started symbols.
+        ledger = PortfolioLedger(
+            successful_symbols,
+            self.initial_capital,
+            dict(STRATEGY_CONFIG.get("corr_clusters") or {}),
+        )
+
+        # 4. Joint clock loop.
+        pnl_contributions: dict[str, float] = {s: 0.0 for s in successful_symbols}
+        ended: dict[str, Any] = {}  # symbol -> its final bar dt (margin zeroed after it)
+        blocked_opens: list[dict[str, Any]] = []
+        joint_equity_curve: list[dict[str, Any]] = []
+
+        while any(item is not None for item in pending.values()):
+            current_dt = min(item[1] for item in pending.values() if item is not None)
+            ledger.update_trading_day(current_dt)
+            # A83 range semantics: a symbol whose bar range ended before this
+            # tick contributes zero margin (its last margin is not carried
+            # forward); its PnL contribution stays frozen at the last value.
+            for symbol, end_dt in ended.items():
+                if end_dt < current_dt and ledger.margin_by_symbol.get(symbol, 0.0) != 0.0:
+                    ledger.update_symbol_margin(symbol, 0.0)
+
+            tick_symbols = sorted(
+                s for s in successful_symbols
+                if pending.get(s) is not None and pending[s][1] == current_dt
+            )
+            for symbol in tick_symbols:
+                item = pending[symbol]
+                assert item[0] == "pre_open", (
+                    f"joint driver invariant violated: expected 'pre_open' for "
+                    f"{symbol} at {current_dt}, got {item[0]!r}"
+                )
+                equity, margin, reason = ledger.pre_open_injection_for(symbol)
+                if reason is not None:
+                    # Speculative record of gating pressure: an open attempted
+                    # at this tick would have been forced to fail (mirrors how
+                    # PortfolioCoordinator.blocked_opens already works).
+                    blocked_opens.append({
+                        "dt": current_dt.isoformat(sep=" "),
+                        "symbol": symbol,
+                        "reason": reason,
+                    })
+                gen = generators[symbol]
+                post_item = gen.send((equity, margin))
+                assert post_item[0] == "post_bar" and post_item[1] == current_dt, (
+                    f"joint driver invariant violated: expected 'post_bar' for "
+                    f"{symbol} at {current_dt}, got {post_item!r}"
+                )
+                ledger.update_symbol_margin(symbol, float(post_item[4]))
+                pnl_contributions[symbol] = float(post_item[3]) - engines[symbol].initial_capital
+                ledger.update_equity(pnl_contributions)
+                try:
+                    # Feed the shared portfolio view back so the engine's own
+                    # recorded equity_curve entry reflects the joint replay.
+                    pending[symbol] = gen.send((ledger.equity, ledger.margin_total))
+                except StopIteration as stop:
+                    symbol_reports[symbol] = stop.value
+                    pending[symbol] = None
+                    ended[symbol] = current_dt
+                ledger.check_daily_loss_limit()
+
+            # One entry per unique tick: ledger state has converged by the end
+            # of the tick's symbol loop, so this is well-defined.
+            joint_equity_curve.append({
+                "dt": current_dt,
+                "equity": ledger.equity,
+                "total_open_margin": ledger.margin_total,
+                "margin_utilization_pct": (
+                    ledger.margin_total / ledger.equity if ledger.equity > 0 else 0.0
+                ),
+            })
+
+        # 5. Assemble the joint report.
+        all_pairs: list[dict[str, Any]] = []
+        for symbol in successful_symbols:
+            for pair in engines[symbol].strategy.get_combined_trades():
+                pair_copy = pair.copy()
+                pair_copy["symbol"] = symbol
+                all_pairs.append(pair_copy)
+        all_pairs.sort(key=lambda x: x["open_dt"])
+
+        sizing_caveat = None
+        for s in successful_symbols:
+            report = symbol_reports.get(s) or {}
+            if report.get("sizing_caveat"):
+                sizing_caveat = report["sizing_caveat"]
+                break
+
+        return {
+            "portfolio_risk": "on",
+            "sizing_model": "risk",
+            "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
+            "initial_capital": self.initial_capital,
+            "period": f"{self.start_date} ~ {self.end_date}",
+            "symbols": successful_symbols,
+            "symbol_reports": symbol_reports,
+            "symbol_errors": symbol_errors,
+            "equity_curve": joint_equity_curve,
+            "pairs": all_pairs,
+            "blocked_opens": blocked_opens,
+            "loss_limit_triggers": ledger.loss_limit_triggers,
+            # A87 scope is block-new-opens only; no forced liquidation happens
+            # in this path (deferred to A89), so there is deliberately no
+            # "flat_events" field.
+            "flatten_on_breach": "not_implemented_see_A89",
+            "sizing_caveat": sizing_caveat,
+        }
+
     def run(self) -> dict[str, Any]:
         """Run the portfolio backtest and return the report."""
         sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
         portfolio_risk = STRATEGY_CONFIG.get("portfolio_risk", "off")
         if sizing_model == "risk" and portfolio_risk == "on":
-            raise NotImplementedError(
-                "sizing_model='risk' with portfolio_risk='on' is not supported yet: "
-                "the coordinated portfolio replay uses weight-based accounting, which is "
-                "incompatible with the currency-based lots/margin accounting of risk sizing."
-            )
+            return self._build_joint_report()
         symbol_results = self._run_per_symbol()
         if portfolio_risk == "off":
             return self._build_off_report(symbol_results)
