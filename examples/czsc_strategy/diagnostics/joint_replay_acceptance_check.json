@@ -1,0 +1,509 @@
+{
+  "config": {
+    "symbols": [
+      "AP888",
+      "RB888",
+      "SC888",
+      "A888",
+      "ZN888"
+    ],
+    "window": "2022-01-01 ~ 2026-04-24",
+    "db_path": "D:\\BaiduNetdiskDownload\\新数据库\\ssquant数据库_20260425\\kline_data.db",
+    "initial_capital": 1000000.0,
+    "sizing_model": "risk",
+    "portfolio_risk": "on",
+    "max_margin_pct": 0.5,
+    "max_symbol_margin_pct": 1.0,
+    "cluster_gross_cap": 1.0,
+    "daily_loss_limit_pct": 0.03,
+    "corr_clusters": {
+      "industrial_energy": [
+        "RB888",
+        "ZN888",
+        "SC888"
+      ]
+    }
+  },
+  "symbol_errors": {},
+  "symbol_report_errors": {},
+  "no_symbol_errors": true,
+  "symbols_run": [
+    "AP888",
+    "RB888",
+    "SC888",
+    "A888",
+    "ZN888"
+  ],
+  "curve_rows": 19470,
+  "first_dt": "2022-01-11 13:59:00",
+  "last_dt": "2026-04-24 23:59:00",
+  "min_equity": 885950.3964999999,
+  "max_equity": 1005958.5580000001,
+  "final_equity": 949526.4130000001,
+  "equity_always_positive": true,
+  "margin_always_nonnegative": true,
+  "max_total_open_margin": 56140.55,
+  "final_total_open_margin": 0.0,
+  "max_margin_utilization_pct": 0.06212935015198976,
+  "max_utilization_jump": 0.034366571896625876,
+  "utilization_in_range": true,
+  "utilization_not_wildly_discontinuous": true,
+  "all_values_finite": true,
+  "blocked_opens_count": 58,
+  "blocked_opens_by_reason": {
+    "daily_loss_limit": 58
+  },
+  "blocked_opens_by_symbol": {
+    "RB888": 12,
+    "SC888": 14,
+    "ZN888": 14,
+    "A888": 11,
+    "AP888": 7
+  },
+  "blocked_opens_by_date": {
+    "2022-03-30": 58
+  },
+  "blocked_opens_coherent": true,
+  "blocked_opens_sample": [
+    {
+      "dt": "2022-03-30 09:29:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    }
+  ],
+  "blocked_opens_full": [
+    {
+      "dt": "2022-03-30 09:29:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 09:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:14:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:14:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:14:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:14:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:14:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:59:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:59:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 10:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 11:29:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 11:29:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 11:29:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 11:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 11:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 13:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 13:59:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 13:59:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 13:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 13:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:29:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:29:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:29:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:59:00",
+      "symbol": "AP888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:59:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 14:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:29:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:29:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:59:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 21:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:29:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:29:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:59:00",
+      "symbol": "A888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:59:00",
+      "symbol": "RB888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 22:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 23:29:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 23:29:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 23:59:00",
+      "symbol": "SC888",
+      "reason": "daily_loss_limit"
+    },
+    {
+      "dt": "2022-03-30 23:59:00",
+      "symbol": "ZN888",
+      "reason": "daily_loss_limit"
+    }
+  ],
+  "cluster_membership_case_insensitive": true,
+  "uppercase_mapping": {
+    "AP888": [],
+    "RB888": [
+      "industrial_energy"
+    ],
+    "SC888": [
+      "industrial_energy"
+    ],
+    "A888": [],
+    "ZN888": [
+      "industrial_energy"
+    ]
+  },
+  "live_margin_by_cluster": {
+    "industrial_energy": 3.0
+  },
+  "live_cluster_grouping_ok": true,
+  "comparison_vs_independent": {
+    "per_symbol": {
+      "AP888": {
+        "joint_trade_count": 73,
+        "independent_trade_count": 73,
+        "count_equal": true,
+        "timing_identical": true,
+        "volume_diffs": 10,
+        "classification": "timing_identical_volume_differs",
+        "had_blocked_opens": true,
+        "divergence_coherent": true,
+        "timing_mismatch_sample": [],
+        "joint_realized_pnl": 27225.669999999995,
+        "independent_realized_pnl": 33595.58899999999
+      },
+      "RB888": {
+        "joint_trade_count": 43,
+        "independent_trade_count": 43,
+        "count_equal": true,
+        "timing_identical": true,
+        "volume_diffs": 3,
+        "classification": "timing_identical_volume_differs",
+        "had_blocked_opens": true,
+        "divergence_coherent": true,
+        "timing_mismatch_sample": [],
+        "joint_realized_pnl": -75824.73300000002,
+        "independent_realized_pnl": -74395.27000000003
+      },
+      "SC888": {
+        "joint_trade_count": 0,
+        "independent_trade_count": 0,
+        "count_equal": true,
+        "timing_identical": true,
+        "volume_diffs": 0,
+        "classification": "identical",
+        "had_blocked_opens": true,
+        "divergence_coherent": true,
+        "timing_mismatch_sample": [],
+        "joint_realized_pnl": 0,
+        "independent_realized_pnl": 0
+      },
+      "A888": {
+        "joint_trade_count": 48,
+        "independent_trade_count": 48,
+        "count_equal": true,
+        "timing_identical": true,
+        "volume_diffs": 12,
+        "classification": "timing_identical_volume_differs",
+        "had_blocked_opens": true,
+        "divergence_coherent": true,
+        "timing_mismatch_sample": [],
+        "joint_realized_pnl": -16139.294,
+        "independent_realized_pnl": -15113.726999999999
+      },
+      "ZN888": {
+        "joint_trade_count": 78,
+        "independent_trade_count": 78,
+        "count_equal": true,
+        "timing_identical": false,
+        "volume_diffs": 15,
+        "classification": "diverged_timing",
+        "had_blocked_opens": true,
+        "divergence_coherent": true,
+        "timing_mismatch_sample": [
+          {
+            "index": 5,
+            "joint": [
+              "三买多头",
+              "2022-03-31 00:29:00",
+              "2022-04-13 14:59:00",
+              27005.0,
+              28405.0
+            ],
+            "independent": [
+              "三买多头",
+              "2022-03-30 22:59:00",
+              "2022-04-13 14:59:00",
+              26875.0,
+              28405.0
+            ]
+          }
+        ],
+        "joint_realized_pnl": 7264.769999999965,
+        "independent_realized_pnl": -9550.165000000035
+      }
+    },
+    "joint_total_realized_pnl": -57473.587000000065,
+    "independent_total_realized_pnl": -65463.57300000008,
+    "a83_recorded_total_realized_pnl": -65463.57300000008,
+    "joint_vs_independent_abs_diff": 7989.986000000012,
+    "joint_vs_independent_rel_diff": 0.12205239698725277,
+    "pnl_reasonably_close": true,
+    "unblocked_symbols_timing_identical": true,
+    "all_divergences_coherent": true
+  },
+  "loss_limit_triggers": [
+    {
+      "dt": "2022-03-30 09:29:00",
+      "trading_day": "2022-03-30",
+      "equity": 972346.625,
+      "day_pnl_pct": -0.03004435736718259
+    }
+  ],
+  "flatten_on_breach": "not_implemented_see_A89",
+  "overall_accepted": true
+}

@@ -6,6 +6,11 @@ owner: kimi-code
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
+  - examples/czsc_strategy/diagnostics/joint_replay_acceptance_check.py
+  - examples/czsc_strategy/diagnostics/joint_replay_acceptance_check.json
+  - examples/czsc_strategy/diagnostics/joint_replay_acceptance_2026-07-17.md
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
 last_transition_actor: claude-code
@@ -134,10 +139,61 @@ treats the joint replay as trustworthy for anything beyond unit-test fixtures.
   A84 already established this symbol set's real max margin utilization is low (~6.49%), so an empty
   `blocked_opens` list is an expected, valid outcome here, not a sign the A87 mechanism is untested; the
   unit tests already cover the triggering path under synthetic margin pressure.
+- 2026-07-17 (kimi-code, dev) - A88 real-data acceptance completed; **VERSION/CHANGELOG bumped to
+  0.2.24** (this task added new code <!-- synccheck:ignore --> — the read-only `diagnostics/joint_replay_acceptance_check.py` —
+  so the "pure verification, no bump" case does not apply). No production code touched; no bugs found,
+  so no fix latitude was exercised. Key real-data findings (full numbers in
+  `diagnostics/joint_replay_acceptance_2026-07-17.md` + `joint_replay_acceptance_check.json`, both
+  `git add -f`'d):
+  (a) `blocked_opens` was NOT empty — 58 entries, all `daily_loss_limit`, all on 2022-03-30, from a
+      single trigger at 09:29 (day PnL -3.0044% vs -3% limit); block persisted through the night
+      session under `daily_agg="natural"` and lifted at the 2022-03-31 trading-day rollover, matching
+      the A87 unit-test semantics. Zero margin-cap blocks (peak utilization 6.21%, caps never close
+      to binding) — exactly the design-stage expectation for this symbol set.
+  (b) ZN888's trade sequence diverges from its independent run exactly at its first blocked open
+      (index 5: independent 2022-03-30 22:59 @26,875 blocked → joint re-entry 2022-03-31 00:29
+      @27,005), the design-predicted divergence pattern; the other 4 symbols stayed timing-identical.
+  (c) Per-trade volume differences on timing-identical trades (AP888 10/73, RB888 3/43, A888 12/48,
+      ZN888 15/78) are the documented shared-equity sizing behavior (joint sizes opens off shared
+      portfolio equity; A83/A84 sized off standalone equity), not gating and not an anomaly.
+  (d) Joint total realized PnL -57,473.59 vs A83/A84's -65,463.57 (+7,989.99, 12.2% relative, within
+      the 20% tolerance the checker codifies); joint equity curve has exactly 19,470 rows, matching
+      A83's ledger row count; final equity 949,526.41 reconciles to the cent
+      (1,000,000 - 57,473.59 realized + 7,000.00 unrealized on RB888's still-open position).
+  (e) Scope boundary preserved and restated: block-new-opens only, forced liquidation still
+      unimplemented (A89), not a trading recommendation, not "production-ready".
+  (f) The checker was run twice end-to-end; both executions produced byte-identical check JSON,
+      confirming the joint driver is deterministic on real data.
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+(kimi-code, dev, 2026-07-17 — all commands run natively on this machine)
+
+```bash
+# 1. Joint replay on real DB + all sanity checks (run twice; byte-identical check JSON)
+python examples/czsc_strategy/diagnostics/joint_replay_acceptance_check.py
+#    -> overall_accepted: true; 5 symbols, 0 errors; 19,470 curve rows; 242 pairs;
+#       blocked_opens: 58 (all daily_loss_limit, all 2022-03-30; 1 trigger -3.0044%);
+#       joint total realized PnL -57,473.59 vs A83/A84 independent sum -65,463.57 (rel diff 12.2%)
+
+# 2. Unit tests
+python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+#    -> 751 passed, 4 deselected in 33.32s
+
+# 3. Sync gates
+python tools/sync_check.py
+#    -> PASS (version 4.4.0 consistent)
+python tools/sync_check.py --root examples/czsc_strategy
+#    -> PASS (VERSION 0.2.24 consistent with CHANGELOG) <!-- synccheck:ignore -->
+
+# 4. Preflight (from examples/czsc_strategy/)
+powershell -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight
+#    -> 192 SimNow unit tests passed; "Preflight complete; live SimNow capture was not requested"
+
+# 5. Lint on the new checker
+python -m ruff check examples/czsc_strategy/diagnostics/joint_replay_acceptance_check.py
+#    -> All checks passed!
+```
 
 ## 交接历史
 
