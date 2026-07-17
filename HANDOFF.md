@@ -1,19 +1,19 @@
 ---
 task: A89 - Forced-liquidation design (daily loss limit flatten, design-only, no production code)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
   - docs/design/a89-forced-liquidation-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -154,3 +154,4 @@ $ git status --short   # A89 范围确认
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-17 | claude-code → kimi-code | design → dev | A89 (forced-liquidation design doc) promoted for verification/finalization; handoff design->dev |
+| 2026-07-17 | kimi-code → codex | dev → review | A89 forced-liquidation design verified/finalized |
