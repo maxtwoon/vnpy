@@ -1,7 +1,7 @@
 ---
 task: A89 - Forced-liquidation design (daily loss limit flatten, design-only, no production code)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-17
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - docs/design/a89-forced-liquidation-design.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -155,3 +155,4 @@ $ git status --short   # A89 范围确认
 |------|---------|----------|------|
 | 2026-07-17 | claude-code → kimi-code | design → dev | A89 (forced-liquidation design doc) promoted for verification/finalization; handoff design->dev |
 | 2026-07-17 | kimi-code → codex | dev → review | A89 forced-liquidation design verified/finalized |
+| 2026-07-17 | codex → codex | review → done | A89 review passed: design references and scope verified; sync gates pass; pytest/preflight accepted via recorded Manual Verification due documented WinError 5 tmp_path sandbox limitation |
