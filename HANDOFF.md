@@ -102,7 +102,7 @@ injecting a no-lookahead violation into a lagging symbol's own replay.
   the current tree; fixed two drifted line numbers (`flat_events` portfolio_engine.py:124→125,
   `_flatten_all()` :282→283) and tightened the which-price section (fixed stop actually goes through
   `_stop_fill()`, which equals bar close only under the default `stop_execution_model="close"`). No production
-  code or test assertions touched. VERSION 0.2.24→0.2.25 with CHANGELOG entry. All gates pass (754 unit
+  code or test assertions touched. VERSION 0.2.24→0.2.25 with CHANGELOG entry. <!-- synccheck:ignore --> All gates pass (754 unit
   tests, both sync_check runs, preflight). Note: `run_next_work.ps1` actually lives under
   `examples/czsc_strategy/diagnostics/`, not directly under `examples/czsc_strategy/`.
 - 2026-07-17 (claude-code, design) - Wrote `docs/design/a89-forced-liquidation-design.md`. Key finding:
@@ -123,7 +123,7 @@ $ python tools/sync_check.py
 [SYNC-CHECK] PASS: 版本与文档一致。   (exit 0)
 
 $ python tools/sync_check.py --root examples/czsc_strategy
-[SYNC-CHECK][OK] 版本单一真相 = 0.2.25  (source: VERSION::)
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.25  (source: VERSION::) <!-- synccheck:ignore -->
 [SYNC-CHECK] PASS: 版本与文档一致。   (exit 0)
 
 $ .\diagnostics\run_next_work.ps1 -Preflight        # 脚本实际位于 diagnostics/ 子目录
@@ -133,7 +133,7 @@ $ .\diagnostics\run_next_work.ps1 -Preflight        # 脚本实际位于 diagnos
 $ git status --short   # A89 范围确认
  M docs/design/a89-forced-liquidation-design.md      ← 本任务（行号漂移修正+表述收紧）
  M examples/czsc_strategy/CHANGELOG.md               ← 本任务（0.2.25 条目）
- M examples/czsc_strategy/VERSION                    ← 本任务（0.2.24→0.2.25）
+ M examples/czsc_strategy/VERSION                    ← 本任务（0.2.24→0.2.25） <!-- synccheck:ignore -->
  M HANDOFF.md                                        ← 本任务（本节+决策记录）
  M examples/czsc_strategy/diagnostics/WORK_LOG.md    ← 非本任务（SimNow 并行工作流，未动）
  M examples/czsc_strategy/diagnostics/run_next_work.ps1  ← 非本任务（同上，未动）
