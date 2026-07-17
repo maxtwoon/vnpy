@@ -6,7 +6,6 @@ owner: kimi-code
 updated: 2026-07-17
 deliverables:
   - HANDOFF.md
-  - examples/czsc_strategy/chan_strategy/portfolio_ledger.py
   - examples/czsc_strategy/chan_strategy/portfolio_engine.py
 blockers: []
 last_transition_kind: next
