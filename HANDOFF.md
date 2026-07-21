@@ -1,8 +1,8 @@
 ---
 task: A100 - Document divergence enter/leave-leg direction mismatch as accepted behavior (re-audit M-NEW-2)
 version: 4.4.0
-stage: design
-owner: claude-code
+stage: dev
+owner: kimi-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -11,12 +11,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: fix
+last_transition_kind: next
 last_transition_actor: claude-code
 last_transition_from_stage: design
-last_transition_to_stage: design
+last_transition_to_stage: dev
 last_transition_from_owner: claude-code
-last_transition_to_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -185,3 +185,4 @@ task.
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A100 (divergence direction-mismatch documentation, re-audit M-NEW-2) scoped; drafting design brief |
+| 2026-07-22 | claude-code → kimi-code | design → dev | A100 promoted design->dev |
