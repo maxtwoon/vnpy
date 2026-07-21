@@ -1,295 +1,222 @@
 ---
-task: A100 - Document divergence enter/leave-leg direction mismatch as accepted behavior (re-audit M-NEW-2)
+task: A101 - Fix SimNow readiness gate soft-quota/docstring mismatch and None-passes-as-True gap (2nd re-audit H-NEW-2)
 version: 4.4.0
-stage: done
-owner: codex
+stage: design
+owner: claude-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
-  - examples/czsc_strategy/chan_strategy/signals.py
-  - examples/czsc_strategy/chan_strategy/sell_signals.py
+  - examples/czsc_strategy/chan_strategy/validation.py
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
-  - examples/czsc_strategy/tests/unit/test_divergence_macd.py
 blockers: []
-last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_kind: fix
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: design
+last_transition_from_owner: claude-code
+last_transition_to_owner: claude-code
 ---
 
 ## Background
 
-`diagnostics_ai_stock_review_report_2026-07-22.md` (the post-A97 comprehensive re-audit) flagged
-**M-NEW-2**: the 背驰 (divergence) power comparison used by `signal_divergence_status`, `signal_first_buy`
-(`chan_strategy/signals.py`), and `signal_first_sell` (`chan_strategy/sell_signals.py`) does not guarantee
-that the "entering" (`enter_bi`) and "leaving" (`leave_bi`) bi legs share the same direction before
-comparing their magnitudes.
+`diagnostics_ai_stock_review_report_2026-07-22b.md` (the SECOND comprehensive re-audit, run after A98/A99/A100
+closed the first re-audit's findings) flagged **H-NEW-2**: `SimNowReadinessChecker.check_readiness()`
+(`chan_strategy/validation.py`) has two related problems in the same function.
 
-**claude-code independently re-verified this by reading the code** (re-verify yourself in case line numbers
+**claude-code independently re-verified both by reading the code** (re-verify yourself in case line numbers
 have drifted):
 
-- All three functions select `enter_bi` the same way:
+**Problem 1 — docstring implies all 10 conditions gate readiness; only 4 actually do:**
+
+- The docstring (`validation.py:879-892`) lists 10 numbered conditions under "条件:" (conditions) with
+  `[OK]/[NG]` framing, reading as if satisfying the list is what determines readiness — with no
+  qualification that only some are mandatory.
+- The actual `ready` computation (`validation.py:989-1011`):
   ```python
-  if zs_start_idx > 0:
-      enter_bi = bi_list[zs_start_idx - 1]
-  else:
-      enter_bi = bi_list[zs_start_idx]   # falls back to the zhongshu's own first bi
+  passed_count = sum(1 for c in checks.values() if c["passed"] is True)
+  ...
+  signal_stable = (
+      checks.get("增量一致性检查", {}).get("passed") is not False
+      and checks.get("无重绘检查", {}).get("passed") is not False
+      and checks.get("冻结快照确定性检查", {}).get("passed") is not False
+  )
+  enough_trades = checks.get("交易样本>=100", {}).get("passed") is not False
+  return {..., "ready": passed_count >= 7 and signal_stable and enough_trades}
   ```
-  (`signals.py:325-329` inside `signal_divergence_status`; `signals.py:463-466` inside `signal_first_buy`;
-  the equivalent `enter_idx = last_zs["start_idx"] - 1 if ... else last_zs["start_idx"]` at
-  `sell_signals.py:132-134` inside `signal_first_sell`.) `leave_bi` is always the last bi after the
-  zhongshu, filtered by direction. Since a zhongshu's own bi count (`n_bis`, `zhongshu.py:39`) is
-  data-dependent, whether `enter_bi` (from `zs_start_idx - 1`, or the zhongshu's own first bi when
-  `zs_start_idx == 0`) ends up the same direction as `leave_bi` is not fixed — it can legitimately end up
-  opposite.
-- `_divergence_power`/`_bi_power`/`_macd_power_for_segment` (`signals.py:60-134`) compute pure magnitude
-  (`abs(high-low)` or summed `|hist|`), agnostic of direction — so an opposite-direction `enter_bi` is
-  compared against `leave_bi` exactly as if it were same-direction.
-- **This is NOT a clear-cut bug, and claude-code is explicitly NOT claiming to know the correct chan-theory
-  answer here.** `tests/unit/test_divergence_macd.py:178-212`
-  (`test_signal_first_buy_differs_between_models`) already constructs a fixture where `zs_start_idx == 0`,
-  so `enter_bi` is the zhongshu's own first bi (`Direction.Up`) while `leave_bi` is `Direction.Down` —
-  opposite directions — and the test does not treat this as invalid; it only asserts the amplitude/MACD
-  models disagree on the resulting classification. This existing, already-passing test is direct evidence
-  that the current behavior (direction-agnostic comparison) is at least tolerated by the project's own test
-  suite, and quite possibly an accepted design choice rather than an overlooked defect.
-- However, neither `signal_divergence_status`'s docstring (`signals.py:277-292`) nor either call site
-  documents that direction-matching is intentionally not required — a future reader (human or agent) could
-  reasonably assume "进入段"/"离开段" ("entering segment"/"leaving segment") implies a matched pair of
-  trend legs, which is the standard chan-theory framing for divergence, and be surprised to find the code
-  doesn't enforce it.
+  Only 4 of the 10 checks (增量一致性检查/无重绘检查/冻结快照确定性检查/交易样本>=100) individually gate
+  `ready` via `signal_stable`/`enough_trades`. The other 6 — win_rate>=45%, profit_factor>=1.0,
+  max_drawdown<=20%, sharpe>=0.3 (A99), 样本外表现, and 参数稳定性 (hardcoded `passed: None`, so it can
+  never contribute a `True`) — only contribute to a `passed_count >= 7` quota. **Confirmed via a concrete
+  scenario**: `win_rate=0.40` (fails the documented 45% requirement) with all other backtest metrics passing
+  and all three stability checks passing yields `passed_count=8`, `signal_stable=True`,
+  `enough_trades=True` → `ready=True` — i.e. a strategy can fail a metric the docstring lists as a numbered
+  condition and still be reported ready. `run_validation.py:140` prints this `ready` value directly as the
+  human-facing "可以进入SimNow仿真" conclusion; `diagnostics/simnow_backfill_pending_replays.py:81/90` and
+  `diagnostics/simnow_replay_readiness.py:83` both branch on the same boolean.
+- The inline comment immediately above `signal_stable`/`enough_trades` (`validation.py:993-998`, "进入仿真
+  的硬门槛：... 任何一项失败都不应进入仿真。") is actually self-consistent with the code — it explicitly
+  scopes itself to exactly the 4 conditions it lists just above it, not all 10. **The mismatch is between
+  the docstring's unqualified 10-item numbered list and the code**, not between this inline comment and the
+  code. Don't conflate the two when writing the fix — the inline comment is fine as-is.
 
-## Decision: scope this to documentation only, not a behavior change
+**Problem 2 — an omitted (`None`) hard-gate check silently counts as passing, not "unknown":**
 
-The audit report itself is explicit that this "needs chan-theory domain review, not just code reading" —
-claude-code has read the code carefully but has no independent authority to declare whether direction
-constraint was chan-theory-intended or not, and the audit's own suggested fix (b) (search backward for the
-nearest same-direction bi) is a real signal-generation behavior change with unknown impact on every
-existing 背驰/一买/一卖/一卖 classification in the whole test suite and any historical backtest results that
-depend on today's behavior.
+- `signal_stable`/`enough_trades` use `passed is not False` rather than `passed is True`. When an optional
+  stability param is omitted (`incremental_consistency=None`, etc. — the default for all three, and what
+  happens on `SimNowReadinessChecker().check_readiness(report)` with only the backtest report, e.g.
+  `tests/unit/test_simnow_readiness_sharpe.py:20`), the corresponding `checks[...]` entry is set to
+  `{"passed": None, ...}` (`validation.py:914-916` etc.) — and `None is not False` evaluates `True`, so an
+  *untested* hard-gate condition is silently treated as *passing*.
+- **Confirmed via repo-wide search this is not currently live**: the one production call site
+  (`run_full_validation`, `validation.py:1233-1239`) always supplies all four values as real dicts with a
+  concrete `passed: True/False` (never `None`) — `inc_result`/`rp_result`/`sf_result` come from
+  `SignalValidator.validate_*` methods (`validation.py:563-570`, `1121-1130`) which always return a real
+  dict, and `oos_result` similarly from `robustness.out_of_sample_test()` (`validation.py:1216`). The only
+  other call site in the repo, `tests/unit/test_simnow_readiness_sharpe.py`'s `_sharpe_check`/
+  `_sharpe_suggestions` helpers (added by A99), calls `check_readiness(report)` with everything else
+  omitted, but neither of A99's 4 tests reads `result["ready"]` — so no existing test currently observes
+  this gap either.
 
-**Decision: this task implements the audit's suggested fix (a) only — document the current behavior
-explicitly, do not change signal logic.** This mirrors the project's established precedent for exactly this
-situation (A95's M1, A96's M3): when the "correct" intended behavior can't be independently verified and a
-real domain expert would need to weigh in, the safe move is honest documentation of the current, tested
-behavior — not a guessed behavior change that could silently alter every 背驰-based signal in the system.
-If a human/domain-expert later determines direction-matching genuinely should be enforced, that becomes a
-separate, deliberately-scoped follow-up task with its own regression-impact analysis — explicitly NOT this
-task.
+## Decision: fix both, but conservatively
+
+**Problem 1 fix — documentation only, mirroring A99's precedent.** Do NOT change `passed_count >= 7` or
+which checks feed the quota — there's no independently-verifiable evidence for what the "correct" quota
+threshold should be, and changing it would be a real, higher-risk behavior change to a live promotion gate
+(same reasoning A99 applied to the Sharpe threshold: the enforced behavior is the live production behavior;
+fix the docstring to describe it accurately instead of guessing at a "more correct" gate). Rewrite the
+docstring's "条件:" list to explicitly mark which 4 are individually mandatory (hard gates) and which 6 only
+contribute to the `>=7-of-10` quota, matching the code's actual, already-well-commented intent (the inline
+comment at `:993-998` already correctly documents the 4-item hard-gate set — the docstring just needs to
+stop implying all 10 are equally mandatory).
+
+**Problem 2 fix — a real, deliberate, narrowly-scoped behavior change, following the A97 fail-closed
+precedent.** Change `is not False` to `is True` for the three `signal_stable` conditions and `enough_trades`
+in `validation.py:999-1004` only. Reasoning:
+1. This mirrors A97's rationale exactly: a hard gate should not silently pass on missing/unproven
+   information ("not yet proven safe" should mean "not ready," not "ready by default"). The current
+   `is not False` treats "we never checked this" the same as "this passed," which is the same shape of bug
+   A97 fixed for `rollover_open_gating`.
+2. **Verified safe for the one production call site** (Background, Problem 2) — `run_full_validation` always
+   supplies concrete non-None dicts for all four, so `is not False` and `is True` are behaviorally identical
+   there; this change only tightens the not-currently-triggered direct-call path.
+3. This does NOT touch `passed_count`/the `>=7` quota logic — only the 4 hard-gate booleans.
 
 ## Goal
 
-1. Add a note to `signal_divergence_status`'s docstring (`signals.py:277-292`, near "力度计算:") stating
-   plainly that `enter_bi` and `leave_bi` are not required or guaranteed to share the same `direction` —
-   `enter_bi` is chosen purely by position (the bi immediately before the zhongshu, or the zhongshu's own
-   first bi when there is none before it), independent of `leave_bi`'s direction — and that the magnitude
-   comparison (`_divergence_power`) is intentionally direction-agnostic. State this as a description of
-   current, tested behavior (referencing `test_signal_first_buy_differs_between_models` as the test that
-   already exercises the opposite-direction case), not as a chan-theory justification claude-code isn't
-   qualified to assert.
-2. Add a short inline comment at each of the three `enter_bi`/`enter_idx` selection sites (`signals.py:
-   325-329`, `signals.py:463-466`, `sell_signals.py:132-134`) noting that the selected leg's direction is
-   not checked against `leave_bi`'s — a one- or two-line comment is enough, don't duplicate the full
-   docstring explanation three times; point back to `signal_divergence_status`'s docstring as the fuller
-   explanation.
-3. **Do not change any comparison logic, any direction filtering, or the `enter_bi`/`enter_idx` selection
-   itself in any of the three functions** — this is a documentation-only task, exactly like A96 (M3). If you
-   find yourself editing anything other than docstrings/comments in `signals.py`/`sell_signals.py`, stop —
-   that's out of scope.
-4. Add a regression test to `tests/unit/test_divergence_macd.py` that explicitly pins today's accepted
-   behavior for the mismatched-direction case (rather than relying only on the existing
-   `test_signal_first_buy_differs_between_models`, which exercises it incidentally without naming it) —
-   e.g. a small, direct unit test on `_divergence_power`/`_bi_power` (or a targeted `signal_divergence_status`
-   call) using two bis with opposite `direction` values, asserting the function runs and returns a sensible
-   magnitude comparison without raising or filtering on direction. Keep it minimal — this is locking down
-   documented behavior, not building new coverage infrastructure.
+1. Rewrite `check_readiness`'s docstring (`validation.py:879-892`) to distinguish the 4 mandatory hard-gate
+   conditions (1-4: 增量一致性检查/无重绘检查/冻结快照确定性检查/交易样本>=100) from the 6 that only
+   contribute to the `passed_count >= 7` quota (5-10) — state the quota threshold explicitly (e.g. "条件
+   5-10 中至少需通过 7/10（含条件1-4）" or similar, phrase it however reads clearest, just be accurate and
+   explicit about which is which). Re-verify the exact current wording/numbering yourself in case it's
+   drifted from what's quoted in Background.
+2. **Do not touch the inline comment at `:993-998`** — it's already accurate (scoped to exactly the 4 items
+   it lists); don't inflate or rewrite it.
+3. **Do not touch `passed_count >= 7`** or add/remove any check from `checks{}` or from what feeds
+   `passed_count` — the quota mechanism and its threshold are unchanged, only documented accurately.
+4. Change `validation.py:999-1004`'s four `is not False` comparisons to `is True` (three inside
+   `signal_stable`, one for `enough_trades`). Re-verify surrounding structure before editing.
+5. Add regression tests to `tests/unit/test_simnow_readiness_sharpe.py` (extending the existing A99 file,
+   which already has the right imports/helpers for `SimNowReadinessChecker`) covering:
+   - A quota-vs-hard-gate case: construct a report where `win_rate` fails (e.g. `0.40`) but every other
+     backtest metric passes and all three stability checks + trade count pass (supply them explicitly, not
+     omitted) → assert `ready is True` (documenting the INTENTIONAL soft-quota behavior — this is not a bug
+     to "fix away," it's the accepted design once correctly documented) and that `passed_count` reflects the
+     failing win_rate check correctly (i.e. one less than the all-pass case).
+   - The None-passes-as-True regression (Problem 2, the actual fix): call `check_readiness` with a report
+     and explicitly omit (or pass `None` for) the stability params → assert `ready is False` now (was `True`
+     before this fix) since an unproven stability check must not silently pass. Use this to also confirm
+     `test_simnow_readiness_sharpe.py`'s existing 4 tests (which never read `ready`) remain unaffected — run
+     the full file, don't assume.
+   - A positive case confirming `ready is True` is still reachable at all: full report with all four hard
+     gates explicitly passing (not omitted) and enough quota checks passing.
 
 ## Acceptance Criteria
 
-- [x] `signal_divergence_status`'s docstring documents that enter/leave leg directions are not
-      required/guaranteed to match, referencing the existing test that already exercises this.
-- [x] Short inline comments added at all three `enter_bi`/`enter_idx` selection sites, pointing back to the
-      fuller docstring explanation.
-- [x] **Zero changes to comparison logic, direction filtering, or leg-selection logic** in `signals.py` or
-      `sell_signals.py` — verified in the diff (docstring/comment lines only).
-- [x] New regression test added pinning the mismatched-direction case as accepted/tested behavior.
-- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (count increases only
-      by the new test(s) added — note the exact delta in the Decision Log).
-- [x] `-m realdb` equivalence gate still passes unchanged (this task does not touch `backtest_engine.py`,
-      `positions.py`, or any numeric signal-generation logic — verify rather than assume per AGENTS.md rule).
-- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
-- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [x] `ruff check` clean on touched files (or, if pre-existing lint errors exist in these files, verify via
-      diff against HEAD that the count is unchanged — same pattern A99 used for `validation.py`'s 45
-      pre-existing errors).
-- [x] VERSION/CHANGELOG bumped — CHANGELOG entry must state this is a **documentation clarification of
-      already-existing, already-tested behavior, not a signal-generation logic change** — be explicit, same
-      as A96's (M3) CHANGELOG wording.
-- [x] Include a literal `## Manual Verification` heading with natively-run command output.
-- [x] **Remember the `synccheck:ignore` marker** for any version-like string in this task's own HANDOFF
+- [ ] `check_readiness`'s docstring explicitly distinguishes the 4 hard-gate conditions from the 6
+      quota-contributing conditions and states the `>=7/10` threshold plainly.
+- [ ] The inline comment at `:993-998` is unchanged (already accurate).
+- [ ] `passed_count >= 7` and every check's membership in `checks{}`/`passed_count` is completely unchanged
+      — verified in the diff.
+- [ ] The four `is not False` → `is True` changes at `:999-1004` are the only logic change in this file —
+      verified in the diff (everything else is docstring/comments).
+- [ ] New regression tests added per Goal item 5, all passing; existing `test_simnow_readiness_sharpe.py`
+      tests (from A99) still pass unchanged.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (count increases only
+      by the new tests added — note the exact delta in the Decision Log).
+- [ ] `-m realdb` equivalence gate still passes unchanged (this task does not touch `backtest_engine.py`,
+      `positions.py`, or `signals.py` — verify rather than assume per AGENTS.md rule, since `validation.py`
+      may still be exercised somewhere in that gate; note the recurring pre-existing ULP float discrepancy
+      from A98/A99/A100 if it recurs again — that's environment-specific and unrelated to this task).
+- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
+- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [ ] `ruff check` clean on touched files, or verify via diff against HEAD that any pre-existing lint-error
+      count is unchanged (same pattern A99 used — `validation.py` had 45 pre-existing errors as of A99).
+- [ ] VERSION/CHANGELOG bumped — CHANGELOG entry must clearly distinguish the two changes: (a) documentation
+      clarification of the existing quota mechanism (no behavior change), and (b) the real, narrowly-scoped
+      fail-closed behavior change for omitted stability checks (a hard-gate condition that was never tested
+      now correctly blocks readiness instead of silently passing).
+- [ ] Include a literal `## Manual Verification` heading with natively-run command output.
+- [ ] **Remember the `synccheck:ignore` marker** for any version-like string in this task's own HANDOFF
       notes.
 
 ## Notes for the Next Agent
 
-(review = claude-code must read this before starting)
+(dev = kimi-code must read this before starting)
 
-1. **Dev work is complete; all acceptance criteria above are ticked and evidenced in
-   `## Manual Verification` below.** Verify each criterion against the diff and the recorded command
-   output; the diff scope is exactly: one docstring section in `signals.py`
-   (`signal_divergence_status`), three two-line inline comments (two in `signals.py`, one in
-   `sell_signals.py`), one new test function in `tests/unit/test_divergence_macd.py`, VERSION bump
-   (`0.2.38`, synccheck:ignore), and one CHANGELOG entry. **Zero logic changes** — the `git diff` on
-   `chan_strategy/` contains docstring/comment lines only (shown in Manual Verification item 7).
-2. **The new regression test** `test_divergence_power_ignores_leg_direction_mismatch` deliberately
-   constructs enter_bi (Direction.Up) / leave_bi (Direction.Down) with opposite directions and asserts
-   `_divergence_power` returns the plain magnitude comparison under both `amplitude` and `macd`
-   models without raising or direction-filtering. Unit count delta is exactly +1 (772 → 773,
-   synccheck:ignore).
-3. **realdb gate**: `test_research_mode_equivalence_to_baseline` still fails with the identical
-   last-ulp float-repr diff A99 already documented as pre-existing/environmental; A100 re-ran the
-   control on unmodified HEAD code (A100 edits copied aside, `git checkout --`, rerun, restore) and
-   the failure reproduces byte-identically — out of A100 scope, flagged for awareness only.
-4. **Unrelated SimNow-workstream files** (`diagnostics/WORK_LOG.md`,
-   `diagnostics/simnow_20d_promotion_decision.md`) were left untouched; `git status --short` before
-   handoff shows only A100-scoped files plus those two concurrent-workstream files.
-5. **This closes the last of the three re-audit follow-up tasks** (H-NEW-1 via A98, M-NEW-1 via A99,
-   M-NEW-2 via this task). After review passes, per the user's standing instruction, launch another
-   comprehensive re-audit subagent to check for any remaining or newly-introduced issues.
+1. **Two distinct changes in one task, each independently justified** — read the "Decision: fix both, but
+   conservatively" section above in full. Problem 1 (docstring) is documentation-only, mirroring A99.
+   Problem 2 (`is not False` → `is True`) IS a real behavior change, but a narrowly-scoped, well-justified
+   one mirroring A97 — do not skip it or treat it as "just docs too."
+2. **Do NOT change `passed_count >= 7`, which checks feed it, or the inline comment at `:993-998`.** Scope
+   creep here (e.g. "let's also tighten the quota to 8" or "let's make win_rate a hard gate too") is
+   explicitly out of scope — that would be guessing at intended policy with no independent evidence, exactly
+   what this task's Decision Log explicitly avoids doing.
+3. **Do not touch the unrelated files currently sitting modified in the working tree**
+   (`diagnostics/WORK_LOG.md`, `diagnostics/simnow_20d_promotion_decision.md`, and any other SimNow-workstream
+   files you see) — these belong to a concurrent, unrelated workstream. **Before committing, run
+   `git status --short` and confirm only your own A101-scoped files are staged.**
+4. **Include a literal `## Manual Verification` heading** — required every time; do not omit it.
+5. Finish with the acceptance commands, then
+   `python tools/handoff.py next --actor kimi-code --summary "A101 SimNow readiness gate fix completed"`.
+   Transactional gate — fix and retry if it blocks; no `--no-gate`. If the command itself crashes/times out
+   for environment reasons, do not manually hand-edit HANDOFF.md's stage/owner fields to bypass it — leave
+   the working tree with your changes uncommitted and note the failure in the Decision Log; claude-code will
+   verify and commit properly.
+6. This is the sole High-severity finding from the second comprehensive re-audit
+   (`diagnostics_ai_stock_review_report_2026-07-22b.md`); that report also flagged 4 Low findings
+   (L-NEW-4 through L-NEW-7) that were NOT scoped as follow-up tasks — they're genuine but low-risk,
+   defensive-coding gaps not currently triggered by any live call site, consistent with this project's
+   practice of not chasing every Low finding into its own task.
 
 ## Decision Log
 
-- 2026-07-22 (claude-code, design) - This is the third and final follow-up task from the 2026-07-22
-  re-audit (H-NEW-1 closed via A98; M-NEW-1 closed via A99; this is M-NEW-2).
-- 2026-07-22 (claude-code, design) - Full reasoning for the documentation-only scope (not implementing
-  direction-matching) is recorded in the "Decision: scope this to documentation only" section above — key
-  point: the audit itself says this needs chan-theory domain review, and an existing passing test
-  (`test_signal_first_buy_differs_between_models`) already relies on/tolerates the mismatched-direction
-  case, so changing the logic risks silently altering real signal classifications with no independent way
-  to verify the change is chan-theory-correct. Mirrors A95 (M1) and A96 (M3) precedent.
-- 2026-07-22 (claude-code, design) - Confirmed via code reading that all three call sites
-  (`signal_divergence_status`, `signal_first_buy` in `signals.py`; `signal_first_sell` in
-  `sell_signals.py`) share the identical `enter_bi`/`enter_idx` selection pattern, so the docstring/comment
-  clarification needs to touch all three, not just the one the audit's code excerpt happened to show.
-- 2026-07-22 (kimi-code, dev) - Implemented exactly the designed scope: (a) new 「方向约束」 section in
-  `signal_divergence_status`'s docstring (framed as a description of current, tested behavior referencing
-  `test_signal_first_buy_differs_between_models`, explicitly NOT a chan-theory justification); (b) two-line
-  inline comments at all three `enter_bi`/`enter_idx` selection sites pointing back to that docstring
-  section; (c) one new regression test `test_divergence_power_ignores_leg_direction_mismatch` in
-  `tests/unit/test_divergence_macd.py` pinning the opposite-direction enter/leave pair as accepted behavior
-  under both `amplitude` and `macd` divergence models. Diff on `chan_strategy/` is docstring/comment lines
-  only — verified in Manual Verification item 7.
-- 2026-07-22 (kimi-code, dev) - Unit suite delta is exactly +1: 772 → 773 passed (not-realdb), matching
-  the single new test; no existing test was modified. `test_divergence_macd.py` alone: 10 → 11 passed
-  (synccheck:ignore).
-- 2026-07-22 (kimi-code, dev) - VERSION bumped `0.2.37` → `0.2.38` (synccheck:ignore) with a CHANGELOG
-  entry explicitly worded as a documentation clarification of already-existing, already-tested behavior,
-  not a signal-generation logic change (A96 M3 wording pattern). Added
-  `tests/unit/test_divergence_macd.py` to the deliverables list (pre-existing file, extended in-place).
-- 2026-07-22 (kimi-code, dev) - realdb gate: `test_research_mode_equivalence_to_baseline` fails with the
-  same last-ulp float-repr diff A99 documented as pre-existing/environmental; control run on unmodified
-  HEAD code (A100 edits aside) reproduces the identical failure, so it is not caused by A100. All other
-  realdb tests pass (3 passed).
+- 2026-07-22 (claude-code, design) - This is the sole High-severity finding from the SECOND comprehensive
+  re-audit (after A98/A99/A100 closed the first re-audit's findings). Unlike the first re-audit's three
+  follow-ups, this task combines a documentation fix (Problem 1, mirroring A99) with one narrowly-scoped
+  real behavior change (Problem 2, mirroring A97) — both independently justified and both verified safe
+  for the one live production call site before being scoped.
+- 2026-07-22 (claude-code, design) - Explicitly did NOT scope a fix for whether win_rate/profit_factor/
+  max_drawdown/sharpe/oos should become hard gates instead of quota-contributors — there's no independent
+  evidence for what the "correct" policy is, and this project's consistent precedent (A95 M1, A96 M3, A99
+  M-NEW-1) is to document actual behavior accurately rather than guess at intended behavior changes to a
+  live gate.
+- 2026-07-22 (claude-code, design) - Confirmed the inline comment at `validation.py:993-998` is NOT part of
+  the reported mismatch — it already accurately scopes itself to the 4 hard-gate items only. The audit
+  report's phrasing could be read as implicating this comment too; re-reading it directly, it does not
+  claim all 10 checks are hard gates, only the 4 it explicitly enumerates. Recorded here so kimi doesn't
+  waste time trying to "fix" a comment that isn't actually wrong.
+- 2026-07-22 (claude-code, design) - Confirmed via repo-wide `grep` that only two call sites exist for
+  `check_readiness`: the one production path (`run_full_validation`, always supplies concrete non-None
+  values for all four hard-gate inputs) and A99's test helpers (never read `ready`) — so the Problem 2 fix
+  is safe today and only tightens behavior for future/direct callers that omit stability params.
 
 ## Manual Verification
 
-Environment: repo-root `python` for sync_check/handoff; `D:\repo\vnpy\.venv_new\Scripts\python.exe`
-for pytest; system `ruff` for lint. All commands run natively on Windows from `D:\repo\vnpy` unless noted.
-
-1. New regression test file (10 -> 11, delta = exactly the 1 new test):
-
-   ```text
-   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit/test_divergence_macd.py -q
-   11 passed, 2 warnings in 0.16s
-   ```
-
-2. Full unit suite, not realdb (772 -> 773, synccheck:ignore; delta = exactly the 1 new test):
-
-   ```text
-   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
-   773 passed, 4 deselected, 2 warnings in 45.30s
-   ```
-
-3. realdb equivalence gate (same 1 pre-existing environmental failure A99 documented, proven not caused
-   by A100):
-
-   ```text
-   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit -q -m "realdb"
-   FAILED .../test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
-   1 failed, 3 passed, 773 deselected, 2 warnings in 71.40s
-   ```
-
-   Control run with A100 code edits reverted to HEAD (copied aside, `git checkout --`, rerun, restored;
-   files re-verified identical after restore):
-
-   ```text
-   $ git checkout -- examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py
-   $ .venv_new\Scripts\python.exe -m pytest "...::test_research_mode_equivalence_to_baseline" -q --tb=line
-   FAILED .../test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
-   1 failed, 2 warnings in 30.47s        # identical failure on unmodified HEAD code
-   ```
-
-   A100's `chan_strategy/` diff is docstring/comment-only (item 7), and the failing test exercises
-   `backtest_engine`/snapshot comparison untouched by this task. Pre-existing, out of A100 scope.
-
-4. ruff (all three touched code/test files — clean, and byte-identical result on the HEAD baseline via
-   `git stash` / `git stash pop`):
-
-   ```text
-   $ ruff check examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py examples/czsc_strategy/tests/unit/test_divergence_macd.py
-   All checks passed!        # exit=0; baseline (HEAD, stashed) also: All checks passed!
-   ```
-
-5. Preflight (from `examples/czsc_strategy/`, run twice; second run captured for the record):
-
-   ```text
-   $ powershell -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight
-   ==> Compile SimNow capture script
-   ==> Run SimNow workflow unit tests
-   205 passed in 29.49s
-   ==> Build pending replay backfill plan
-   ==> Preflight complete; live SimNow capture was not requested
-   (exit code 0)
-   ```
-
-6. sync_check, both roots:
-
-   ```text
-   $ python tools/sync_check.py
-   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)   # synccheck:ignore
-   [SYNC-CHECK] PASS: 版本与文档一致   (exit 0)
-   $ python tools/sync_check.py --root examples/czsc_strategy
-   [SYNC-CHECK][OK] 版本单一真相 = 0.2.38  (source: VERSION::)   # synccheck:ignore
-   [SYNC-CHECK] PASS: 版本与文档一致   (exit 0)
-   ```
-
-7. Diff scope check — `chan_strategy/` changes are docstring/comment lines only (insertions: 15-line
-   docstring section + 3 two-line comments; the single "deletion" is the one-line `# 计算进入段力度`
-   comment replaced by its expanded two-line form); unrelated SimNow-workstream files left untouched:
-
-   ```text
-   $ git diff --stat examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py
-    examples/czsc_strategy/chan_strategy/sell_signals.py |  2 ++
-    examples/czsc_strategy/chan_strategy/signals.py      | 20 +++++++++++++++++++-
-    2 files changed, 21 insertions(+), 1 deletion(-)
-   $ git status --short
-    M examples/czsc_strategy/CHANGELOG.md
-    M examples/czsc_strategy/VERSION
-    M examples/czsc_strategy/chan_strategy/sell_signals.py
-    M examples/czsc_strategy/chan_strategy/signals.py
-    M examples/czsc_strategy/diagnostics/WORK_LOG.md                      (concurrent workstream, untouched)
-    M examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md (concurrent workstream, untouched)
-    M examples/czsc_strategy/tests/unit/test_divergence_macd.py
-    M HANDOFF.md
-   ```
+(pending — dev fills in)
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-22 | claude-code → claude-code | design → design | A100 (divergence direction-mismatch documentation, re-audit M-NEW-2) scoped; drafting design brief |
-| 2026-07-22 | claude-code → kimi-code | design → dev | A100 promoted design->dev |
-| 2026-07-22 | kimi-code → codex | dev → review | A100 divergence direction-mismatch documented |
-| 2026-07-22 | codex → codex | review → done | A100 review passed: documentation-only divergence direction-mismatch clarification verified; touched-file ruff/sync gates pass; unit/preflight sandbox WinError 5 covered by recorded native manual verification. |
+| 2026-07-22 | claude-code → claude-code | design → design | A101 (SimNow readiness gate fix, 2nd re-audit H-NEW-2) scoped; drafting design brief |
