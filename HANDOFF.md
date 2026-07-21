@@ -1,7 +1,7 @@
 ---
 task: A95 - Document risk_per_trade_pct as a nominal budget, not a hard loss cap (audit M1)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-21
 deliverables:
@@ -10,10 +10,10 @@ deliverables:
   - examples/czsc_strategy/chan_strategy/positions.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -180,3 +180,4 @@ PS> git status --short
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A95 (document risk_per_trade_pct nominal budget, audit M1) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A95 risk_per_trade_pct nominal-budget documentation completed |
+| 2026-07-21 | codex → codex | review → done | A95 review passed: risk_per_trade_pct documentation clarified as nominal budget; logic unchanged |
