@@ -1,7 +1,7 @@
 ---
 task: A100 - Document divergence enter/leave-leg direction mismatch as accepted behavior (re-audit M-NEW-2)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-22
 deliverables:
@@ -13,10 +13,10 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_divergence_macd.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -292,3 +292,4 @@ for pytest; system `ruff` for lint. All commands run natively on Windows from `D
 | 2026-07-22 | claude-code → claude-code | design → design | A100 (divergence direction-mismatch documentation, re-audit M-NEW-2) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A100 promoted design->dev |
 | 2026-07-22 | kimi-code → codex | dev → review | A100 divergence direction-mismatch documented |
+| 2026-07-22 | codex → codex | review → done | A100 review passed: documentation-only divergence direction-mismatch clarification verified; touched-file ruff/sync gates pass; unit/preflight sandbox WinError 5 covered by recorded native manual verification. |
