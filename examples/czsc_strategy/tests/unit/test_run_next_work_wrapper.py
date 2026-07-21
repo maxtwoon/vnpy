@@ -83,6 +83,42 @@ def test_invoke_checked_process_preserves_nonzero_exit_code():
     assert "exit code 7" in output
 
 
+def test_assert_live_artifact_exists_accepts_existing_file():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    helper = _extract_function(script_text, "Assert-LiveArtifactExists")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        helper,
+        "$path = [System.IO.Path]::GetTempFileName()",
+        "Assert-LiveArtifactExists -Path $path -Label 'capture'",
+        "Write-Host 'artifact-check-finished'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert "artifact-check-finished" in output
+
+
+def test_assert_live_artifact_exists_rejects_missing_file():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    helper = _extract_function(script_text, "Assert-LiveArtifactExists")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        helper,
+        "$path = Join-Path $env:TEMP 'definitely_missing_simnow_artifact.json'",
+        "Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue",
+        "Assert-LiveArtifactExists -Path $path -Label 'capture'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "capture artifact is missing" in output
+
+
 def test_kline_window_validation_rejects_short_live_capture():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert_kline_window = _extract_function(script_text, "Assert-KlineCoverageWindow")
@@ -210,6 +246,42 @@ def test_formal_window_validation_allows_night_when_formal_sessions_missing():
 
     assert completed.returncode == 0, output
     assert "default-night-window-finished" in output
+
+
+def test_historical_db_update_tables_include_enabled_symbols_only():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_update_tables = _extract_function(script_text, "Get-HistoricalDbUpdateTables")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_update_tables,
+        "$contractMap = @{ AP888 = @{ enabled = $true }; RB888 = @{ enabled = $true }; SC888 = @{ enabled = $false } }",
+        "$tables = Get-HistoricalDbUpdateTables -ContractMap $contractMap",
+        "$tables | ConvertTo-Json -Compress",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert output.strip() == '["ap888_15M_raw","ap888_1M_raw","ap888_5M_raw","rb888_15M_raw","rb888_1M_raw","rb888_5M_raw"]'
+
+
+def test_historical_db_update_tables_ignore_disabled_and_preserve_sorted_uniques():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_update_tables = _extract_function(script_text, "Get-HistoricalDbUpdateTables")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_update_tables,
+        "$contractMap = @{ ZN888 = @{ enabled = $false }; A888 = @{ enabled = $true }; AP888 = @{ enabled = $true } }",
+        "$tables = Get-HistoricalDbUpdateTables -ContractMap $contractMap",
+        "$tables | ConvertTo-Json -Compress",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert output.strip() == '["a888_15M_raw","a888_1M_raw","a888_5M_raw","ap888_15M_raw","ap888_1M_raw","ap888_5M_raw"]'
 
 
 def test_live_capture_runs_daily_monitor_once_for_formal_ledger_write():
@@ -393,6 +465,7 @@ def test_halt_monitor_does_not_stop_summary_generation():
 def test_historical_db_update_parameters_defined():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "[switch]$UpdateHistoricalDb" in script_text
+    assert "[switch]$PostProcessOnly" in script_text
     assert "[string]$HistoricalDbUpdateCommand" in script_text
     assert "[int]$HistoricalDbUpdateTimeoutSeconds" in script_text
 
@@ -412,7 +485,7 @@ def test_historical_db_update_runs_before_capture_when_enabled():
 def test_historical_db_update_can_be_explicitly_skipped():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     update_index = script_text.index("Run historical DB auto update")
-    update_block = script_text[update_index:update_index + 1800]
+    update_block = script_text[update_index:update_index + 3200]
     assert "[switch]$SkipHistoricalDbUpdate" in script_text
     assert "$ShouldUpdateHistoricalDb" in update_block
     assert "if ($ShouldUpdateHistoricalDb)" in update_block
@@ -429,9 +502,29 @@ def test_formal_live_capture_defaults_to_historical_db_update():
     assert "-not $SkipHistoricalDbUpdate.IsPresent" in script_text
 
 
+def test_historical_db_update_invokes_auto_update_script_with_single_table_parameter():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    update_index = script_text.index("Run historical DB auto update")
+    update_block = script_text[update_index:update_index + 3200]
+
+    assert "Get-HistoricalDbUpdateTables -ContractMap $ContractMap" in script_text
+    assert '-FilePath "powershell.exe"' in update_block
+    assert '-Command", "& `"$HistoricalDbUpdateScriptPath`"$HistoricalDbUpdateInlineTableArgs"' in update_block
+    assert '$HistoricalDbUpdateInlineTableArgs = " -Table @(" + (($HistoricalDbUpdateTables | ForEach-Object { "\'$_\'" }) -join ", ") + ")"' in update_block
+
+
 def test_run_summary_receives_historical_db_update_argument():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     step_index = script_text.index("Generate run summary")
     summary_block = script_text[step_index:step_index + 900]
     assert "--historical-db-update" in summary_block
     assert "$HistoricalDbUpdateJson" in summary_block
+
+
+def test_post_process_only_resume_step_present():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "Resume live post-processing from existing artifacts" in script_text
+    assert "Assert-LiveArtifactExists -Path $CaptureJson -Label \"capture JSON\"" in script_text
+    assert "Assert-LiveArtifactExists -Path $KlineSummaryJson -Label \"kline summary JSON\"" in script_text
+    assert "Assert-LiveArtifactExists -Path $ReplayJson -Label \"replay JSON\"" in script_text

@@ -95,6 +95,40 @@ def extract_environment_capture(capture: dict[str, Any]) -> dict[str, Any]:
     raw = capture.get("raw") or {}
     meta = capture.get("meta") or {}
     subscribed = raw.get("subscribed") or []
+    tick_counts_by_symbol: dict[str, int] = {}
+    symbol_lookup: dict[tuple[str, str], str] = {}
+    vt_lookup: dict[str, str] = {}
+    symbol_only_lookup: dict[str, str] = {}
+    for row in subscribed:
+        research_symbol = str(row.get("research_symbol") or "").upper()
+        if not research_symbol:
+            continue
+        tick_counts_by_symbol[research_symbol] = 0
+        symbol = str(row.get("symbol") or "").lower()
+        exchange = str(row.get("exchange") or "").upper()
+        vt_symbol = str(row.get("vt_symbol") or "")
+        if symbol and exchange:
+            symbol_lookup[(symbol, exchange)] = research_symbol
+        if symbol and symbol not in symbol_only_lookup:
+            symbol_only_lookup[symbol] = research_symbol
+        if vt_symbol:
+            vt_lookup[vt_symbol] = research_symbol
+    for tick in raw.get("ticks") or []:
+        vt_symbol = str(tick.get("vt_symbol") or "")
+        symbol = str(tick.get("symbol") or "").lower()
+        exchange = str(tick.get("exchange") or "").upper()
+        research_symbol = (
+            vt_lookup.get(vt_symbol)
+            or symbol_lookup.get((symbol, exchange))
+            or symbol_only_lookup.get(symbol)
+            or (str(tick.get("symbol") or "").upper() if str(tick.get("symbol") or "").upper() in tick_counts_by_symbol else "")
+        )
+        if research_symbol:
+            tick_counts_by_symbol[research_symbol] = tick_counts_by_symbol.get(research_symbol, 0) + 1
+    zero_tick_subscribed_symbols = sorted(
+        symbol for symbol, count in tick_counts_by_symbol.items()
+        if count == 0
+    )
     return {
         "ticks": len(raw.get("ticks") or []),
         "contracts_count": int(raw.get("contracts_count", 0) or 0),
@@ -102,6 +136,8 @@ def extract_environment_capture(capture: dict[str, Any]) -> dict[str, Any]:
         "subscribed_count": len(subscribed),
         "read_only": meta.get("read_only") is True,
         "orders_sent_by_workflow": int(meta.get("orders_sent_by_workflow", 0) or 0),
+        "tick_counts_by_symbol": tick_counts_by_symbol,
+        "zero_tick_subscribed_symbols": zero_tick_subscribed_symbols,
     }
 
 
@@ -160,6 +196,14 @@ def extract_historical_db_update_summary(update: dict[str, Any]) -> dict[str, An
 
 def extract_record_summary(record: dict[str, Any]) -> dict[str, Any]:
     """Summarize the daily monitor record JSON."""
+    threshold_rows = []
+    for row in (record.get("thresholds", {}).get("rows") or []):
+        threshold_rows.append({
+            "metric": row.get("metric", ""),
+            "value": row.get("value"),
+            "level": row.get("level", ""),
+            "unit": row.get("unit", ""),
+        })
     return {
         "status": record.get("status", ""),
         "valid_observation": bool(record.get("valid_observation")),
@@ -167,6 +211,7 @@ def extract_record_summary(record: dict[str, Any]) -> dict[str, Any]:
         "threshold_status": record.get("thresholds", {}).get("status", ""),
         "order_safety_status": record.get("order_safety", {}).get("status", ""),
         "consistency_matched": bool(record.get("consistency", {}).get("matched")),
+        "threshold_rows": threshold_rows,
     }
 
 

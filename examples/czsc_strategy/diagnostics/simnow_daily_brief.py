@@ -77,7 +77,8 @@ def _build_record_for_action(summary: dict[str, Any]) -> dict[str, Any]:
     elif status in {"pending", "halt"}:
         record["consistency"] = {"reason": reason}
         record["thresholds"] = {
-            "status": _safe_get(summary, "record", "threshold_status", default="pass")
+            "status": _safe_get(summary, "record", "threshold_status", default="pass"),
+            "rows": list(_safe_get(summary, "record", "threshold_rows", default=[])),
         }
 
     record["kline_coverage"] = {
@@ -166,6 +167,8 @@ def build_daily_brief(summary: dict[str, Any]) -> str:
         f"- subscribed_count: `{_safe_get(summary, 'environment_capture', 'subscribed_count', default=0)}`",
         f"- read_only: `{_format_bool(_safe_get(summary, 'environment_capture', 'read_only', default=False))}`",
         f"- orders_sent_by_workflow: `{_safe_get(summary, 'environment_capture', 'orders_sent_by_workflow', default=0)}`",
+        f"- tick_counts_by_symbol: `{json.dumps(_safe_get(summary, 'environment_capture', 'tick_counts_by_symbol', default={}), ensure_ascii=False, sort_keys=True)}`",
+        f"- zero_tick_subscribed_symbols: `{_format_symbols(_safe_get(summary, 'environment_capture', 'zero_tick_subscribed_symbols', default=[]))}`",
         "",
         "## 历史 DB 更新",
         "",

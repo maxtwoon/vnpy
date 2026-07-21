@@ -93,16 +93,21 @@ def test_render_daily_brief_halt_needs_user_action():
     summary = _sample_run_summary()
     summary["automation_status"] = "halt"
     summary["automation_exit_code"] = 30
-    summary["automation_reason"] = "workflow_order_safety_breach"
+    summary["automation_reason"] = "consecutive_loss_abs_pct"
     summary["automation_action"] = "stop automation and review manually"
     summary["record"]["status"] = "halt"
-    summary["record"]["reason"] = "workflow_order_safety_breach"
+    summary["record"]["reason"] = "consecutive_loss_abs_pct"
+    summary["record"]["threshold_status"] = "halt"
+    summary["record"]["threshold_rows"] = [
+        {"metric": "drawdown_abs_pct", "value": 1.2992, "level": "warning", "unit": "%"},
+        {"metric": "consecutive_loss_abs_pct", "value": 0.1218, "level": "halt", "unit": "%"},
+    ]
 
     text = render_daily_brief(summary)
 
     assert "automation_status: `halt`" in text
     assert "needs_user_action: `true`" in text
-    assert "停止自动化" in text or "人工审查" in text
+    assert "consecutive_loss_abs_pct=0.1218%" in text
 
 
 def test_render_daily_brief_failed_missing_run_summary():

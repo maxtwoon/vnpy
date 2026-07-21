@@ -4393,3 +4393,428 @@ powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\ru
 ### Next Action
 
 Run the next observation during the next valid session window with the formal 1800-second command. Keep `2026-07-16` as `pending/historical_db_lag` unless a newer same-date run replaces the ledger row again.
+
+## 2026-07-17 Formal Night Session Observation
+
+### Goal
+
+Execute the formal read-only SimNow observation flow during the night session with the documented `1800`-second command, repair any local wrapper blockers automatically, and use `simnow_run_summary_2026-07-17.json` as the final source of truth.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `192 passed`.
+
+Failed on the first formal attempt:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Initial blocker:
+
+- The historical DB auto-update step failed before SimNow capture.
+- Root cause 1: `D:\repo\ssquant\auto_update.ps1` launched Python without UTF-8 console output, so `update_kline_db.py` raised `UnicodeEncodeError` while printing the DB path.
+- Root cause 2: after the encoding fix, the same wrapper still passed a mojibake DB path, so the updater reported `数据库不存在`.
+
+Local repair:
+
+- Updated `D:\repo\ssquant\auto_update.ps1` to set and restore `PYTHONIOENCODING=utf-8` around the Python call.
+- Replaced the hard-coded DB path literal with a Python-derived `update_kline_db.DEFAULT_DB_PATH` lookup so the wrapper no longer depends on the PowerShell source file's Chinese literal encoding.
+- Added an absolute `sys.path.insert(0, r'D:\repo\ssquant')` to that lookup so it works even when invoked from `D:\repo\vnpy`.
+
+Passed after the wrapper repair:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+### Outcomes
+
+- The formal run started after midnight local time, so the authoritative artifacts were generated for `2026-07-17`.
+- Generated/refreshed authoritative artifacts:
+  - `simnow_export_2026-07-17.json`
+  - `simnow_kline_update_2026-07-17.json`
+  - `simnow_replay_2026-07-17.json`
+  - `simnow_record_2026-07-17.json`
+  - `simnow_report_2026-07-17.md`
+  - `simnow_run_summary_2026-07-17.json`
+  - `simnow_daily_brief_2026-07-17.md`
+  - `simnow_historical_db_update_2026-07-17.json`
+  - `simnow_ledger_summary.json`
+- Historical DB auto update succeeded:
+  - `historical_db_update.status=passed`
+  - `historical_db_update.exit_code=0`
+  - `started_at=2026-07-17T00:02:00.5833413+08:00`
+  - `ended_at=2026-07-17T00:02:03.1487571+08:00`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17348`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=4904`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Observed account activity remained contamination/audit evidence only:
+  - `account_contamination.detected=true`
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Delayed replay remained unavailable as a counting source:
+  - `delayed_replay.available=false`
+  - `delayed_replay.status=pending`
+  - `latest_db_date=2026-07-16`
+  - `missing_or_lagged_symbols=[AP888,RB888,SC888,A888,ZN888]`
+- Kline coverage became the primary blocker instead of DB lag:
+  - `kline.missing_symbols=[AP888]`
+  - `kline.short_symbols=[A888,RB888]`
+  - `min_bars_per_symbol=30`
+- Final machine-readable conclusion from `simnow_run_summary_2026-07-17.json`:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=kline_coverage_incomplete`
+  - `automation_action=resolve pending gate before counting`
+- 20-day ledger progress after the upsert:
+  - `observed_days=4`
+  - `valid_observation_days=0`
+  - `pending_days=3`
+  - `skipped_days=0`
+  - `halt_days=1`
+
+### Notes
+
+- This is a formal `1800`-second observation attempt, not a smoke run.
+- The day does not count toward the 20-day gate because `AP888` is missing from the generated 1M coverage and `A888`/`RB888` remain below the `30`-bar minimum.
+- No workflow orders were sent.
+
+### Next Action
+
+Re-run the formal read-only observation in an active night or day session that can deliver complete `AP888` coverage and at least `30` one-minute bars for every enabled symbol.
+
+## 2026-07-17 Daytime Formal Retry Timeout
+
+### Goal
+
+Re-run the documented formal read-only SimNow observation flow during the day session and confirm whether a newer same-date `simnow_run_summary_2026-07-17.json` replaces the earlier night-session conclusion.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `192 passed`.
+- Pending replay backfill plan still shows `2026-07-15` waiting for DB coverage.
+
+Timed out at the client while the wrapper was still inside the historical DB update chain:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+### Outcomes
+
+- No new `2026-07-17` daily observation artifacts were written after the earlier `00:32 +08:00` formal run; the only new file from this retry was `simnow_backfill_plan.json` at `15:22 +08:00`.
+- The timed-out retry left a live process chain:
+  - `run_next_work.ps1`
+  - nested `powershell.exe` launchers
+  - `D:\repo\ssquant\auto_update.ps1`
+  - `python.exe update_kline_db.py`
+- Because this exceeded the earlier seconds-long historical DB update baseline and had not produced a new capture/report/run-summary set, the retry was treated as an execution timeout rather than a newer accepted observation result.
+- The stale retry processes were terminated locally to avoid leaving an orphaned historical DB update job running.
+- The authoritative same-date conclusion therefore remains the latest completed machine-readable summary already on disk:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=kline_coverage_incomplete`
+  - `automation_action=resolve pending gate before counting`
+- The unchanged authoritative metrics from `simnow_run_summary_2026-07-17.json` remain:
+  - `ticks=4904`
+  - `contracts_count=17348`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `historical_db_update.status=passed`
+  - `kline.missing_symbols=[AP888]`
+  - `kline.short_symbols=[A888,RB888]`
+
+### Notes
+
+- This daytime retry did not replace the earlier `2026-07-17` ledger row because it never completed to a new `simnow_record_2026-07-17.json` / `simnow_run_summary_2026-07-17.json`.
+- No workflow orders were sent.
+- The final daily status for `2026-07-17` must still be read from the existing `simnow_run_summary_2026-07-17.json`, not inferred from the timed-out retry.
+
+### Next Action
+
+Investigate why the daytime `-UpdateHistoricalDb` path can stall for tens of minutes before capture, or re-run the formal observation in the next valid session after confirming the update step is healthy.
+
+## 2026-07-21 Formal Day Session Observation
+
+### Goal
+
+Execute the documented formal read-only SimNow observation flow for `2026-07-21`, use the generated `simnow_run_summary_2026-07-21.json` as the final source of truth, and record whether the day counts toward the restarted 20-day ledger.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `195 passed`.
+- Pending replay backfill plan still shows `2026-07-15` waiting for DB coverage.
+
+Client timed out while the formal wrapper was still post-processing:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Recovered the remaining read-only post-processing from the artifacts already written by that same formal run:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+python .\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --report-md .\examples\czsc_strategy\diagnostics\simnow_20d_promotion_decision.md
+python .\examples\czsc_strategy\diagnostics\simnow_run_summary.py --date 2026-07-21 --out-dir .\examples\czsc_strategy\diagnostics --out-json .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-21.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --ledger-summary .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json --historical-db-update .\examples\czsc_strategy\diagnostics\simnow_historical_db_update_2026-07-21.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07-21 --run-summary .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-21.json --out-md .\examples\czsc_strategy\diagnostics\simnow_daily_brief_2026-07-21.md
+```
+
+### Outcomes
+
+- The formal observation itself completed its read-only capture path and wrote the same-day core artifacts before the client timeout:
+  - `simnow_export_2026-07-21.json`
+  - `simnow_kline_update_2026-07-21.json`
+  - `simnow_replay_readiness_2026-07-21.json`
+  - `simnow_replay_2026-07-21.json`
+  - `simnow_record_2026-07-21.json`
+  - `simnow_report_2026-07-21.md`
+- The remaining read-only summary artifacts were regenerated locally from those files:
+  - `simnow_ledger_summary.json`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_run_summary_2026-07-21.json`
+  - `simnow_daily_brief_2026-07-21.md`
+- Historical DB auto update succeeded:
+  - `historical_db_update.status=passed`
+  - `historical_db_update.exit_code=0`
+  - `started_at=2026-07-21T10:30:41.9131031+08:00`
+  - `ended_at=2026-07-21T10:33:26.7365771+08:00`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17742`.
+- Enabled subscriptions were complete: `5/5`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `meta.read_only=true`
+  - `meta.orders_sent_by_workflow=0`
+  - `meta.workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Environment capture counts:
+  - `ticks=10955`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+- Observed account activity remained contamination/audit evidence only:
+  - `account_contamination.detected=true`
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Replay readiness was available for the same day:
+  - `delayed_replay.available=true`
+  - `latest_db_date=2026-07-21`
+  - `missing_or_lagged_symbols=[]`
+- Kline coverage still had a formal gate gap:
+  - `kline.missing_symbols=[AP888]`
+  - `kline.short_symbols=[]`
+  - `min_bars_per_symbol=30`
+- Final machine-readable conclusion from `simnow_run_summary_2026-07-21.json`:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- The daily record remained non-counting:
+  - `record.status=halt`
+  - `record.reason=consecutive_loss_abs_pct`
+  - `record.threshold_status=halt`
+  - `record.valid_observation=false`
+- 20-day ledger progress after the upsert:
+  - `observed_days=5`
+  - `valid_observation_days=0`
+  - `pending_days=3`
+  - `halt_days=2`
+
+### Notes
+
+- The wrapper timeout was a client/runtime limit issue, not a connection/query failure. The formal run had already finished capture and replay export before the timeout interrupted the later summary-generation steps.
+- The final daily conclusion must come from the regenerated `simnow_run_summary_2026-07-21.json`, not from the timeout itself and not from the markdown report alone.
+- No workflow orders were sent.
+
+### Next Action
+
+Stop automation for this candidate and review the threshold breach (`consecutive_loss_abs_pct`) together with the unresolved `AP888` kline coverage gap before scheduling another formal observation.
+
+## 2026-07-21 Daily Acceptance Review
+
+### Goal
+
+Execute the SimNow daily acceptance flow for the current workspace state without sending orders, and decide whether a new live run is appropriate after checking the authoritative same-day machine-readable result.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `200 passed`.
+- Pending replay backfill plan still shows `2026-07-15` as `ready_to_backfill`.
+
+Inspected the current same-day authoritative artifacts instead of re-running `-LiveCapture`:
+
+```powershell
+Get-Date -Format o
+Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-21.json
+Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_record_2026-07-21.json
+```
+
+### Outcomes
+
+- Current local time during this review was `2026-07-21T15:18:30.2509605+08:00`.
+- Same-day formal artifacts already existed from the earlier read-only observation run:
+  - `simnow_export_2026-07-21.json`
+  - `simnow_record_2026-07-21.json`
+  - `simnow_report_2026-07-21.md`
+  - `simnow_run_summary_2026-07-21.json`
+- Preflight passed, but a new live capture was intentionally not started because the authoritative same-day run summary already reported:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- The accepted same-day capture metrics remain:
+  - `ticks=10955`
+  - `contracts_count=17742`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=5`
+- Read-only safety remains satisfied:
+  - `read_only=true`
+  - `orders_sent_by_workflow=0`
+  - `workflow_order_actions=[]`
+- Formal observation-side checks from the authoritative run summary remain:
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `kline.missing_symbols=[AP888]`
+  - `record.valid_observation=false`
+- Current 20-day progress remains unchanged:
+  - `valid_observation_days=0`
+  - `pending_days=3`
+  - `halt_days=2`
+
+### Notes
+
+- Re-running `-LiveCapture` on the same date would upsert and potentially replace today's formal ledger row. That is not appropriate while the current machine-readable instruction is to stop automation and review manually.
+- This review therefore treats the existing `simnow_run_summary_2026-07-21.json` as the final source of truth for today, exactly as required by `ACCEPTANCE.md`.
+- No workflow orders were sent.
+
+### Next Action
+
+Keep today's result as `halt/consecutive_loss_abs_pct`, review the threshold breach and the remaining `AP888` kline gap manually, and only schedule another formal observation after that review.
+
+## 2026-07-21 Daily Acceptance Review Follow-Up
+
+### Goal
+
+Run the required daily preflight, verify the current same-day machine-readable result remains authoritative, and avoid replacing today's formal ledger row after the workflow has already halted for manual review.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `200 passed`.
+- Pending replay backfill plan still shows `2026-07-15` as `ready_to_backfill`.
+
+Inspected the current same-day authoritative artifacts instead of re-running `-LiveCapture`:
+
+```powershell
+Get-Date -Format o
+Get-Item .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-21.json, .\examples\czsc_strategy\diagnostics\simnow_record_2026-07-21.json, .\examples\czsc_strategy\diagnostics\simnow_report_2026-07-21.md, .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-21.json
+Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-21.json
+Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_historical_db_update_2026-07-21.json
+```
+
+### Outcomes
+
+- Current local time during this review was `2026-07-21T15:21:36.7195556+08:00`.
+- Required same-day artifacts are present:
+  - `simnow_export_2026-07-21.json`
+  - `simnow_record_2026-07-21.json`
+  - `simnow_report_2026-07-21.md`
+  - `simnow_run_summary_2026-07-21.json`
+- The authoritative same-day machine-readable conclusion remains unchanged:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- Accepted same-day capture metrics remain:
+  - `ticks=10955`
+  - `contracts_count=17742`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=5`
+- Read-only safety remains satisfied:
+  - `read_only=true`
+  - `orders_sent_by_workflow=0`
+- Formal observation-side checks from the authoritative run summary remain:
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `kline.missing_symbols=[AP888]`
+  - `record.threshold_status=halt`
+  - `record.valid_observation=false`
+
+### Notes
+
+- A new same-date `-LiveCapture` run was intentionally not started because it would upsert and potentially replace today's halted ledger row.
+- This follow-up therefore treats `simnow_run_summary_2026-07-21.json` as the single source of truth, exactly as required by `ACCEPTANCE.md`.
+- No workflow orders were sent.
+
+### Next Action
+
+Keep today's result as `halt/consecutive_loss_abs_pct`, review the threshold breach and the remaining `AP888` coverage gap manually, and only schedule another formal observation after that review.

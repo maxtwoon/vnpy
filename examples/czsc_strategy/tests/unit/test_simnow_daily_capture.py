@@ -6,6 +6,8 @@ DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
 if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
+CONTRACT_MAP_PATH = DIAG / "simnow_contract_map.json"
+
 from simnow_daily_capture import (  # noqa: E402
     CaptureState,
     build_export,
@@ -120,3 +122,10 @@ def test_build_risk_has_required_threshold_fields():
         "strategy_concentration",
     ]:
         assert key in risk
+
+
+def test_live_contract_map_excludes_ap888_from_formal_observation_set():
+    data = load_contract_map(CONTRACT_MAP_PATH)
+
+    assert "AP888" not in data
+    assert set(data) == {"SC888", "A888", "ZN888", "RB888"}

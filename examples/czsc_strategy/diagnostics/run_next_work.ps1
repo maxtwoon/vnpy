@@ -1,6 +1,7 @@
 param(
     [switch]$Preflight,
     [switch]$LiveCapture,
+    [switch]$PostProcessOnly,
     [switch]$SkipReplay,
     [switch]$SkipKlineUpdate,
     [int]$DurationSeconds = 1800,
@@ -17,6 +18,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$DefaultHistoricalDbUpdateCommand = 'powershell.exe -ExecutionPolicy Bypass -File "D:\repo\ssquant\auto_update.ps1"'
+$HistoricalDbUpdateScriptPath = "D:\repo\ssquant\auto_update.ps1"
 
 # Avoid permission-sensitive __pycache__ writes in the source tree.
 $env:PYTHONDONTWRITEBYTECODE = '1'
@@ -66,6 +69,17 @@ function Invoke-CheckedProcess {
     $process.WaitForExit()
     if ($process.ExitCode -ne 0) {
         throw "$Label failed with exit code $($process.ExitCode)"
+    }
+}
+
+function Assert-LiveArtifactExists {
+    param(
+        [string]$Path,
+        [string]$Label
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "$Label artifact is missing: $Path"
     }
 }
 
@@ -170,6 +184,53 @@ function Assert-FormalObservationWindow {
         $BlockingList = [string]::Join(", ", $BlockingSymbols)
         throw "Formal observation window rejected: enabled symbols [$BlockingList] do not allow the $CurrentSession session; current local time is $($LocalNow.ToString('yyyy-MM-dd HH:mm:ss zzz')). Use -SkipKlineUpdate for a smoke test or run during an allowed session."
     }
+}
+
+function Get-HistoricalDbUpdateTables {
+    param([object]$ContractMap)
+
+    $Periods = @("15M", "1M", "5M")
+    $Tables = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $Entries = @()
+    if ($ContractMap -is [System.Collections.IDictionary]) {
+        $Entries = $ContractMap.GetEnumerator()
+    } else {
+        $Entries = $ContractMap.PSObject.Properties
+    }
+
+    foreach ($Entry in $Entries) {
+        if ($ContractMap -is [System.Collections.IDictionary]) {
+            $Symbol = [string]$Entry.Key
+            $Row = $Entry.Value
+        } else {
+            $Symbol = [string]$Entry.Name
+            $Row = $Entry.Value
+        }
+
+        if ([string]::IsNullOrWhiteSpace($Symbol) -or $null -eq $Row) {
+            continue
+        }
+
+        $Enabled = $false
+        if ($Row -is [System.Collections.IDictionary]) {
+            if ($Row.Contains("enabled")) {
+                $Enabled = [bool]$Row["enabled"]
+            }
+        } elseif ($Row.PSObject.Properties.Name -contains "enabled") {
+            $Enabled = [bool]$Row.enabled
+        }
+
+        if (-not $Enabled) {
+            continue
+        }
+
+        $ContinuousSymbol = $Symbol.Trim().ToLowerInvariant()
+        foreach ($Period in $Periods) {
+            [void]$Tables.Add("${ContinuousSymbol}_${Period}_raw")
+        }
+    }
+
+    return @($Tables | Sort-Object)
 }
 
 $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -280,132 +341,168 @@ if ($Preflight -and -not $LiveCapture) {
 }
 
 if ($LiveCapture) {
-    Write-Step "Run historical DB auto update"
-    $HistoricalDbUpdateStartedAt = (Get-Date).ToString("o")
-    if ($ShouldUpdateHistoricalDb) {
-        try {
-            Invoke-CheckedProcess `
-                -Label "Run historical DB auto update command" `
-                -FilePath "powershell" `
-                -Arguments @(
-                    "-NoProfile",
-                    "-ExecutionPolicy", "Bypass",
-                    "-Command", "$HistoricalDbUpdateCommand"
-                ) `
-                -TimeoutSeconds $HistoricalDbUpdateTimeoutSeconds
+    if (-not $PostProcessOnly) {
+        Write-Step "Run historical DB auto update"
+        # skipped path is still supported below when the formal update is disabled.
+        $HistoricalDbUpdateStartedAt = (Get-Date).ToString("o")
+        $HistoricalDbUpdateTables = Get-HistoricalDbUpdateTables -ContractMap $ContractMap
+        if ($ShouldUpdateHistoricalDb) {
+            try {
+                $HistoricalDbUpdateCommandForLog = $HistoricalDbUpdateCommand
+                if ($HistoricalDbUpdateCommand -eq $DefaultHistoricalDbUpdateCommand) {
+                    $HistoricalDbUpdateInlineTableArgs = ""
+                    if ($HistoricalDbUpdateTables.Count -gt 0) {
+                        $HistoricalDbUpdateInlineTableArgs = " -Table @(" + (($HistoricalDbUpdateTables | ForEach-Object { "'$_'" }) -join ", ") + ")"
+                    }
+                    $HistoricalDbUpdateArguments = @(
+                        "-NoProfile",
+                        "-ExecutionPolicy", "Bypass",
+                        "-Command", "& `"$HistoricalDbUpdateScriptPath`"$HistoricalDbUpdateInlineTableArgs"
+                    )
+                    $HistoricalDbUpdateCommandForLog = "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command `"& `"$HistoricalDbUpdateScriptPath`"$HistoricalDbUpdateInlineTableArgs`""
+                    if ($HistoricalDbUpdateTables.Count -gt 0) {
+                        $HistoricalDbUpdateCommandForLog += " # tables: " + ($HistoricalDbUpdateTables -join ", ")
+                    }
+                    Invoke-CheckedProcess `
+                        -Label "Run historical DB auto update command" `
+                        -FilePath "powershell.exe" `
+                        -Arguments $HistoricalDbUpdateArguments `
+                        -TimeoutSeconds $HistoricalDbUpdateTimeoutSeconds
+                } else {
+                    Invoke-CheckedProcess `
+                        -Label "Run historical DB auto update command" `
+                        -FilePath "powershell.exe" `
+                        -Arguments @(
+                            "-NoProfile",
+                            "-ExecutionPolicy", "Bypass",
+                            "-Command", "$HistoricalDbUpdateCommand"
+                        ) `
+                        -TimeoutSeconds $HistoricalDbUpdateTimeoutSeconds
+                }
+                $HistoricalDbUpdatePayload = [ordered]@{
+                    status = "passed"
+                    exit_code = 0
+                    command = $HistoricalDbUpdateCommandForLog
+                    started_at = $HistoricalDbUpdateStartedAt
+                    ended_at = (Get-Date).ToString("o")
+                }
+                $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
+            } catch {
+                $HistoricalDbUpdatePayload = [ordered]@{
+                    status = "failed"
+                    exit_code = 1
+                    command = $HistoricalDbUpdateCommandForLog
+                    started_at = $HistoricalDbUpdateStartedAt
+                    ended_at = (Get-Date).ToString("o")
+                    reason = "$_"
+                }
+                $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
+                throw "Historical DB auto update failed: $_"
+            }
+        } else {
+            # Formal skip path still writes a status=skipped artifact for downstream summaries.
+            $HistoricalDbUpdateReason = "Historical DB auto update skipped"
+            if ($SkipKlineUpdate.IsPresent) {
+                $HistoricalDbUpdateReason = "Smoke capture skips the formal historical DB auto update"
+            } elseif ($SkipHistoricalDbUpdate.IsPresent) {
+                $HistoricalDbUpdateReason = "SkipHistoricalDbUpdate switch set"
+            }
             $HistoricalDbUpdatePayload = [ordered]@{
-                status = "passed"
-                exit_code = 0
+                status = "skipped"
+                exit_code = $null
                 command = $HistoricalDbUpdateCommand
                 started_at = $HistoricalDbUpdateStartedAt
                 ended_at = (Get-Date).ToString("o")
+                reason = $HistoricalDbUpdateReason
             }
             $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
-        } catch {
-            $HistoricalDbUpdatePayload = [ordered]@{
-                status = "failed"
-                exit_code = 1
-                command = $HistoricalDbUpdateCommand
-                started_at = $HistoricalDbUpdateStartedAt
-                ended_at = (Get-Date).ToString("o")
-                reason = "$_"
+        }
+
+        Invoke-CheckedProcess `
+            -Label "Run read-only SimNow capture" `
+            -FilePath "python" `
+            -Arguments @(
+            ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
+            "--duration-seconds", "$DurationSeconds",
+            "--out-json", "$CaptureJson"
+        ) `
+            -TimeoutSeconds $CaptureTimeoutSeconds
+
+        if (-not $SkipKlineUpdate) {
+            Write-Step "Aggregate SimNow ticks into local 1M replay bars"
+            $KlineArgs = @(
+                ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
+                "--simnow-json", "$CaptureJson",
+                "--summary-json", "$KlineSummaryJson",
+                "--min-bars-per-symbol", "$MinKlineBarsPerSymbol"
+            )
+            if (-not [string]::IsNullOrWhiteSpace($KlineDbPath)) {
+                $KlineArgs += @("--db-path", "$KlineDbPath")
             }
-            $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
-            throw "Historical DB auto update failed: $_"
+            & python @KlineArgs
+            if ($LASTEXITCODE -ne 0) {
+                throw "SimNow kline update failed with exit code $LASTEXITCODE"
+            }
         }
-    } else {
-        $HistoricalDbUpdateReason = "Historical DB auto update skipped"
-        if ($SkipKlineUpdate.IsPresent) {
-            $HistoricalDbUpdateReason = "Smoke capture skips the formal historical DB auto update"
-        } elseif ($SkipHistoricalDbUpdate.IsPresent) {
-            $HistoricalDbUpdateReason = "SkipHistoricalDbUpdate switch set"
-        }
-        $HistoricalDbUpdatePayload = [ordered]@{
-            status = "skipped"
-            exit_code = $null
-            command = $HistoricalDbUpdateCommand
-            started_at = $HistoricalDbUpdateStartedAt
-            ended_at = (Get-Date).ToString("o")
-            reason = $HistoricalDbUpdateReason
-        }
-        $HistoricalDbUpdatePayload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $HistoricalDbUpdateJson -Encoding UTF8
-    }
 
-    Invoke-CheckedProcess `
-        -Label "Run read-only SimNow capture" `
-        -FilePath "python" `
-        -Arguments @(
-        ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
-        "--duration-seconds", "$DurationSeconds",
-        "--out-json", "$CaptureJson"
-    ) `
-        -TimeoutSeconds $CaptureTimeoutSeconds
-
-    if (-not $SkipKlineUpdate) {
-        Write-Step "Aggregate SimNow ticks into local 1M replay bars"
-        $KlineArgs = @(
-            ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
-            "--simnow-json", "$CaptureJson",
-            "--summary-json", "$KlineSummaryJson",
-            "--min-bars-per-symbol", "$MinKlineBarsPerSymbol"
+        Write-Step "Build live strategy event surface"
+        $StrategySurfaceArgs = @(
+            ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
+            "--capture-json", "$CaptureJson",
+            "--date", "$Date"
         )
         if (-not [string]::IsNullOrWhiteSpace($KlineDbPath)) {
-            $KlineArgs += @("--db-path", "$KlineDbPath")
+            $StrategySurfaceArgs += @("--db-path", "$KlineDbPath")
         }
-        & python @KlineArgs
+        & python @StrategySurfaceArgs
         if ($LASTEXITCODE -ne 0) {
-            throw "SimNow kline update failed with exit code $LASTEXITCODE"
+            throw "Strategy surface enrichment failed with exit code $LASTEXITCODE"
         }
-    }
 
-    Write-Step "Build live strategy event surface"
-    $StrategySurfaceArgs = @(
-        ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
-        "--capture-json", "$CaptureJson",
-        "--date", "$Date"
-    )
-    if (-not [string]::IsNullOrWhiteSpace($KlineDbPath)) {
-        $StrategySurfaceArgs += @("--db-path", "$KlineDbPath")
-    }
-    & python @StrategySurfaceArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Strategy surface enrichment failed with exit code $LASTEXITCODE"
-    }
-
-    if (-not $SkipReplay) {
-        Write-Step "Check replay DB readiness"
-        & python ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py" --date $Date > $ReplayReadinessJson
-        $ReplayReady = $LASTEXITCODE -eq 0
-        if ($ReplayReady) {
-            Invoke-CheckedProcess `
-                -Label "Export same-day replay snapshot" `
-                -FilePath "python" `
-                -Arguments @(
-                ".\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py",
-                "--end", "$Date",
-                "--date", "$Date",
-                "--out-json", "$ReplayJson"
-            ) `
-                -TimeoutSeconds $ReplayTimeoutSeconds
-        } else {
-            Write-Host "Replay DB is not ready for $Date; skipping expensive replay export."
-            $Readiness = Get-Content -LiteralPath $ReplayReadinessJson -Raw | ConvertFrom-Json
-            $ReplayPlaceholder = [ordered]@{
-                signals = @()
-                trades = @()
-                positions = @()
-                risk = @{}
-                meta = [ordered]@{
-                    date = $Date
-                    replay_available = $false
-                    replay_unavailable_reason = "historical_db_lag"
-                    latest_db_date = $Readiness.latest_db_date
-                    db_path = $Readiness.db_path
-                    missing_or_lagged_symbols = $Readiness.missing_or_lagged_symbols
-                    table_ranges = $Readiness.table_ranges
+        if (-not $SkipReplay) {
+            Write-Step "Check replay DB readiness"
+            & python ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py" --date $Date > $ReplayReadinessJson
+            $ReplayReady = $LASTEXITCODE -eq 0
+            if ($ReplayReady) {
+                Invoke-CheckedProcess `
+                    -Label "Export same-day replay snapshot" `
+                    -FilePath "python" `
+                    -Arguments @(
+                    ".\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py",
+                    "--end", "$Date",
+                    "--date", "$Date",
+                    "--out-json", "$ReplayJson"
+                ) `
+                    -TimeoutSeconds $ReplayTimeoutSeconds
+            } else {
+                Write-Host "Replay DB is not ready for $Date; skipping expensive replay export."
+                $Readiness = Get-Content -LiteralPath $ReplayReadinessJson -Raw | ConvertFrom-Json
+                $ReplayPlaceholder = [ordered]@{
+                    signals = @()
+                    trades = @()
+                    positions = @()
+                    risk = @{}
+                    meta = [ordered]@{
+                        date = $Date
+                        replay_available = $false
+                        replay_unavailable_reason = "historical_db_lag"
+                        latest_db_date = $Readiness.latest_db_date
+                        db_path = $Readiness.db_path
+                        missing_or_lagged_symbols = $Readiness.missing_or_lagged_symbols
+                        table_ranges = $Readiness.table_ranges
+                    }
                 }
+                $ReplayPlaceholder | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ReplayJson -Encoding UTF8
             }
-            $ReplayPlaceholder | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ReplayJson -Encoding UTF8
+        }
+    } else {
+        Write-Step "Resume live post-processing from existing artifacts"
+        Assert-LiveArtifactExists -Path $CaptureJson -Label "capture JSON"
+        if (-not $SkipKlineUpdate) {
+            Assert-LiveArtifactExists -Path $KlineSummaryJson -Label "kline summary JSON"
+        }
+        if (-not $SkipReplay) {
+            Assert-LiveArtifactExists -Path $ReplayJson -Label "replay JSON"
         }
     }
 

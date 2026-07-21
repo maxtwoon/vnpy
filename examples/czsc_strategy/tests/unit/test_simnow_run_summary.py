@@ -81,6 +81,8 @@ def test_build_run_summary_from_minimal_artifacts(tmp_path):
     assert summary["capture"]["orders"] == 0
     assert summary["capture"]["trades"] == 0
     assert summary["capture"]["subscribed_count"] == 2
+    assert summary["environment_capture"]["tick_counts_by_symbol"] == {"AP888": 1, "SC888": 1}
+    assert summary["environment_capture"]["zero_tick_subscribed_symbols"] == []
     assert summary["kline"]["missing_symbols"] == ["AP888"]
     assert summary["kline"]["short_symbols"] == ["SC888"]
     assert summary["kline"]["min_bars_per_symbol"] == 30
@@ -90,6 +92,7 @@ def test_build_run_summary_from_minimal_artifacts(tmp_path):
     assert summary["record"]["threshold_status"] == "pass"
     assert summary["record"]["order_safety_status"] == "pass"
     assert summary["record"]["consistency_matched"] is False
+    assert summary["record"]["threshold_rows"] == []
     assert summary["promotion"]["ready_to_expand"] is False
     assert summary["promotion"]["valid_observation_days"] == 0
     assert summary["promotion"]["observed_days"] == 1
@@ -234,7 +237,10 @@ def test_build_run_summary_separates_environment_account_contamination_and_delay
             "positions": [{"symbol": "sc2608", "direction": "多", "volume": 1, "price": 468.5, "pnl": 9500.0}],
             "orders": [{"symbol": "sc2608", "direction": "多", "price": 437.8, "volume": 1}],
             "trades": [{"symbol": "sc2608", "direction": "多", "price": 437.8, "volume": 1}],
-            "subscribed": [{"research_symbol": "SC888"}, {"research_symbol": "RB888"}],
+            "subscribed": [
+                {"research_symbol": "SC888", "symbol": "sc2608", "exchange": "INE", "vt_symbol": "sc2608.INE"},
+                {"research_symbol": "RB888", "symbol": "rb2610", "exchange": "SHFE", "vt_symbol": "rb2610.SHFE"},
+            ],
         },
     }
     replay = {
@@ -270,6 +276,8 @@ def test_build_run_summary_separates_environment_account_contamination_and_delay
         "subscribed_count": 2,
         "read_only": True,
         "orders_sent_by_workflow": 0,
+        "tick_counts_by_symbol": {"RB888": 0, "SC888": 1},
+        "zero_tick_subscribed_symbols": ["RB888"],
     }
     assert summary["account_contamination"]["detected"] is True
     assert summary["account_contamination"]["orders"] == 1
@@ -292,6 +300,31 @@ def test_build_run_summary_separates_environment_account_contamination_and_delay
     summary_text = json.dumps(summary, ensure_ascii=False)
     assert "20510820" not in summary_text
     assert "9500" not in summary_text
+
+
+def test_build_run_summary_preserves_threshold_rows_for_daily_brief(tmp_path):
+    files = _make_files(tmp_path)
+    record = {
+        "status": "halt",
+        "valid_observation": False,
+        "consistency": {"matched": False, "reason": "consecutive_loss_abs_pct"},
+        "thresholds": {
+            "status": "halt",
+            "rows": [
+                {"metric": "drawdown_abs_pct", "value": 1.2992, "level": "warning", "unit": "%"},
+                {"metric": "consecutive_loss_abs_pct", "value": 0.1218, "level": "halt", "unit": "%"},
+            ],
+        },
+        "order_safety": {"status": "pass"},
+    }
+    _write_json(files["record_json"], record)
+
+    summary = build_run_summary("2026-07-21", files)
+
+    assert summary["record"]["threshold_rows"] == [
+        {"metric": "drawdown_abs_pct", "value": 1.2992, "level": "warning", "unit": "%"},
+        {"metric": "consecutive_loss_abs_pct", "value": 0.1218, "level": "halt", "unit": "%"},
+    ]
 
 
 def test_summary_does_not_leak_sensitive_capture_fields(tmp_path):
