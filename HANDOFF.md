@@ -1,8 +1,8 @@
 ---
 task: A92 - Validate A90 forced-liquidation actually flattens real positions + circuit-breaker caveat (audit H3)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -16,12 +16,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -166,6 +166,10 @@ honest about when it doesn't apply.
 
 ## Decision Log
 
+- 2026-07-21 (kimi-code, dev) - Codex rejection fix: removed unused `datetime` import (F401) from
+  `diagnostics/joint_replay_flatten_stress_check.py` line 53; no functional change. Ruff now passes on all
+  four A92-scoped files (`ruff check` on stress checker + backtest_engine + portfolio_engine +
+  test_position_sizing_research_equivalence -> All checks passed, ruff 0.15.21). <!-- synccheck:ignore -->
 - 2026-07-21 - Continuing the audit-remediation queue after A91 (H1) closed. This task (A92) addresses H3.
 - 2026-07-21 (claude-code, design) - Scoped this task to two independent halves: (1) prove the A90
   mechanism on real data via a deliberately tightened `daily_loss_limit_pct` diagnostic run (not a config
@@ -240,6 +244,13 @@ $ python diagnostics\joint_replay_flatten_stress_check.py 0.005   # (cwd: exampl
 #   24460.0 — exactly as the shadow probe predicted.
 ```
 
+### Ruff (codex rejection fix)
+
+```
+$ ruff check examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.py examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/chan_strategy/portfolio_engine.py examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.py
+All checks passed!   (ruff 0.15.21, after removing unused `datetime` import) <!-- synccheck:ignore -->
+```
+
 ### Unit tests (acceptance command)
 
 ```
@@ -284,3 +295,4 @@ $ powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Pref
 | 2026-07-21 | claude-code → kimi-code | design → dev | A92 (A90 real-data flatten validation + circuit-breaker caveats, audit H3) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A92 forced-liquidation real-data validation completed |
 | 2026-07-21 | codex → kimi-code | review → dev | 打回: Ruff F401 unused datetime import in A92 stress checker |
+| 2026-07-21 | kimi-code → codex | dev → review | A92 dev fix: removed F401 unused datetime import from flatten stress checker; ruff+unit+sync gates pass |
