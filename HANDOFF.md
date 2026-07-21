@@ -1,7 +1,7 @@
 ---
 task: A91 - Revive research-mode equivalence gate (audit H1: whitelist-based comparison, not dict==)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-21
 deliverables:
@@ -10,10 +10,10 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.json
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -369,3 +369,4 @@ VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained th
 | 2026-07-21 | kimi-code → codex | dev → review | A91 equivalence gate whitelist fix completed |
 | 2026-07-21 | codex → kimi-code | review → dev | 打回: Bucket-B sub_strategies is classified but not snapshotted or compared |
 | 2026-07-21 | kimi-code → codex | dev → review | A91 equivalence gate sub_strategies fix completed |
+| 2026-07-21 | codex → codex | review → done | A91 review passed |
