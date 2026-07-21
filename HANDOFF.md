@@ -1,8 +1,8 @@
 ---
 task: A98 - Gate partial take-profit exits with limit_halt_model="enforce" (re-audit H-NEW-1)
 version: 4.4.0
-stage: design
-owner: claude-code
+stage: dev
+owner: kimi-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -11,12 +11,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: fix
+last_transition_kind: next
 last_transition_actor: claude-code
 last_transition_from_stage: design
-last_transition_to_stage: design
+last_transition_to_stage: dev
 last_transition_from_owner: claude-code
-last_transition_to_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -175,3 +175,4 @@ report):
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A98 (partial-TP enforce gating, re-audit H-NEW-1) scoped; drafting design brief |
+| 2026-07-22 | claude-code → kimi-code | design → dev | A98 promoted design->dev |
