@@ -122,3 +122,6 @@ SKILL_audit_report.md
 # Local Codex manual database
 a80_codex_manual.db
 a80_codex_manual.db-journal
+
+# Local audit prompts/reports at repo root
+/diagnostics_*.md
