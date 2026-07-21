@@ -2,6 +2,18 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.31（2026-07-21）
+- A93 review 打回修复（codex 拒绝项闭环，无行为变化）：
+  - `chan_strategy/positions.py` 签名行 `trailing_start` 注释删除过时的 `1.5%` 字面量
+    （该参数现为 `None` 哨兵、运行时取 `STRATEGY_CONFIG`，字面百分比只会再次漂移），改为配置中性表述。
+  - `positions.py` 与 `tests/unit/test_positions.py` 的 30 条 ruff 存量告警清零：28 条
+    `UP006`/`UP035`/`UP045`/`F401` 由 `ruff check --fix` 机械修复（`typing.List/Dict/Tuple/Optional`
+    → 内置泛型 / `X | None`，删除未使用的 `typing.Dict` 与 `pytest` 导入）；1 条 `B905`
+    （`Signal` 值匹配的 `zip(...)`）按审查指引显式加 `strict=False`——两侧均已 `[:3]` 截断，
+    最短者胜的既有语义保持不变，不用 `strict=True` 避免短分段信号崩溃。
+    `ruff check` 对两个触及文件现在 0 告警。纯类型标注现代化 + 注释修正，无任何运行时行为变化；
+    全部单元测试（761 not-realdb + 4 realdb 等价门禁）通过数不变。
+
 ## 0.2.30（2026-07-21）
 - A93 消除 `Position()` 孤儿移动止损默认值（audit M5）：`Position.__init__` 的
   `trailing_start`/`trailing_drawback_pct` 默认参数从硬编码 `150`/`0.4`（与

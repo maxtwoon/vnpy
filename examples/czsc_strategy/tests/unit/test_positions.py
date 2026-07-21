@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 
-import pytest
 
 from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.positions import (

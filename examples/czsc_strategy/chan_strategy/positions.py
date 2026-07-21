@@ -5,7 +5,6 @@
 使用自定义轻量实现，兼容 czsc 框架的 dict 配置格式
 """
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
 from enum import Enum
 from datetime import datetime
 from math import floor
@@ -209,7 +208,7 @@ class Signal:
         # 检查值匹配（支持"任意"通配）
         expected_parts = self.signal_value.split("_")
         actual_parts = signals_dict[key].split("_")
-        for exp, act in zip(expected_parts[:3], actual_parts[:3]):
+        for exp, act in zip(expected_parts[:3], actual_parts[:3], strict=False):
             if exp != "任意" and exp != act:
                 return False
         return True
@@ -219,9 +218,9 @@ class Signal:
 class Factor:
     """因子 - 信号的组合"""
     name: str
-    signals_all: List[Signal] = field(default_factory=list)
-    signals_any: List[Signal] = field(default_factory=list)
-    signals_not: List[Signal] = field(default_factory=list)
+    signals_all: list[Signal] = field(default_factory=list)
+    signals_any: list[Signal] = field(default_factory=list)
+    signals_not: list[Signal] = field(default_factory=list)
 
     def is_match(self, signals_dict: dict) -> bool:
         """检查因子是否匹配"""
@@ -254,10 +253,10 @@ class Event:
     """事件 - Factor组合 + 操作"""
     name: str
     operate: Operate
-    factors: List[Factor] = field(default_factory=list)
-    signals_all: List[Signal] = field(default_factory=list)
-    signals_any: List[Signal] = field(default_factory=list)
-    signals_not: List[Signal] = field(default_factory=list)
+    factors: list[Factor] = field(default_factory=list)
+    signals_all: list[Signal] = field(default_factory=list)
+    signals_any: list[Signal] = field(default_factory=list)
+    signals_not: list[Signal] = field(default_factory=list)
     is_structural: bool = field(default=False, compare=False)
     is_partial_tp: bool = field(default=False, compare=False)
 
@@ -581,12 +580,12 @@ class Position:
         self,
         name: str,
         symbol: str,
-        opens: List[Event],
-        exits: List[Event] = None,
+        opens: list[Event],
+        exits: list[Event] = None,
         interval: int = 0,
         timeout: int = 1000,
         stop_loss: int = 1000,
-        trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP) 1.5%; None=取 STRATEGY_CONFIG
+        trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP); None=取 STRATEGY_CONFIG
         trailing_drawback_pct: float | None = None, # 移动止损回撤容忍比例; None=取 STRATEGY_CONFIG
         T0: bool = False,
         commission_rate: float | None = None,     # 手续费率(万一)
@@ -617,8 +616,8 @@ class Position:
         self.contract_multiplier = 1  # 合约乘数（A40; research=1, risk=from spec）
         self.bars_since_open = 0  # 开仓后经过的K线数
         self.last_open_dt = None  # 最后开仓时间
-        self.trades: List[TradeRecord] = []  # 交易记录
-        self.pairs: List[dict] = []  # 配对交易
+        self.trades: list[TradeRecord] = []  # 交易记录
+        self.pairs: list[dict] = []  # 配对交易
         self.opens_allowed: bool = True  # A46: regime router can suppress new opens
 
         # A40 sizing skip counters
@@ -777,7 +776,7 @@ class Position:
                         elif self.pos < 0:  # pragma: no branch
                             self._close_short(price, dt, "ATR移动止损")
 
-    def _get_operate(self, signals_dict: dict, price: float, dt: datetime) -> Tuple[Optional[Operate], str]:
+    def _get_operate(self, signals_dict: dict, price: float, dt: datetime) -> tuple[Operate | None, str]:
         """获取当前应执行的操作"""
         # 先检查平仓事件（优先级高）
         if self.pos != 0:
@@ -1004,7 +1003,7 @@ class Position:
         self.trades.append(TradeRecord(dt=dt, operate=Operate.LO, price=price, volume=self.volume, reason=reason))
 
     def _size_open(self, price: float, equity_at_entry: float | None,
-                   total_open_margin: float | None) -> Tuple[int, int]:
+                   total_open_margin: float | None) -> tuple[int, int]:
         """Compute integer-lot size under A40 risk-mode sizing model.
 
         Returns (volume, contract_multiplier).  volume < 1 means the open should be skipped.
@@ -1720,8 +1719,8 @@ class ChanTimingStrategy:
 
     def __init__(self, symbol: str, freq: str = "30分钟",
                  commission_rate: float = None, slippage: float = None,
-                 enable_daily_filter: Optional[bool] = None,
-                 enable_short: Optional[bool] = None):
+                 enable_daily_filter: bool | None = None,
+                 enable_short: bool | None = None):
         """
         初始化缠论择时策略
 
@@ -1754,12 +1753,12 @@ class ChanTimingStrategy:
         self._positions = None
         # 一买历史记录（用于二买上下文判断）
         # 记录完整锚点信息: dt, price, zs_zd, zs_zg
-        self.buy1_history: List[dict] = []
-        self._last_buy1_anchor: Optional[dict] = None
+        self.buy1_history: list[dict] = []
+        self._last_buy1_anchor: dict | None = None
         # 一卖历史记录（用于二卖上下文判断）
         # 记录完整锚点信息: dt, price, zs_zd, zs_zg
-        self.sell1_history: List[dict] = []
-        self._last_sell1_anchor: Optional[dict] = None
+        self.sell1_history: list[dict] = []
+        self._last_sell1_anchor: dict | None = None
 
         # A45 ATR chop-filter state tracker (updated every trade-frequency bar).
         from chan_strategy.signals import AtrStateTracker
@@ -1769,11 +1768,11 @@ class ChanTimingStrategy:
             floor=STRATEGY_CONFIG.get("atr_percentile_floor", 0.30),
         )
 
-    def get_last_buy1_anchor(self) -> Optional[dict]:
+    def get_last_buy1_anchor(self) -> dict | None:
         """获取最近的一买锚点信息（供二买信号绑定使用）"""
         return self._last_buy1_anchor
 
-    def get_last_sell1_anchor(self) -> Optional[dict]:
+    def get_last_sell1_anchor(self) -> dict | None:
         """获取最近的一卖锚点信息（供二卖信号绑定使用）"""
         return self._last_sell1_anchor
 
@@ -1880,7 +1879,7 @@ class ChanTimingStrategy:
                 return
 
     @property
-    def positions(self) -> List[Position]:
+    def positions(self) -> list[Position]:
         if self._positions is None:
             positions = [
                 create_first_buy_position(self.symbol, self.freq,
@@ -2136,7 +2135,7 @@ class ChanTimingStrategy:
             results[pos.name] = pos.evaluate()
         return results
 
-    def get_combined_trades(self) -> List[dict]:
+    def get_combined_trades(self) -> list[dict]:
         """获取所有子策略的配对交易"""
         all_pairs = []
         for pos in self.positions:

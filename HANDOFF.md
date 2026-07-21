@@ -1,8 +1,8 @@
 ---
 task: A93 - Fix Position() orphan trailing-stop defaults vs config (audit M5)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -11,12 +11,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -151,6 +151,18 @@ still allowing an explicit override for tests — apply the identical pattern to
 
 ## Decision Log
 
+- 2026-07-21 (kimi-code, dev, reject-fix round 2) - Closed both codex rejection items exactly per
+  claude-code's fix guidance: (1) stale `1.5%` literal removed from the `trailing_start` signature
+  comment (now config-neutral: `None=取 STRATEGY_CONFIG`); (2) all 30 ruff findings on the two touched
+  files cleared — 28 mechanical `UP006`/`UP035`/`UP045`/`F401` via `ruff check --fix --unsafe-fixes`
+  (typing modernization + unused-import removal, zero runtime change) and 1 `B905` at `Signal.matches()`
+  resolved with explicit `strict=False` (NOT `strict=True` — both operands are `[:3]`-sliced and
+  shortest-wins truncation is the existing intentional semantics). `ruff check` on the two touched
+  files now exits 0. Re-ran the full acceptance list from scratch after the fix pass: 761 not-realdb +
+  4 realdb equivalence gate pass unchanged, dual sync_check PASS, preflight 200 passed, git status
+  shows only A93-scoped files. czsc VERSION bumped one patch with CHANGELOG entry (literal numbers kept
+  out of this file to satisfy the root version gate; the rejected round's bump was already committed,
+  so this follow-up is a separate visible change with its own bump).
 - 2026-07-21 (kimi-code, dev) - Implemented A93 exactly per design: `trailing_start`/
   `trailing_drawback_pct` are now `None`-sentinel params resolved from `STRATEGY_CONFIG`
   (`trailing_start_bp`/`trailing_drawback_pct`, literal fallbacks 300/0.25 re-verified against
@@ -170,50 +182,62 @@ still allowing an explicit override for tests — apply the identical pattern to
 
 ## Manual Verification
 
-All commands run natively on this machine (kimi-code, 2026-07-21).
+All commands run natively on this machine (kimi-code, 2026-07-21, reject-fix round 2 — re-run from
+scratch AFTER the ruff-fix pass, per claude-code guidance item 3).
 
-1. Unit suite (`-m "not realdb"`):
+1. Ruff on touched files (rejection item 1 — now clean):
+   ```
+   $ ruff check --config pyproject.toml examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_positions.py
+   All checks passed!   (exit=0; was: Found 30 errors)
+   ```
+   Fix composition: 28 UP006/UP035/UP045/F401 via `ruff check --fix --unsafe-fixes` (typing
+   modernization + unused `typing.Dict`/`pytest` imports); 1 B905 at `positions.py` `Signal` value
+   match via explicit `strict=False` (shortest-wins semantics preserved, NOT `strict=True`).
+   Verified via `git diff`: only type-annotation syntax, the two removed imports, `strict=False`,
+   and the stale-comment fix — zero runtime-logic changes.
+
+2. Stale comment (rejection item 2):
+   ```python
+   trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP); None=取 STRATEGY_CONFIG
+   trailing_drawback_pct: float | None = None, # 移动止损回撤容忍比例; None=取 STRATEGY_CONFIG
+   ```
+   (`1.5%` literal removed; comments are now config-neutral.)
+
+3. Unit suite (`-m "not realdb"`):
    ```
    $ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
-   761 passed, 4 deselected in 39.03s
+   761 passed, 4 deselected in 41.32s
    ```
-   (760 -> 761: exactly +1 new test `test_position_direct_construction_uses_config_trailing_defaults`;
-   no existing assertion changed.)
+   (Same 761 as the rejected round — the ruff-fix pass changed no test outcomes; still exactly +1
+   new test `test_position_direct_construction_uses_config_trailing_defaults` vs pre-A93; no existing
+   assertion changed.)
 
-2. realdb equivalence gate (A91/A92 baseline):
+4. realdb equivalence gate (A91/A92 baseline):
    ```
    $ python -m pytest examples/czsc_strategy/tests/unit -q -m realdb
-   4 passed, 761 deselected in 78.12s
+   4 passed, 761 deselected in 78.98s (0:01:18)
    ```
    (`test_research_mode_equivalence_to_baseline` and
    `test_research_mode_additive_fields_take_default_values` pass unchanged — no backtest output drift.)
 
-3. Ruff on touched files (concise, rule set compared against pristine HEAD copies):
+5. sync_check (both roots, after the czsc VERSION patch bump):
    ```
-   $ ruff check --config pyproject.toml examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_positions.py
-   Found 30 errors.
-   $ ruff check --config pyproject.toml .tmp\a93_head_positions.py .tmp\a93_head_test_positions.py   # pristine HEAD copies
-   Found 30 errors.
-   ```
-   Identical rule set (B905/F401/UP006/UP035/UP045), all pre-existing; zero new findings from A93.
-
-4. sync_check (both roots):
-   ```
-   $ python tools/sync_check.py
-   [SYNC-CHECK] PASS: 版本与文档一致
    $ python tools/sync_check.py --root examples/czsc_strategy
    [SYNC-CHECK][OK] 版本单一真相 = <czsc VERSION file>  (source: VERSION::)
-   [SYNC-CHECK] PASS: 版本与文档一致
+   [SYNC-CHECK] PASS: 版本与文档一致。
+   $ python tools/sync_check.py
+   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+   [SYNC-CHECK] PASS: 版本与文档一致。
    ```
 
-5. Preflight:
+6. Preflight:
    ```
    $ powershell -NoProfile -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight   # from examples/czsc_strategy/diagnostics
-   200 passed in 23.07s
+   200 passed in 22.24s
    ==> Preflight complete; live SimNow capture was not requested
    ```
 
-6. Scope check:
+7. Scope check:
    ```
    $ git status --short
     M examples/czsc_strategy/CHANGELOG.md
@@ -221,6 +245,8 @@ All commands run natively on this machine (kimi-code, 2026-07-21).
     M examples/czsc_strategy/chan_strategy/positions.py
     M examples/czsc_strategy/tests/unit/test_positions.py
    ```
+   (HANDOFF.md itself also modified by this round's Decision Log / Manual Verification update.
+   None of the unrelated SimNow workstream files touched.)
 
 ## 交接历史
 
@@ -229,3 +255,4 @@ All commands run natively on this machine (kimi-code, 2026-07-21).
 | 2026-07-21 | claude-code → kimi-code | design → dev | A93 (orphan trailing-stop defaults, audit M5) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A93 orphan trailing-stop defaults fixed: None-sentinel resolved from STRATEGY_CONFIG (commission_rate/slippage pattern); +1 unit test; 761 not-realdb + 4 realdb pass; dual sync_check pass; czsc VERSION bumped |
 | 2026-07-21 | codex → kimi-code | review → dev | 打回: A93 review blocked: touched-file ruff check is not clean and trailing_start comment still says stale 1.5 percent |
+| 2026-07-21 | kimi-code → codex | dev → review | A93 reject-fix: stale 1.5% comment removed (config-neutral); 30 ruff findings on touched files cleared (28 auto-fixed UP006/UP035/UP045/F401 + B905 strict=False); 761 not-realdb + 4 realdb pass unchanged; dual sync_check PASS; czsc VERSION patch-bumped |
