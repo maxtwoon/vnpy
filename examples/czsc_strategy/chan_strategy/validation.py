@@ -887,7 +887,7 @@ class SimNowReadinessChecker:
         5. 胜率 >= 45% [OK]/[NG]
         6. 盈亏比 >= 1.0 [OK]/[NG]
         7. 最大回撤 <= 20% [OK]/[NG]
-        8. 夏普比率 >= 0.5 [OK]/[NG]
+        8. 夏普比率 >= 0.3 [OK]/[NG]
         9. 样本外表现未显著失效 [OK]/[NG]
         10. 参数轻微变化结果稳定 [OK]/[NG]
         """
@@ -1338,9 +1338,9 @@ def generate_optimization_suggestions(report: dict, validation_results: dict) ->
         )
 
     # 夏普
-    if sharpe < 0.5:
+    if sharpe < 0.3:
         suggestions.append(
-            f"夏普比率偏低({sharpe:.2f}<0.5): 策略风险调整后收益不佳"
+            f"夏普比率偏低({sharpe:.2f}<0.3): 策略风险调整后收益不佳"
         )
 
     # 子策略分析

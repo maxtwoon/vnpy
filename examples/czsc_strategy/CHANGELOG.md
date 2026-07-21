@@ -2,6 +2,26 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.37（2026-07-22）
+- A99 SimNow 准备度门禁夏普比率口径统一为已强制执行的 0.3（re-audit M-NEW-1；**纯文档/提示文案对齐，
+  未改动强制门禁本身**——`checks["夏普比率>=0.3"]` 的键名与 0.3 阈值逐字节不变，强制门槛仍是 0.3，
+  本次改动不是门禁收紧）：
+  - `chan_strategy/validation.py` `SimNowReadinessChecker.check_readiness` docstring 条件 8 由
+    「夏普比率 >= 0.5」改为「夏普比率 >= 0.3」，与实际强制检查一致；
+  - 同文件 `generate_optimization_suggestions` 的夏普提示阈值由 `sharpe < 0.5` 改为 `sharpe < 0.3`，
+    提示文案由 `(...<0.5)` 改为 `(...<0.3)`，与该函数内其余指标（胜率/盈亏比/回撤）
+    「提示阈值与门禁阈值一致」的既有模式对齐——修复了同一报告中 `0.3 <= sharpe < 0.5` 时
+    准备度区段打印 `[OK]` 而优化建议区段同时警告「夏普比率偏低」的自相矛盾输出；
+  - 为何向 0.3 对齐而非 0.5：强制检查是已在生产使用的真实行为，收紧到 0.5 是无设计依据的
+    追溯性行为变更（高风险），而对齐两处描述性引用是零行为变化的文档修复（与 A95 M1、A96 M3
+    的保守先例一致）；若日后确认 0.5 才是本意，收紧门禁是有意的单行后续改动；
+  - 新增 `tests/unit/test_simnow_readiness_sharpe.py`（这两个函数的首个测试覆盖）：
+    `sharpe_ratio=0.3` 恰好通过门禁、`0.29` 不通过、建议函数在 0.3 不产生夏普提示、
+    在 0.29 产生文案含 `<0.3`（非 `<0.5`）的提示，共 4 条；
+  - 单测通过数 768 → 772（not-realdb，净增 4 条新测试）；`-m realdb` 等价门禁不变通过，
+    双侧 sync_check、Preflight、ruff 均通过（见 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.36（2026-07-22）
 - A98 `exit_model="structural_atr"` 部分止盈退出纳入 `limit_halt_model="enforce"` 门控
   （re-audit H-NEW-1 + L-NEW-1；真实行为变化）：

@@ -1,21 +1,22 @@
 ---
 task: A99 - Reconcile Sharpe-ratio threshold inconsistency in SimNow readiness gate (re-audit M-NEW-1)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/validation.py
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
+  - examples/czsc_strategy/tests/unit/test_simnow_readiness_sharpe.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -117,25 +118,27 @@ numeric-behavior change here is not something to make lightly, and NOT to be con
 
 ## Acceptance Criteria
 
-- [ ] `validation.py:890`'s docstring says `>= 0.3`, matching the actual check.
-- [ ] `validation.py:1341,1343`'s suggestion generator uses `0.3` (both the comparison and the message
+- [x] `validation.py:890`'s docstring says `>= 0.3`, matching the actual check.
+- [x] `validation.py:1341,1343`'s suggestion generator uses `0.3` (both the comparison and the message
       string), matching the actual check.
-- [ ] `checks["夏普比率>=0.3"]` itself (the dict key name AND its `0.3` threshold) is completely unchanged —
+- [x] `checks["夏普比率>=0.3"]` itself (the dict key name AND its `0.3` threshold) is completely unchanged —
       verified in the diff.
-- [ ] New test file added covering the four cases in Goal item 4, all passing.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (count increases only
+- [x] New test file added covering the four cases in Goal item 4, all passing.
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (count increases only
       by the new tests added — note the exact delta in the Decision Log).
-- [ ] `-m realdb` equivalence gate still passes unchanged (this task does NOT touch `backtest_engine.py`,
-      `positions.py`, or `signals.py`, so it's expected to be unaffected — verify rather than assume per
-      AGENTS.md rule, since `validation.py` may still be exercised somewhere in that gate).
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] `ruff check` clean on touched files.
-- [ ] VERSION/CHANGELOG bumped — CHANGELOG entry must state this is a **documentation/message
+- [x] `-m realdb` equivalence gate verified unaffected by A99 — `validation.py` is NOT exercised by the
+      failing test; the one failure (`test_research_mode_equivalence_to_baseline`, last-ulp float repr vs
+      stored snapshot) reproduces identically on unmodified HEAD code (control run in Manual Verification
+      item 3). Pre-existing environmental issue, out of A99 scope, flagged for review.
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `ruff check` clean on touched files — new test file fully clean; `validation.py` has 45
+      pre-existing errors byte-identical to the HEAD baseline, zero introduced by this diff.
+- [x] VERSION/CHANGELOG bumped — CHANGELOG entry must state this is a **documentation/message
       reconciliation, not a change to the enforced SimNow readiness gate** (the enforced threshold stays
       0.3) — be explicit about this distinction so a future reader doesn't mistake it for a gate-tightening.
-- [ ] Include a literal `## Manual Verification` heading with natively-run command output.
-- [ ] **Remember the `synccheck:ignore` marker** for any version-like string in this task's own HANDOFF
+- [x] Include a literal `## Manual Verification` heading with natively-run command output.
+- [x] **Remember the `synccheck:ignore` marker** for any version-like string in this task's own HANDOFF
       notes.
 
 ## Notes for the Next Agent
@@ -181,10 +184,124 @@ numeric-behavior change here is not something to make lightly, and NOT to be con
   `SimNowReadinessChecker.check_readiness` nor `generate_optimization_suggestions` has ANY existing test
   coverage — this task adds the first tests for either function, not just a regression test for this one
   fix.
+- 2026-07-22 (kimi-code, dev) - Implemented exactly the two scoped edits: `validation.py:890` docstring
+  `>= 0.5` -> `>= 0.3`, and `generate_optimization_suggestions` comparison `sharpe < 0.5` -> `sharpe < 0.3`
+  plus message `<0.5` -> `<0.3`. `checks["夏普比率>=0.3"]` (key + threshold) untouched — verified in diff:
+  exactly 3 lines changed (3 insertions / 3 deletions). New test file
+  `tests/unit/test_simnow_readiness_sharpe.py` added with the 4 boundary cases from Goal item 4; added to
+  `deliverables` after creation per Note 0.
+- 2026-07-22 (kimi-code, dev) - VERSION bumped 0.2.36 -> 0.2.37 (synccheck:ignore) with a CHANGELOG entry
+  that explicitly states this is a documentation/message reconciliation, NOT a change to the enforced
+  SimNow readiness gate (enforced threshold stays 0.3).
+- 2026-07-22 (kimi-code, dev) - Unit suite `-m "not realdb"`: 768 -> 772 passed, delta exactly +4 (the new
+  tests; baseline 768 per A98's changelog).
+- 2026-07-22 (kimi-code, dev) - `-m realdb` gate: 3 passed, 1 failed —
+  `test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline` fails on a
+  float-precision mismatch vs the stored snapshot (`sharpe_ratio: baseline=0.8091974663759458
+  actual=0.809197466375945`). Verified PRE-EXISTING and unrelated to A99: (a) that test imports only
+  `chan_strategy.backtest_engine` / `chan_strategy.config` — `validation.py` is never exercised; (b)
+  re-ran it with `validation.py` temporarily reverted to HEAD (A99 edits stashed aside) — identical
+  failure; (c) A99's diff touches docstring/message text only, no numeric behavior. The snapshot was
+  evidently generated under a different numeric environment. Out of A99 scope (task forbids touching
+  `backtest_engine.py`/`positions.py`/`signals.py`); flagged here for claude-code review instead of
+  silently regenerating the snapshot.
+- 2026-07-22 (kimi-code, dev) - ruff: new test file is clean; `validation.py` reports 45 pre-existing
+  lint errors — verified identical to the HEAD baseline (`git show HEAD:...validation.py` -> same 45
+  errors), i.e. zero new lint introduced by this diff. Did not auto-fix the pre-existing ones (would be
+  a 42-line out-of-scope refactor).
 
 ## Manual Verification
 
-(pending — dev fills in)
+Environment: repo-root `python` for sync_check/handoff; `D:\repo\vnpy\.venv_new\Scripts\python.exe`
+(pytest 9.1.1 — synccheck:ignore) for pytest; system `ruff` for lint. All commands run natively on
+Windows from `D:\repo\vnpy` unless noted.
+
+1. New tests (4 boundary cases):
+
+   ```text
+   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit/test_simnow_readiness_sharpe.py -q
+   ....                                                                     [100%]
+   4 passed, 2 warnings in 0.09s
+   ```
+
+2. Full unit suite, not realdb (768 -> 772, delta = exactly the 4 new tests):
+
+   ```text
+   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+   772 passed, 4 deselected, 2 warnings in 46.22s
+   ```
+
+3. realdb equivalence gate (1 pre-existing environmental failure, proven not caused by A99):
+
+   ```text
+   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit -q -m "realdb"
+   FAILED .../test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
+   1 failed, 3 passed, 772 deselected, 2 warnings in 72.11s
+
+   E   AssertionError: SC888: computed (Bucket-B) report fields differ from baseline:
+   E       sharpe_ratio: baseline=0.8091974663759458 actual=0.809197466375945
+   ```
+
+   Control run with `validation.py` reverted to HEAD (A99 edits copied aside, then restored):
+
+   ```text
+   $ git checkout -- examples/czsc_strategy/chan_strategy/validation.py
+   $ .venv_new\Scripts\python.exe -m pytest "...::test_research_mode_equivalence_to_baseline" -q --tb=line
+   FAILED .../test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
+   1 failed, 2 warnings in 30.95s        # identical failure on unmodified HEAD code
+   ```
+
+   The failing test imports only `backtest_engine` / `config` (never `validation.py`); the mismatch is a
+   last-ulp float repr difference against the stored snapshot. Pre-existing, out of A99 scope.
+
+4. ruff (touched files):
+
+   ```text
+   $ ruff check examples/czsc_strategy/tests/unit/test_simnow_readiness_sharpe.py
+   All checks passed!
+
+   $ ruff check examples/czsc_strategy/chan_strategy/validation.py
+   Found 45 errors.   # pre-existing; `git show HEAD:...validation.py` yields the same 45 — zero new
+   ```
+
+5. Preflight (from `examples/czsc_strategy/`):
+
+   ```text
+   $ powershell -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight
+   ...
+   ==> Run SimNow workflow unit tests
+   205 passed in 29.28s
+   ==> Preflight complete; live SimNow capture was not requested
+   (exit code 0)
+   ```
+
+6. sync_check, both roots:
+
+   ```text
+   $ python tools/sync_check.py
+   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)   # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致性
+
+   $ python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = 0.2.37  (source: VERSION::)   # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致性
+   ```
+
+7. Diff scope check — only the 3 intended lines in `validation.py`; unrelated SimNow-workstream files
+   (`diagnostics/WORK_LOG.md`, `diagnostics/simnow_20d_promotion_decision.md`) left untouched:
+
+   ```text
+   $ git diff --stat examples/czsc_strategy/chan_strategy/validation.py
+    1 file changed, 3 insertions(+), 3 deletions(-)
+   $ git status --short
+    M examples/czsc_strategy/chan_strategy/validation.py
+    M examples/czsc_strategy/diagnostics/WORK_LOG.md                      (concurrent workstream, untouched)
+    M examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md (concurrent workstream, untouched)
+    M examples/czsc_strategy/VERSION
+    M examples/czsc_strategy/CHANGELOG.md
+    M HANDOFF.md
+   ?? examples/czsc_strategy/tests/unit/test_simnow_readiness_sharpe.py
+   ```
 
 ## 交接历史
 
@@ -192,3 +309,4 @@ numeric-behavior change here is not something to make lightly, and NOT to be con
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A99 (Sharpe threshold reconciliation, re-audit M-NEW-1) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A99 promoted design->dev |
+| 2026-07-22 | kimi-code → codex | dev → review | A99 Sharpe threshold reconciliation completed: docstring + suggestion message aligned to enforced 0.3 gate (no behavior change); 4 new boundary tests (768->772); VERSION/CHANGELOG bumped; realdb 1 pre-existing env failure verified unrelated to A99 |
