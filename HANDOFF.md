@@ -1,20 +1,20 @@
 ---
 task: A91 - Revive research-mode equivalence gate (audit H1: whitelist-based comparison, not dict==)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.py
   - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.json
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -151,6 +151,22 @@ loosening an assertion until it stops catching anything — that is the opposite
 
 (dev = kimi-code must read this before starting)
 
+### Codex review rejection (2026-07-21)
+
+1. Acceptance mismatch: `sub_strategies` is classified in this task as Bucket B computed strategy output
+   from `BacktestEngine.generate_report()`, but the implementation still removes it in `_run_symbol()` and
+   leaves it out of `EQUIVALENCE_REPORT_FIELDS`. The handoff contract says Bucket-B report fields must be
+   compared against the baseline; excluding a computed report key weakens the equivalence gate. Fix by
+   snapshotting and comparing `sub_strategies`, or return to design with a stricter recorded rationale if
+   this field is intentionally out of scope.
+2. Review environment note: `python -m pytest tests/unit -q -m "not realdb"` and
+   `powershell -File diagnostics/run_next_work.ps1 -Preflight` failed here with the documented
+   `tmp_path` / `PermissionError [WinError 5]` sandbox signature, so the existing Manual Verification
+   pass counts may be used for those two acceptance items per `.synccheck.yml`. The broad
+   `python -m pytest tests/unit -m realdb -q` run also could not be independently completed in this
+   sandbox because SQLite could not open the external DB under `D:/BaiduNetdiskDownload/...`; the
+   A91-specific equivalence file skipped locally for the same unavailable real database.
+
 1. **The failing assertion is a symptom, not the disease.** Do not "fix" this by deleting the test, by
    catching the exception, by adding `xfail`, or by comparing fewer fields than actually needed to catch a
    real regression. The whole point of this task is that this gate currently has no teeth; leaving it with
@@ -265,3 +281,4 @@ VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained th
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A91 (revive research-mode equivalence gate, audit H1) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A91 equivalence gate whitelist fix completed |
+| 2026-07-21 | codex → kimi-code | review → dev | 打回: Bucket-B sub_strategies is classified but not snapshotted or compared |
