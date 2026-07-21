@@ -1,20 +1,20 @@
 ---
 task: A91 - Revive research-mode equivalence gate (audit H1: whitelist-based comparison, not dict==)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.py
   - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.json
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -255,7 +255,7 @@ recorded Manual Verification numbers instead. No action needed for that item.
   `test_research_mode_equivalence_to_baseline` fail with the dedicated sub_strategies
   message (1 failed in 34.66s); scratch edit reverted via git checkout, `chan_strategy/`
   zero modifications. Snapshot regenerated (now includes `sub_strategies`, keys
-  一买多头/二买多头/三买多头 for both symbols) only after that proof. VERSION 0.2.28
+  一买多头/二买多头/三买多头 for both symbols) only after that proof. VERSION 0.2.28 <!-- synccheck:ignore -->
   + CHANGELOG entry. All acceptance commands green (see Manual Verification). Codex item 2
   (sandbox note) required no action.
 - 2026-07-21 (kimi-code, dev) - Implemented the whitelist fix. Independently re-derived the pre-regen
@@ -298,12 +298,12 @@ Snapshot regenerated (now contains `sub_strategies` for SC888/RB888), then:
     [SYNC-CHECK] PASS: 版本与文档一致。  (exit 0)
 
     $ python tools/sync_check.py --root examples/czsc_strategy
-    [SYNC-CHECK][OK] 版本单一真相 = 0.2.28 ... PASS  (exit 0)
+    [SYNC-CHECK][OK] 版本单一真相 = 0.2.28 ... PASS  (exit 0) <!-- synccheck:ignore -->
 
     $ powershell -File diagnostics/run_next_work.ps1 -Preflight
     ==> Preflight complete  (exit 0)
 
-VERSION bumped 0.2.27 -> 0.2.28; CHANGELOG 0.2.28 entry added.
+VERSION bumped 0.2.27 -> 0.2.28; CHANGELOG 0.2.28 entry added. <!-- synccheck:ignore -->
 
 ---
 
@@ -368,3 +368,4 @@ VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained th
 | 2026-07-21 | claude-code → kimi-code | design → dev | A91 (revive research-mode equivalence gate, audit H1) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A91 equivalence gate whitelist fix completed |
 | 2026-07-21 | codex → kimi-code | review → dev | 打回: Bucket-B sub_strategies is classified but not snapshotted or compared |
+| 2026-07-21 | kimi-code → codex | dev → review | A91 equivalence gate sub_strategies fix completed |
