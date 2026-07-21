@@ -244,6 +244,20 @@ recorded Manual Verification numbers instead. No action needed for that item.
   Bucket B computed-output classification) rather than a blacklist/exception-list, so future config-echo
   additions don't require another manual test update. Explicitly scoped OUT building a CI-runnable
   synthetic fixture DB — too large a separate task; scoped in a lightweight process note instead.
+- 2026-07-21 (kimi-code, dev, round 2 - codex reject item 1 fix) - `sub_strategies` is now
+  snapshotted and compared. `_run_symbol()` no longer strips it (`"report": dict(report)`);
+  the equivalence test gained a dedicated nested-dict full-equality assertion for
+  `sub_strategies` alongside pairs/equity_curve, kept OUT of `EQUIVALENCE_REPORT_FIELDS`
+  (flat-scalar whitelist) with the rationale documented in the module docstring. No
+  old-vs-new diff proof was applicable (old baseline never stored the key — newly added
+  comparison surface, per claude-code's fix instructions); instead the catch-proof was
+  done: scratch edit perturbing `Position.evaluate()`'s `win_rate` (+0.01) made
+  `test_research_mode_equivalence_to_baseline` fail with the dedicated sub_strategies
+  message (1 failed in 34.66s); scratch edit reverted via git checkout, `chan_strategy/`
+  zero modifications. Snapshot regenerated (now includes `sub_strategies`, keys
+  一买多头/二买多头/三买多头 for both symbols) only after that proof. VERSION 0.2.28
+  + CHANGELOG entry. All acceptance commands green (see Manual Verification). Codex item 2
+  (sandbox note) required no action.
 - 2026-07-21 (kimi-code, dev) - Implemented the whitelist fix. Independently re-derived the pre-regen
   proof (did not trust the HANDOFF numbers): pairs and equity_curve byte-identical vs old baseline for
   both symbols; zero shared-key Bucket-B value differences. One nuance the design's classification
@@ -261,6 +275,39 @@ recorded Manual Verification numbers instead. No action needed for that item.
   Verification).
 
 ## Manual Verification
+
+Round 2 (sub_strategies fix, 2026-07-21):
+
+Throwaway-edit catch proof (scratch edit in `positions.py` `evaluate()`, `win_rate` + 0.01;
+reverted via `git checkout`, `chan_strategy/` clean afterwards):
+
+    $ python -m pytest tests/unit/test_position_sizing_research_equivalence.py -m realdb -q -k equivalence_to_baseline
+    E   AssertionError: SC888: sub_strategies (per-sub-strategy computed stats) differ from stored baseline.
+    FAILED ... test_research_mode_equivalence_to_baseline
+    1 failed, 1 deselected in 34.66s
+
+Snapshot regenerated (now contains `sub_strategies` for SC888/RB888), then:
+
+    $ python -m pytest tests/unit -m realdb -q          (examples/czsc_strategy)
+    4 passed, 755 deselected in 79.38s (0:01:19)
+
+    $ python -m pytest tests/unit -q -m "not realdb"    (examples/czsc_strategy)
+    755 passed, 4 deselected in 36.39s                  (count unchanged)
+
+    $ python tools/sync_check.py                        (repo root)
+    [SYNC-CHECK] PASS: 版本与文档一致。  (exit 0)
+
+    $ python tools/sync_check.py --root examples/czsc_strategy
+    [SYNC-CHECK][OK] 版本单一真相 = 0.2.28 ... PASS  (exit 0)
+
+    $ powershell -File diagnostics/run_next_work.ps1 -Preflight
+    ==> Preflight complete  (exit 0)
+
+VERSION bumped 0.2.27 -> 0.2.28; CHANGELOG 0.2.28 entry added.
+
+---
+
+Round 1 (whitelist fix, 2026-07-21):
 
 Independent Bucket-B re-verification vs the OLD baseline (run BEFORE regenerating the snapshot;
 script `.tmp/a91_bucket_b_diff.py`, full log `.tmp/a91_diff_proof.txt`):

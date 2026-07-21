@@ -18,6 +18,44 @@
       "unparseable_rows_skipped": 0,
       "traded_bars": 4432,
       "mode_label": "RESEARCH_BASELINE",
+      "sub_strategies": {
+        "一买多头": {
+          "total_trades": 18,
+          "win_count": 11,
+          "loss_count": 7,
+          "win_rate": 0.6111111111111112,
+          "avg_profit": 0.03491698758774482,
+          "avg_loss": 0.020094506767489816,
+          "profit_factor": 2.730574706733807,
+          "max_pnl": 0.1258802528404545,
+          "min_pnl": -0.02646520728399858,
+          "avg_bars_held": 59.22222222222222
+        },
+        "二买多头": {
+          "total_trades": 5,
+          "win_count": 2,
+          "loss_count": 3,
+          "win_rate": 0.4,
+          "avg_profit": 0.018915968558717033,
+          "avg_loss": 0.03323447496937137,
+          "profit_factor": 0.3794447096707027,
+          "max_pnl": 0.021701433691756273,
+          "min_pnl": -0.03486616496086684,
+          "avg_bars_held": 77.4
+        },
+        "三买多头": {
+          "total_trades": 4,
+          "win_count": 2,
+          "loss_count": 2,
+          "win_rate": 0.5,
+          "avg_profit": 0.07991698531030261,
+          "avg_loss": 0.03662902937630795,
+          "profit_factor": 2.1817936939927156,
+          "max_pnl": 0.1070891424075531,
+          "min_pnl": -0.03677686729514136,
+          "avg_bars_held": 135.75
+        }
+      },
       "max_long_exposure": 0.4,
       "max_short_exposure": 0.0,
       "max_gross_exposure": 0.4,
@@ -49109,6 +49147,37 @@
       "unparseable_rows_skipped": 0,
       "traded_bars": 2780,
       "mode_label": "RESEARCH_BASELINE",
+      "sub_strategies": {
+        "一买多头": {
+          "total_trades": 8,
+          "win_count": 3,
+          "loss_count": 5,
+          "win_rate": 0.375,
+          "avg_profit": 0.030479458382061595,
+          "avg_loss": 0.023002012126913145,
+          "profit_factor": 0.7950467519247914,
+          "max_pnl": 0.052326513256628314,
+          "min_pnl": -0.0250531202435312,
+          "avg_bars_held": 68.5
+        },
+        "二买多头": {
+          "total_trades": 2,
+          "win_count": 0,
+          "loss_count": 2,
+          "win_rate": 0.0,
+          "avg_profit": 0,
+          "avg_loss": 0.036569627268763186,
+          "profit_factor": 0.0,
+          "max_pnl": -0.030812923462986197,
+          "min_pnl": -0.042326331074540174,
+          "avg_bars_held": 81.5
+        },
+        "三买多头": {
+          "total_trades": 0,
+          "win_rate": 0,
+          "profit_factor": 0
+        }
+      },
       "max_long_exposure": 0.30000000000000004,
       "max_short_exposure": 0.0,
       "max_gross_exposure": 0.30000000000000004,

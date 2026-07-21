@@ -8,7 +8,8 @@ unchanged from the stored baseline.  What is compared (A91 whitelist-based):
                      pnl_pct, bars_held, reason, reason_code).
 * ``equity_curve`` — full equality (per-bar price/equity/exposure fields).
 * ``report``       — full equality on the Bucket-B whitelist
-                     (``EQUIVALENCE_REPORT_FIELDS``) only.
+                     (``EQUIVALENCE_REPORT_FIELDS``) only, plus full
+                     equality on ``sub_strategies`` (see below).
 
 Bucket-A (config echo / label) report fields are deliberately NOT diffed
 against the baseline: new keys may appear and existing ones may change when a
@@ -37,9 +38,15 @@ Key classification of ``BacktestEngine.generate_report()`` output
   ``max_margin_utilization_pct``, ``final_total_open_margin`` (risk sizing
   only) and ``rollover_open_gating_rejected_opens``,
   ``rollover_open_gating_unavailable`` (gating on only).
-  ``sub_strategies`` is Bucket B but excluded from the snapshot by
-  ``_run_symbol()`` (per-strategy detail; the aggregate stats above already
-  pin the combined behavior).  The conditional keys never appear under the
+  ``sub_strategies`` is Bucket B and IS snapshotted and compared, but via
+  a separate full-equality assertion rather than
+  ``EQUIVALENCE_REPORT_FIELDS``: it is a nested dict
+  ``{pos_name: {stat: value}}`` (per-sub-strategy ``Position.evaluate()``
+  output, all numeric), not a flat scalar, so it does not fit the
+  whitelist's flat ``.get(field)`` loop.  Comparing only portfolio-level
+  aggregates would leave a gap — two different distributions of trades
+  across sub-strategies could produce identical aggregates while differing
+  at the sub-strategy level.  The conditional keys never appear under the
   research-default config this test runs, so they are not in the whitelist.
 
 RESEARCH-ONLY, not a trading recommendation.
@@ -58,8 +65,9 @@ START = "2023-01-01"
 END = "2023-12-31"
 SNAPSHOT_PATH = Path(__file__).with_name("test_position_sizing_research_equivalence.snapshot.json")
 
-# Bucket B whitelist: computed report fields diffed against the baseline.
-# ``sub_strategies`` is excluded (not snapshotted, see module docstring).
+# Bucket B whitelist: flat scalar computed report fields diffed against the
+# baseline.  ``sub_strategies`` is Bucket B too, but compared separately as a
+# nested dict (see module docstring).
 EQUIVALENCE_REPORT_FIELDS = (
     "total_bars",
     "unparseable_rows_skipped",
@@ -125,11 +133,9 @@ def _run_symbol(symbol: str) -> dict:
     pairs = engine.strategy.get_combined_trades()
     return {
         "symbol": symbol,
-        "report": {
-            k: v
-            for k, v in report.items()
-            if k not in ("sub_strategies",)
-        },
+        # Full report dict, including sub_strategies (pure numeric nested
+        # dict; no datetime formatting needed, unlike pairs/equity_curve).
+        "report": dict(report),
         "pairs": [
             {
                 "strategy": p.get("strategy"),
@@ -174,9 +180,10 @@ def _fmt_dt(value):
 def test_research_mode_equivalence_to_baseline():
     """Research mode must reproduce the stored baseline on computed output.
 
-    Compares ``pairs`` and ``equity_curve`` by full equality, and ``report``
+    Compares ``pairs`` and ``equity_curve`` by full equality, ``report``
     by full equality restricted to the Bucket-B whitelist
-    (``EQUIVALENCE_REPORT_FIELDS``).  Bucket-A config-echo fields are
+    (``EQUIVALENCE_REPORT_FIELDS``), and ``sub_strategies`` by full
+    equality as a nested dict.  Bucket-A config-echo fields are
     shape-checked (presence + type) but never value-diffed against baseline.
     """
     actual = {symbol: _run_symbol(symbol) for symbol in SYMBOLS}
@@ -196,6 +203,10 @@ def test_research_mode_equivalence_to_baseline():
         )
         assert act["equity_curve"] == base["equity_curve"], (
             f"{symbol}: equity curve differs from stored baseline."
+        )
+        assert act["report"].get("sub_strategies") == base["report"].get("sub_strategies"), (
+            f"{symbol}: sub_strategies (per-sub-strategy computed stats) "
+            f"differ from stored baseline."
         )
 
         diffs = []

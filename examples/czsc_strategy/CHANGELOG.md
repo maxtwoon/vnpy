@@ -2,6 +2,20 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.28（2026-07-21）
+
+- A91 等价性门禁补强（codex review 打回项 1：`sub_strategies` 分类为 Bucket-B 却未快照/比较）：
+  - `tests/unit/test_position_sizing_research_equivalence.py`：`_run_symbol()` 不再剔除
+    `sub_strategies`，快照含完整 `report`；等价性测试新增独立的嵌套字典全等断言
+    （`sub_strategies` 为 `{pos_name: {stat: value}}` 结构，不进 `EQUIVALENCE_REPORT_FIELDS`
+    扁平标量白名单，模块 docstring 已说明原因）——消除“聚合计指标相同但子策略级交易分布
+    漂移”这一静默回归盲区；
+  - 正向证明：scratch edit 篡改 `Position.evaluate()` 的 `win_rate`（+0.01）后
+    `test_research_mode_equivalence_to_baseline` 按预期失败（报 sub_strategies 差异），
+    随后已回退，`chan_strategy/` 零改动；
+  - 基线快照重新生成（现含 `sub_strategies`）；`-m realdb` 与 `-m "not realdb"` 全量测试、
+    双侧 sync_check、Preflight 均通过。
+
 ## 0.2.27（2026-07-21）
 
 - A91 恢复 research 模式等价性门禁效力（audit H1；`generate_report()` 新增 8 个报告字段后
