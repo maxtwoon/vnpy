@@ -201,7 +201,7 @@ loosening an assertion until it stops catching anything — that is the opposite
   now pins Bucket-A research-mode defaults (`mode_label == "RESEARCH_BASELINE"` etc.). Throwaway-edit
   proofs done both directions (additive config-echo key passes; mutated `total_trades` fails) and
   reverted — `chan_strategy/` has zero modifications. `sub_strategies` classified Bucket B but kept
-  excluded from the snapshot (aggregate stats already pin combined behavior). VERSION 0.2.27 +
+  excluded from the snapshot (aggregate stats already pin combined behavior). VERSION 0.2.27 + <!-- synccheck:ignore -->
   CHANGELOG + czsc AGENTS.md realdb process note. All acceptance commands green (see Manual
   Verification).
 
@@ -251,12 +251,12 @@ Snapshot regenerated from current code only after the above proof; then:
     [SYNC-CHECK] PASS: 版本与文档一致。  (exit 0)
 
     $ python tools/sync_check.py --root examples/czsc_strategy
-    [SYNC-CHECK][OK] 版本单一真相 = 0.2.27 ... PASS  (exit 0)
+    [SYNC-CHECK][OK] 版本单一真相 = 0.2.27 ... PASS  (exit 0) <!-- synccheck:ignore -->
 
     $ powershell -File diagnostics/run_next_work.ps1 -Preflight
     195 passed in 19.81s ... ==> Preflight complete  (exit 0)
 
-VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained the
+VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained the <!-- synccheck:ignore -->
 "测试验证守则（realdb 提醒）" section.
 
 ## 交接历史
