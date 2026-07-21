@@ -60,6 +60,38 @@ def test_trailing_stop_and_interval():
     assert p.pos == 0
 
 
+def test_position_direct_construction_uses_config_trailing_defaults():
+    """A93/M5: directly-constructed Position() (no create_* factory) must not
+    silently use orphan defaults (150/0.4); None-sentinel defaults resolve
+    from STRATEGY_CONFIG like commission_rate/slippage already do."""
+    sig = "A_B_C_x_任意_任意_0"
+    original = dict(STRATEGY_CONFIG)
+    try:
+        # Defaults resolve from STRATEGY_CONFIG when omitted.
+        STRATEGY_CONFIG["trailing_start_bp"] = 300
+        STRATEGY_CONFIG["trailing_drawback_pct"] = 0.25
+        p = Position("p", "T", [event("open", "开多", [sig])])
+        assert p.trailing_start == STRATEGY_CONFIG["trailing_start_bp"] == 300
+        assert p.trailing_drawback_pct == STRATEGY_CONFIG["trailing_drawback_pct"] == 0.25
+
+        # None-sentinel explicitly passed also resolves from config (and tracks it).
+        STRATEGY_CONFIG["trailing_start_bp"] = 450
+        STRATEGY_CONFIG["trailing_drawback_pct"] = 0.35
+        q = Position("q", "T", [event("open", "开多", [sig])],
+                     trailing_start=None, trailing_drawback_pct=None)
+        assert q.trailing_start == STRATEGY_CONFIG["trailing_start_bp"] == 450
+        assert q.trailing_drawback_pct == STRATEGY_CONFIG["trailing_drawback_pct"] == 0.35
+
+        # Explicit overrides still win over config (test/override path preserved).
+        r = Position("r", "T", [event("open", "开多", [sig])],
+                     trailing_start=100, trailing_drawback_pct=0.5)
+        assert r.trailing_start == 100
+        assert r.trailing_drawback_pct == 0.5
+    finally:
+        STRATEGY_CONFIG.clear()
+        STRATEGY_CONFIG.update(original)
+
+
 def test_normalize_exit_reason_codes():
     assert normalize_exit_reason("姝㈡崯") == "stop_loss"
     assert normalize_exit_reason("瓒呮椂") == "timeout"

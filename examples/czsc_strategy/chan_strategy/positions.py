@@ -586,8 +586,8 @@ class Position:
         interval: int = 0,
         timeout: int = 1000,
         stop_loss: int = 1000,
-        trailing_start: int = 150,           # 启动移动止损的盈利阈值(BP) 1.5%
-        trailing_drawback_pct: float = 0.4,  # 移动止损回撤容忍比例(40%=从最高回撤40%平仓)
+        trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP) 1.5%; None=取 STRATEGY_CONFIG
+        trailing_drawback_pct: float | None = None, # 移动止损回撤容忍比例; None=取 STRATEGY_CONFIG
         T0: bool = False,
         commission_rate: float | None = None,     # 手续费率(万一)
         slippage: float | None = None,            # 滑点(0.05%)
@@ -602,8 +602,10 @@ class Position:
         # timeout 按交易周期 bar 计数；当前交易周期为 30 分钟
         self.timeout = timeout    # 超时K线数（交易周期级别，如 600 根 30 分钟 K 线 ≈ 12.5 个交易日）
         self.stop_loss = stop_loss  # 止损BP (1BP=0.01%)
-        self.trailing_start = trailing_start  # 移动止损启动阈值(BP)
-        self.trailing_drawback_pct = trailing_drawback_pct  # 移动止损回撤容忍比例
+        # 移动止损启动阈值(BP)；None 时回退到 STRATEGY_CONFIG（与 commission_rate/slippage 同一模式）
+        self.trailing_start = trailing_start if trailing_start is not None else STRATEGY_CONFIG.get("trailing_start_bp", 300)
+        # 移动止损回撤容忍比例；None 时回退到 STRATEGY_CONFIG
+        self.trailing_drawback_pct = trailing_drawback_pct if trailing_drawback_pct is not None else STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25)
         self.T0 = T0
         self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
         self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]

@@ -1,19 +1,22 @@
 ---
 task: A93 - Fix Position() orphan trailing-stop defaults vs config (audit M5)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/positions.py
+  - examples/czsc_strategy/tests/unit/test_positions.py
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -109,6 +112,15 @@ still allowing an explicit override for tests — apply the identical pattern to
 
 ## Decision Log
 
+- 2026-07-21 (kimi-code, dev) - Implemented A93 exactly per design: `trailing_start`/
+  `trailing_drawback_pct` are now `None`-sentinel params resolved from `STRATEGY_CONFIG`
+  (`trailing_start_bp`/`trailing_drawback_pct`, literal fallbacks 300/0.25 re-verified against
+  `config.py:58-59`) using the identical `commission_rate`/`slippage` pattern. No deviation from
+  design. Ruff on touched files: 30 findings both before (HEAD) and after the change — identical
+  rule set, all pre-existing legacy `typing.List/Dict/Optional` style issues; zero new findings
+  introduced, so left untouched to keep the diff minimal. czsc VERSION bumped one patch with
+  CHANGELOG entry (literal numbers kept out of this file to satisfy the root version gate). Working tree confirmed clean of the unrelated SimNow workstream files
+  (`git status --short` shows only A93-scoped files).
 - 2026-07-21 - User asked to drive the audit report's 🔴/🟠 findings to closure via sync-guardian. H1
   (A91) and H3 (A92) both `done`. H2's root cause (raw 888 splice) stays parked (no adjusted-price data
   source available); only its mitigation is in scope, bundled with M2 in a later task. This task (A93)
@@ -119,10 +131,61 @@ still allowing an explicit override for tests — apply the identical pattern to
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+All commands run natively on this machine (kimi-code, 2026-07-21).
+
+1. Unit suite (`-m "not realdb"`):
+   ```
+   $ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+   761 passed, 4 deselected in 39.03s
+   ```
+   (760 -> 761: exactly +1 new test `test_position_direct_construction_uses_config_trailing_defaults`;
+   no existing assertion changed.)
+
+2. realdb equivalence gate (A91/A92 baseline):
+   ```
+   $ python -m pytest examples/czsc_strategy/tests/unit -q -m realdb
+   4 passed, 761 deselected in 78.12s
+   ```
+   (`test_research_mode_equivalence_to_baseline` and
+   `test_research_mode_additive_fields_take_default_values` pass unchanged — no backtest output drift.)
+
+3. Ruff on touched files (concise, rule set compared against pristine HEAD copies):
+   ```
+   $ ruff check --config pyproject.toml examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_positions.py
+   Found 30 errors.
+   $ ruff check --config pyproject.toml .tmp\a93_head_positions.py .tmp\a93_head_test_positions.py   # pristine HEAD copies
+   Found 30 errors.
+   ```
+   Identical rule set (B905/F401/UP006/UP035/UP045), all pre-existing; zero new findings from A93.
+
+4. sync_check (both roots):
+   ```
+   $ python tools/sync_check.py
+   [SYNC-CHECK] PASS: 版本与文档一致
+   $ python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = <czsc VERSION file>  (source: VERSION::)
+   [SYNC-CHECK] PASS: 版本与文档一致
+   ```
+
+5. Preflight:
+   ```
+   $ powershell -NoProfile -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight   # from examples/czsc_strategy/diagnostics
+   200 passed in 23.07s
+   ==> Preflight complete; live SimNow capture was not requested
+   ```
+
+6. Scope check:
+   ```
+   $ git status --short
+    M examples/czsc_strategy/CHANGELOG.md
+    M examples/czsc_strategy/VERSION
+    M examples/czsc_strategy/chan_strategy/positions.py
+    M examples/czsc_strategy/tests/unit/test_positions.py
+   ```
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A93 (orphan trailing-stop defaults, audit M5) promoted; handoff design->dev |
+| 2026-07-21 | kimi-code → codex | dev → review | A93 orphan trailing-stop defaults fixed: None-sentinel resolved from STRATEGY_CONFIG (commission_rate/slippage pattern); +1 unit test; 761 not-realdb + 4 realdb pass; dual sync_check pass; czsc VERSION bumped |

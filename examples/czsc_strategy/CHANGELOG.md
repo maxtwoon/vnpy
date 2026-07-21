@@ -2,6 +2,18 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.30（2026-07-21）
+- A93 消除 `Position()` 孤儿移动止损默认值（audit M5）：`Position.__init__` 的
+  `trailing_start`/`trailing_drawback_pct` 默认参数从硬编码 `150`/`0.4`（与
+  `STRATEGY_CONFIG` 的 `trailing_start_bp=300`/`trailing_drawback_pct=0.25` 漂移）
+  改为 `None` 哨兵，并在 `__init__` 内按既有 `commission_rate`/`slippage` 同一模式回退到
+  `STRATEGY_CONFIG.get("trailing_start_bp", 300)` / `STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25)`
+  ——不经 `create_*` 工厂直接构造 `Position(...)` 的调用方（测试/诊断脚本/外部调用）不再静默拿到
+  与单一真相配置不一致的旧默认值；显式传参仍原样覆盖。未触碰 `_research_trailing_params()` 与任何
+  `create_*` 工厂（它们始终显式传值，行为不变）；未改 `config.py` 任何默认值，无既有回测输出变化。
+  新增 `tests/unit/test_positions.py::test_position_direct_construction_uses_config_trailing_defaults`
+  证明直接构造（省略或显式 `None`）时取配置值、显式覆盖仍生效。RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.29（2026-07-21）
 - A92 熔断强平真实数据验证 + 报告熔断警示（audit H3；未改 `portfolio_ledger.py`、未改
   `_build_joint_report()` 强平驱动逻辑、未改 `config.py` 默认值）：
