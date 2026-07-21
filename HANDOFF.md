@@ -1,7 +1,7 @@
 ---
 task: A92 - Validate A90 forced-liquidation actually flattens real positions + circuit-breaker caveat (audit H3)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-21
 deliverables:
@@ -17,10 +17,10 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -296,3 +296,4 @@ $ powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Pref
 | 2026-07-21 | kimi-code → codex | dev → review | A92 forced-liquidation real-data validation completed |
 | 2026-07-21 | codex → kimi-code | review → dev | 打回: Ruff F401 unused datetime import in A92 stress checker |
 | 2026-07-21 | kimi-code → codex | dev → review | A92 dev fix: removed F401 unused datetime import from flatten stress checker; ruff+unit+sync gates pass |
+| 2026-07-21 | codex → codex | review → done | A92 review passed |
