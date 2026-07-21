@@ -1,8 +1,8 @@
 ---
 task: A98 - Gate partial take-profit exits with limit_halt_model="enforce" (re-audit H-NEW-1)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -12,11 +12,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -166,9 +166,141 @@ report):
   is a minimal, mechanical fix with no other ripple expected, unlike A97 which had a real behavior-change
   blast radius into a second test file.
 
+- 2026-07-22 (kimi-code, dev) - Fix applied exactly as designed: the partial-TP branch in
+  `Position.update` (`examples/czsc_strategy/chan_strategy/positions.py`, structural_atr elif-chain)
+  now wraps `self._scale_out(...)` in `if not self._reject_fill_at_limit(exit_at_limit, self.pos,
+  is_entry=False):`. Re-verified surrounding branch structure before editing — line numbers had not
+  drifted (branch at :776-779). Diff confirmed: 1 file changed, 2 insertions(+), 1 deletion(-), no
+  other exit branch (structural_atr fixed-stop/timeout/ATR-trailing, or any legacy branch) touched,
+  and `_scale_out`'s internals untouched per the one-call-site scope rule.
+- 2026-07-22 (kimi-code, dev) - Added two regression tests to `tests/unit/test_limit_halt_enforce.py`
+  (file went 12 -> 14 tests): `test_enforce_rejects_structural_atr_partial_tp_at_lower_limit`
+  (blocked band: `pos.pos`/`volume` unchanged, no new pair, `_partial_tp_done is False`,
+  `_pending_fill_rejected_at_limit is True`) and
+  `test_enforce_allows_structural_atr_partial_tp_when_not_at_limit` (positive case under enforce:
+  partial-TP fills normally, volume halves, `pair["fill_rejected_at_limit"] is False`). Fixture
+  style combines `test_exit_model.py::test_structural_atr_partial_tp_long`'s directional-target
+  partial-TP event with this file's enforce-blocking pattern, per the design.
+- 2026-07-22 (kimi-code, dev) - L-NEW-1 resolved as a side effect of the H-NEW-1 fix, exactly as the
+  design predicted: `_scale_out` is now only reachable after `_reject_fill_at_limit` has run for the
+  current fill attempt, so `pair["fill_rejected_at_limit"]` reflects real state. No additional code
+  change made; the positive-case test pins `fill_rejected_at_limit is False` for extra confidence.
+- 2026-07-22 (kimi-code, dev) - Unit-test count delta: 766 -> 768 passed (not-realdb), i.e. exactly
+  +2 (the two new tests). `test_exit_model.py` partial-TP tests pass unchanged (joint run of
+  `test_limit_halt_enforce.py` + `test_exit_model.py`: 30 passed).
+- 2026-07-22 (kimi-code, dev) - **Pre-existing `-m realdb` gate failure (NOT caused by A98),
+  documented per the "verify, don't assume" rule**: `test_position_sizing_research_equivalence.py::
+  test_research_mode_equivalence_to_baseline` fails on a last-ULP float diff in SC888's
+  `sharpe_ratio` (baseline=0.8091974663759458 vs actual=0.809197466375945). All trade `pairs`,
+  `equity_curve`, and `sub_strategies` match the stored baseline byte-for-byte. Proven pre-existing
+  by temporarily reverting the A98 guard (plain file edit, no git mutation) and re-running: the
+  identical failure reproduces on the pristine tree. The guard was then re-applied and re-verified.
+  Root cause is numeric-stack drift vs the 2026-07-21 snapshot regeneration, in the same Sharpe
+  problem area as the re-audit's already-known M-NEW-1 — left for that follow-up task; out of A98's
+  one-call-site scope. A98 is behavior-inert in this test's configuration (`limit_halt_model="off"`
+  per the test's config echo, so `_reject_fill_at_limit` always returns `False`).
+- 2026-07-22 (kimi-code, dev) - VERSION bumped 0.2.35 -> 0.2.36 (synccheck:ignore) with a CHANGELOG
+  entry stating the behavior change plainly (partial-TP fills can now be rejected under
+  `limit_halt_model="enforce"` where they previously never were). No git commit performed —
+  unrelated SimNow-workstream files (`diagnostics/WORK_LOG.md`,
+  `diagnostics/simnow_20d_promotion_decision.md`) sit modified in the working tree and were not
+  touched; `git status --short` shows only the four A98-scoped files as my changes.
+
 ## Manual Verification
 
-(pending — dev fills in)
+All commands run natively on Windows PowerShell from `D:\repo\vnpy` (or the noted subdirectory)
+with `D:\repo\vnpy\.venv_new\Scripts\python.exe` (pytest 9.1.1 — synccheck:ignore) and system `ruff`.
+
+1. Scope check — one call site only:
+
+   ```text
+   PS> git diff examples/czsc_strategy/chan_strategy/positions.py
+   @@ -776,7 +776,8 @@ class Position:
+                    elif not self._partial_tp_done:
+                        partial_event = self._get_partial_tp_event(signals_dict)
+                        if partial_event:
+   -                        self._scale_out(price, dt, f"部分止盈-{partial_event.name}")
+   +                        if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+   +                            self._scale_out(price, dt, f"部分止盈-{partial_event.name}")
+                    elif self._check_atr_trailing_stop(price, atr):
+   ...
+    examples/czsc_strategy/chan_strategy/positions.py | 3 ++-
+    1 file changed, 2 insertions(+), 1 deletion(-)
+   ```
+
+2. New regression tests (from `examples/czsc_strategy/`):
+
+   ```text
+   PS> python -m pytest tests/unit/test_limit_halt_enforce.py -q -m "not realdb"
+   ..............                                                           [100%]
+   14 passed, 2 warnings in 0.30s
+   ```
+
+3. Full unit suite (from `examples/czsc_strategy/`):
+
+   ```text
+   PS> python -m pytest tests/unit -q -m "not realdb"
+   768 passed, 4 deselected, 2 warnings in 52.04s
+   ```
+
+   (Baseline before A98 was 766 passed; delta = exactly the 2 new tests.)
+
+4. `test_exit_model.py` unaffected (from `examples/czsc_strategy/`):
+
+   ```text
+   PS> python -m pytest tests/unit/test_limit_halt_enforce.py tests/unit/test_exit_model.py -q -m "not realdb"
+   30 passed, 2 warnings in 0.20s
+   ```
+
+5. `-m realdb` equivalence gate (from `examples/czsc_strategy/`) — **pre-existing failure, proven
+   unrelated to A98**:
+
+   ```text
+   PS> python -m pytest tests/unit -m realdb -q
+   FAILED tests\unit\test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
+   1 failed, 3 passed, 768 deselected, 2 warnings in 72.14s
+   ```
+
+   Failure detail (`--tb=long`): `AssertionError: SC888: computed (Bucket-B) report fields differ
+   from baseline: sharpe_ratio: baseline=0.8091974663759458 actual=0.809197466375945` — last-ULP
+   float noise only; `pairs`, `equity_curve`, `sub_strategies` asserts all passed. Control run with
+   the A98 guard temporarily reverted (then re-applied):
+
+   ```text
+   PS> python -m pytest tests/unit/test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline -q
+   FAILED tests\unit\test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
+   1 failed, 2 warnings in 32.35s            # identical failure on the pristine tree
+   ```
+
+6. ruff on touched files (from repo root):
+
+   ```text
+   PS> ruff check examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_limit_halt_enforce.py
+   All checks passed!
+   ```
+
+7. sync_check, both roots (from repo root):
+
+   ```text
+   PS> python tools/sync_check.py
+   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+   [SYNC-CHECK] PASS: 版本与文档一致
+
+   PS> python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = 0.2.36  (source: VERSION::)   # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致
+   ```
+
+8. Preflight (from `examples/czsc_strategy/diagnostics/`, where `run_next_work.ps1` lives):
+
+   ```text
+   PS> powershell -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight
+   ==> Compile SimNow capture script
+   ==> Run SimNow workflow unit tests
+   205 passed in 31.29s
+   ==> Build pending replay backfill plan
+   ==> Preflight complete; live SimNow capture was not requested
+   ```
 
 ## 交接历史
 
@@ -176,3 +308,4 @@ report):
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A98 (partial-TP enforce gating, re-audit H-NEW-1) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A98 promoted design->dev |
+| 2026-07-22 | kimi-code → codex | dev → review | A98 partial-TP enforce gating completed |

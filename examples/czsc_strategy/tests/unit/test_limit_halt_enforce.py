@@ -14,7 +14,7 @@ import pytest
 from chan_strategy import backtest_engine as backtest_module
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import STRATEGY_CONFIG
-from chan_strategy.positions import Event, Position
+from chan_strategy.positions import Event, Operate, Position
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +49,32 @@ def _make_short_open_signals() -> dict:
 
 def _make_short_close_signals() -> dict:
     return {"A_B_F": "w_a_b_1"}
+
+
+def _signal_match(signal: str) -> dict:
+    """Return a signals_dict entry that matches the given signal pattern."""
+    key = "_".join(signal.split("_")[:3])
+    value = "_".join(signal.split("_")[3:]).replace("任意", "a")
+    return {key: value}
+
+
+def _partial_tp_event(name: str, operate: str, signal: str) -> Event:
+    """Build a partial-TP style event matching a single directional signal."""
+    event = Event.load({
+        "name": name,
+        "operate": operate,
+        "signals_all": [],
+        "signals_any": [],
+        "signals_not": [],
+        "factors": [{
+            "name": "target",
+            "signals_all": [signal],
+            "signals_any": [],
+            "signals_not": [],
+        }],
+    })
+    event.is_partial_tp = True
+    return event
 
 
 def test_enforce_rejects_long_entry_at_upper_limit():
@@ -268,6 +294,76 @@ def test_enforce_rejects_structural_atr_timeout_exit_at_lower_limit():
                exit_at_limit=(False, True), bar_count=3)
     assert pos.pos == 1
     assert not pos.pairs
+
+
+def test_enforce_rejects_structural_atr_partial_tp_at_lower_limit():
+    """A structural_atr partial-TP fill on a lower-limit bar is skipped under enforce.
+
+    A98 (re-audit H-NEW-1): the partial take-profit branch must go through the
+    same ``_reject_fill_at_limit`` guard as every other exit branch.
+    """
+    STRATEGY_CONFIG["limit_halt_model"] = "enforce"
+    STRATEGY_CONFIG["exit_model"] = "structural_atr"
+    STRATEGY_CONFIG["partial_tp_frac"] = 0.5
+    sig_open = "A_B_C_x_任意_任意_0"
+    sig_target = "A_B_G_t_任意_任意_0"
+    partial_event = _partial_tp_event("partial-tp", "平多", sig_target)
+    partial_event.operate = Operate.LC
+    pos = Position(
+        name="一买多头", symbol="AP888",
+        opens=[_event("open", "开多", [sig_open])],
+        exits=[partial_event],
+        timeout=99, stop_loss=1000,
+    )
+
+    dt_open = datetime(2024, 1, 2, 9, 0)
+    dt_blocked = datetime(2024, 1, 2, 10, 0)
+    pos.update(_signal_match(sig_open), price=100, dt=dt_open, execution_price=100)
+    assert pos.pos == 1
+    assert pos.volume == 1
+
+    pos.update(_signal_match(sig_target), price=110, dt=dt_blocked,
+               execution_price=110, exit_at_limit=(False, True))
+    assert pos.pos == 1
+    assert pos.volume == 1
+    assert not pos.pairs
+    assert pos._partial_tp_done is False
+    assert pos._pending_fill_rejected_at_limit is True
+
+
+def test_enforce_allows_structural_atr_partial_tp_when_not_at_limit():
+    """Under enforce, a partial-TP fill still executes when the exit side is not blocked."""
+    STRATEGY_CONFIG["limit_halt_model"] = "enforce"
+    STRATEGY_CONFIG["exit_model"] = "structural_atr"
+    STRATEGY_CONFIG["partial_tp_frac"] = 0.5
+    sig_open = "A_B_C_x_任意_任意_0"
+    sig_target = "A_B_G_t_任意_任意_0"
+    partial_event = _partial_tp_event("partial-tp", "平多", sig_target)
+    partial_event.operate = Operate.LC
+    pos = Position(
+        name="一买多头", symbol="AP888",
+        opens=[_event("open", "开多", [sig_open])],
+        exits=[partial_event],
+        timeout=99, stop_loss=1000,
+    )
+
+    dt_open = datetime(2024, 1, 2, 9, 0)
+    dt_tp = datetime(2024, 1, 2, 10, 0)
+    pos.update(_signal_match(sig_open), price=100, dt=dt_open, execution_price=100,
+               entry_at_limit=(False, False), exit_at_limit=(False, False))
+    assert pos.pos == 1
+    assert pos.volume == 1
+
+    pos.update(_signal_match(sig_target), price=110, dt=dt_tp,
+               execution_price=110, exit_at_limit=(False, False))
+    assert pos.pos == 1
+    assert pos.volume == pytest.approx(0.5)
+    assert pos._partial_tp_done is True
+    assert len(pos.pairs) == 1
+    pair = pos.pairs[0]
+    assert pair["is_partial_tp"] is True
+    assert pair["volume"] == pytest.approx(0.5)
+    assert pair["fill_rejected_at_limit"] is False
 
 
 def test_enforce_rejected_exit_tag_carries_to_eventual_close():

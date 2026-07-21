@@ -2,6 +2,28 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.36（2026-07-22）
+- A98 `exit_model="structural_atr"` 部分止盈退出纳入 `limit_halt_model="enforce"` 门控
+  （re-audit H-NEW-1 + L-NEW-1；真实行为变化）：
+  - `chan_strategy/positions.py` `Position.update` 的 structural_atr 部分止盈分支
+    （此前是全文件唯一未经 `_reject_fill_at_limit(...)` 守卫的退出路径）现在与其他所有退出分支
+    一样先经守卫：当退出方向触及不可成交涨跌停带（如多头退出遇跌停）时，该 bar 的部分止盈
+    成交被拒绝——不成交、`_partial_tp_done` 保持 `False`、`_pending_fill_rejected_at_limit`
+    置 `True`，下一 bar 重试（与既有的信号平仓/固定止损/超时/ATR 移动止损被拒行为完全一致）；
+  - `limit_halt_model` 为 `"off"`/`"aware"` 时行为逐字节不变（`_reject_fill_at_limit` 在非
+    enforce 模式下恒返回 `False`）；structural_atr 其余退出分支与全部 legacy 分支未触碰；
+  - L-NEW-1（部分止盈 pair 上 `fill_rejected_at_limit` 携带陈旧值）作为同一修复的副作用
+    自然解决——`_scale_out` 现在仅在 `_reject_fill_at_limit` 针对本次成交尝试运行之后才会
+    被执行，pair 上的审计字段反映真实状态，无需额外代码改动；
+  - 新增回归测试 `tests/unit/test_limit_halt_enforce.py::
+    test_enforce_rejects_structural_atr_partial_tp_at_lower_limit`（被拒场景：仓位不变、
+    无新 pair、`_partial_tp_done` 仍为 `False`、拒成交审计标记置 `True`）与
+    `test_enforce_allows_structural_atr_partial_tp_when_not_at_limit`（正向场景：enforce 下
+    非涨跌停 bar 部分止盈正常成交，`pair["fill_rejected_at_limit"] is False`）；
+  - 单测通过数 766 → 768（not-realdb，净增 2 条新测试）；`-m realdb` 等价门禁通过；
+    双侧 sync_check、Preflight、ruff 均通过（见 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.35（2026-07-22）
 - A97 `rollover_open_gating="on"` 检测失败改为 fail-closed（audit M2 + H2 缓解；真实行为变化）：
   - `chan_strategy/backtest_engine.py` 回测主循环前的 rollover 检测失败分支（原打印警告并静默禁用门控、

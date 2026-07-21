@@ -776,7 +776,8 @@ class Position:
                 elif not self._partial_tp_done:
                     partial_event = self._get_partial_tp_event(signals_dict)
                     if partial_event:
-                        self._scale_out(price, dt, f"部分止盈-{partial_event.name}")
+                        if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
+                            self._scale_out(price, dt, f"部分止盈-{partial_event.name}")
                 elif self._check_atr_trailing_stop(price, atr):
                     if not self._reject_fill_at_limit(exit_at_limit, self.pos, is_entry=False):
                         if self.pos > 0:  # pragma: no branch
