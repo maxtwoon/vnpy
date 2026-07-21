@@ -248,6 +248,100 @@ def test_formal_window_validation_allows_night_when_formal_sessions_missing():
     assert "default-night-window-finished" in output
 
 
+def test_formal_capture_plan_day_open_window_uses_1130_close():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        "$now = [datetimeoffset]::Parse('2026-07-21T09:05:00+08:00')",
+        "$plan = Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false -Now $now -MinKlineBarsPerSymbol 30",
+        "$plan | ConvertTo-Json -Compress",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert '"window_name":"day_open"' in output
+    assert '"duration_seconds":8700' in output
+
+
+def test_formal_capture_plan_afternoon_window_uses_1500_close():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        "$now = [datetimeoffset]::Parse('2026-07-21T13:35:00+08:00')",
+        "$plan = Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false -Now $now -MinKlineBarsPerSymbol 30",
+        "$plan | ConvertTo-Json -Compress",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert '"window_name":"day_afternoon"' in output
+    assert '"duration_seconds":5100' in output
+
+
+def test_formal_capture_plan_night_window_uses_2300_close():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        "$now = [datetimeoffset]::Parse('2026-07-21T21:05:00+08:00')",
+        "$plan = Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false -Now $now -MinKlineBarsPerSymbol 30",
+        "$plan | ConvertTo-Json -Compress",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert '"window_name":"night_open"' in output
+    assert '"duration_seconds":6900' in output
+
+
+def test_formal_capture_plan_rejects_non_window_time():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        "$now = [datetimeoffset]::Parse('2026-07-21T10:00:00+08:00')",
+        "Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false -Now $now -MinKlineBarsPerSymbol 30",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "09:05" in output
+    assert "13:35" in output
+    assert "21:05" in output
+
+
+def test_formal_capture_plan_rejects_when_remaining_time_is_shorter_than_min_bars():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        "$now = [datetimeoffset]::Parse('2026-07-21T09:05:00+08:00')",
+        "Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false -Now $now -MinKlineBarsPerSymbol 200",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "MinKlineBarsPerSymbol" in output
+    assert "remaining" in output
+
+
 def test_historical_db_update_tables_include_enabled_symbols_only():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     get_update_tables = _extract_function(script_text, "Get-HistoricalDbUpdateTables")

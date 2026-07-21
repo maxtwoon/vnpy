@@ -99,6 +99,74 @@ function Assert-KlineCoverageWindow {
     }
 }
 
+function Get-FormalCapturePlan {
+    param(
+        [bool]$LiveCapture,
+        [bool]$SkipKlineUpdate,
+        [datetimeoffset]$Now,
+        [int]$MinKlineBarsPerSymbol
+    )
+
+    if (-not $LiveCapture -or $SkipKlineUpdate) {
+        return $null
+    }
+
+    $LocalNow = $Now.ToLocalTime()
+    $TimeOfDay = $LocalNow.TimeOfDay
+    $RequiredSeconds = $MinKlineBarsPerSymbol * 60
+    $WindowSpecs = @(
+        [ordered]@{
+            window_name = "day_open"
+            trigger_label = "09:05"
+            trigger_start = [timespan]::Parse("09:05:00")
+            trigger_end = [timespan]::Parse("09:10:00")
+            capture_end = [timespan]::Parse("11:30:00")
+        },
+        [ordered]@{
+            window_name = "day_afternoon"
+            trigger_label = "13:35"
+            trigger_start = [timespan]::Parse("13:35:00")
+            trigger_end = [timespan]::Parse("13:40:00")
+            capture_end = [timespan]::Parse("15:00:00")
+        },
+        [ordered]@{
+            window_name = "night_open"
+            trigger_label = "21:05"
+            trigger_start = [timespan]::Parse("21:05:00")
+            trigger_end = [timespan]::Parse("21:10:00")
+            capture_end = [timespan]::Parse("23:00:00")
+        }
+    )
+
+    $MatchedSpec = $null
+    foreach ($Spec in $WindowSpecs) {
+        if ($TimeOfDay -ge $Spec.trigger_start -and $TimeOfDay -lt $Spec.trigger_end) {
+            $MatchedSpec = $Spec
+            break
+        }
+    }
+
+    if ($null -eq $MatchedSpec) {
+        throw "Formal observation window rejected: automatic formal runs must start in one of [09:05, 13:35, 21:05] with a 5-minute grace window. Current local time is $($LocalNow.ToString('yyyy-MM-dd HH:mm:ss zzz'))."
+    }
+
+    $WindowStart = $LocalNow.Date + $MatchedSpec.trigger_start
+    $WindowEnd = $LocalNow.Date + $MatchedSpec.capture_end
+    $RemainingSeconds = [int][math]::Floor(($WindowEnd - $LocalNow.DateTime).TotalSeconds)
+
+    if ($RemainingSeconds -lt $RequiredSeconds) {
+        throw "Formal observation window rejected: remaining window seconds ($RemainingSeconds) are shorter than MinKlineBarsPerSymbol ($MinKlineBarsPerSymbol); require at least $RequiredSeconds seconds before the window close."
+    }
+
+    return [ordered]@{
+        window_name = [string]$MatchedSpec.window_name
+        trigger_label = [string]$MatchedSpec.trigger_label
+        window_start = ([datetime]$WindowStart).ToString("yyyy-MM-ddTHH:mm:sszzz")
+        window_end = ([datetime]$WindowEnd).ToString("yyyy-MM-ddTHH:mm:sszzz")
+        duration_seconds = $RemainingSeconds
+    }
+}
+
 function Assert-FormalObservationWindow {
     param(
         [bool]$LiveCapture,
@@ -239,6 +307,16 @@ Set-Location $RepoRoot
 $ContractMapPath = Join-Path $ScriptPath "simnow_contract_map.json"
 $ContractMap = Get-Content -LiteralPath $ContractMapPath -Raw | ConvertFrom-Json
 
+$FormalCapturePlan = Get-FormalCapturePlan `
+    -LiveCapture $LiveCapture.IsPresent `
+    -SkipKlineUpdate $SkipKlineUpdate.IsPresent `
+    -Now (Get-Date) `
+    -MinKlineBarsPerSymbol $MinKlineBarsPerSymbol
+
+if ($null -ne $FormalCapturePlan) {
+    $DurationSeconds = [int]$FormalCapturePlan.duration_seconds
+}
+
 if ([string]::IsNullOrWhiteSpace($Date)) {
     $Date = Get-Date -Format "yyyy-MM-dd"
 }
@@ -287,6 +365,9 @@ Assert-FormalObservationWindow `
 Write-Host "Repository: $RepoRoot"
 Write-Host "Diagnostics: $ScriptPath"
 Write-Host "Date: $Date"
+if ($null -ne $FormalCapturePlan) {
+    Write-Host "Formal window: $($FormalCapturePlan.window_name) ($($FormalCapturePlan.trigger_label) -> $($FormalCapturePlan.window_end)); auto duration: $($FormalCapturePlan.duration_seconds) seconds"
+}
 
 $PyCompileCache = Join-Path $env:TEMP "vnpy_py_compile_cache"
 New-Item -ItemType Directory -Path $PyCompileCache -Force | Out-Null
