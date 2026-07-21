@@ -1,7 +1,7 @@
 ---
 task: A97 - Make rollover_open_gating fail-closed on detection failure (audit M2 + H2 mitigation)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-22
 deliverables:
@@ -13,10 +13,10 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -228,3 +228,4 @@ anything, in case line numbers have drifted):
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A97 (rollover_open_gating fail-closed, audit M2+H2 mitigation) promoted; handoff design->dev |
 | 2026-07-22 | kimi-code → codex | dev → review | A97 rollover_open_gating fail-closed completed |
+| 2026-07-22 | codex → codex | review → done | A97 review passed: code diff matches fail-closed scope; zero-date/off paths unchanged; ruff and sync gates passed; pytest/preflight native results accepted per documented WinError 5 sandbox limitation. |
