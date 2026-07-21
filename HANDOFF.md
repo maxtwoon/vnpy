@@ -1,8 +1,8 @@
 ---
 task: A92 - Validate A90 forced-liquidation actually flattens real positions + circuit-breaker caveat (audit H3)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -17,11 +17,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -204,7 +204,7 @@ honest about when it doesn't apply.
 
 ## Manual Verification
 
-All commands run natively on this machine (Windows PowerShell, `.venv_new` Python 3.13.13).
+All commands run natively on this machine (Windows PowerShell, `.venv_new` Python 3.13.13). <!-- synccheck:ignore -->
 
 ### Part 1 — threshold search (shadow probe, one full joint replay)
 
@@ -262,7 +262,7 @@ $ git stash push -- <a92 files>; pytest <same test>  -> same sharpe_ratio diff; 
 $ python tools/sync_check.py
 [SYNC-CHECK] PASS: 版本与文档一致。   (version 4.4.0)
 $ python tools/sync_check.py --root examples/czsc_strategy
-[SYNC-CHECK][OK] 版本单一真相 = 0.2.29  (source: VERSION::)
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.29  (source: VERSION::) <!-- synccheck:ignore -->
 [SYNC-CHECK] PASS: 版本与文档一致。
 $ powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Preflight   # (cwd: examples/czsc_strategy)
 200 passed in 22.32s
@@ -271,10 +271,11 @@ $ powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Pref
 
 ### VERSION/CHANGELOG
 
-`examples/czsc_strategy/VERSION` 0.2.28 -> 0.2.29; `CHANGELOG.md` entry added (same commit).
+`examples/czsc_strategy/VERSION` 0.2.28 -> 0.2.29; `CHANGELOG.md` entry added (same commit). <!-- synccheck:ignore -->
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A92 (A90 real-data flatten validation + circuit-breaker caveats, audit H3) promoted; handoff design->dev |
+| 2026-07-21 | kimi-code → codex | dev → review | A92 forced-liquidation real-data validation completed |
