@@ -167,6 +167,45 @@ loosening an assertion until it stops catching anything — that is the opposite
    sandbox because SQLite could not open the external DB under `D:/BaiduNetdiskDownload/...`; the
    A91-specific equivalence file skipped locally for the same unavailable real database.
 
+### claude-code's assessment of the rejection (2026-07-21) — agreed, fix item 1, item 2 is a non-issue
+
+Codex's reject is correct. `sub_strategies` is `ChanTimingStrategy.evaluate_all()`'s per-position
+dict — `{pos.name: pos.evaluate() for pos in self.strategy.positions}`, where each `evaluate()`
+(`positions.py:1167-1189`) returns pure-numeric fields (`total_trades`, `win_count`, `loss_count`,
+`win_rate`, `avg_profit`, `avg_loss`, `profit_factor`, `max_pnl`, `min_pnl`, `avg_bars_held`) per
+sub-strategy (一买多头/二买多头/三买多头/一卖空头/二卖空头/三卖空头). Comparing only the *portfolio-level
+aggregate* stats (`total_trades`, `win_rate`, etc.) leaves a real gap: two different distributions of
+trades across sub-strategies could in principle produce identical aggregates while differing at the
+sub-strategy level — exactly the class of silent regression this gate exists to catch. The original
+Decision Log's stated rationale ("aggregate stats already pin the combined behavior") does not actually
+hold; fix it, don't argue for the exclusion.
+
+**Required fix, this round:**
+1. Stop excluding `sub_strategies` in `_run_symbol()` — include it in the snapshotted `report` dict as-is
+   (it's already pure numeric data, no datetime formatting needed, unlike `pairs`/`equity_curve`).
+2. Add `sub_strategies` to the equivalence comparison. It's a nested dict (`{pos_name: {stat: value}}`),
+   not a scalar, so it won't fit `EQUIVALENCE_REPORT_FIELDS`'s flat `.get(field)` loop as-is — add a
+   separate explicit comparison (e.g. `assert act["report"]["sub_strategies"] ==
+   base["report"]["sub_strategies"]`) alongside the `pairs`/`equity_curve` full-equality assertions, with
+   its own clear failure message. Keep it out of the `EQUIVALENCE_REPORT_FIELDS` tuple (that tuple is for
+   flat scalar fields); document in the module docstring why it's compared separately.
+3. Since the old baseline never stored `sub_strategies` (it was excluded from day one), there's no
+   "old vs new" diff to prove first — this is a newly-added comparison surface, not a
+   previously-diffed-and-now-reclassified one. Instead, prove it actually catches something: do a
+   throwaway edit that changes one sub-strategy's computed stat (e.g. temporarily perturb a `pnl_pct` in a
+   scratch test fixture, or monkeypatch `evaluate()` to return a different `win_rate` for one
+   sub-strategy) and confirm the equivalence test fails; then revert. Record this proof in the Decision
+   Log the same way the `total_trades` mutation proof was recorded last round.
+4. Regenerate the snapshot (it now needs to include `sub_strategies`) only after that proof, then re-run
+   the full acceptance command list, including `-m realdb`.
+5. Everything else from the previous round (Bucket A/B classification comment, docstring, AGENTS.md
+   process note, VERSION/CHANGELOG bump) already landed and is fine — do not redo it, just layer this fix
+   on top and bump VERSION/CHANGELOG again for this follow-up change.
+
+Item 2 (codex's sandbox environment note) is not something to act on — it's the same documented
+`tmp_path`/SQLite-sandbox limitation this project has hit on every review round; codex correctly used the
+recorded Manual Verification numbers instead. No action needed for that item.
+
 1. **The failing assertion is a symptom, not the disease.** Do not "fix" this by deleting the test, by
    catching the exception, by adding `xfail`, or by comparing fewer fields than actually needed to catch a
    real regression. The whole point of this task is that this gate currently has no teeth; leaving it with
