@@ -290,6 +290,21 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
     力度计算: 由 ``divergence_model`` 配置决定（amplitude: abs(high-low);
     macd: summed |hist| area on confirmed trade-frequency closes）。
 
+    方向约束（对当前已存在、已测试行为的明确说明，非缠论权威论断）:
+    - 进入段 ``enter_bi`` 仅按位置选取：中枢之前的最后一笔；中枢之前没有笔时
+      回退为中枢自身的第一笔。选取过程与离开段 ``leave_bi`` 的方向无关，
+      两者方向**不保证、也不要求一致**（可以相反）。
+    - ``_divergence_power``/``_bi_power``/``_macd_power_for_segment`` 只做纯幅度
+      比较（``abs(high-low)`` 或 |hist| 面积），本身与笔方向无关，因此反向
+      enter_bi 与 leave_bi 的比较与同向情形完全相同，不会被过滤或报错。
+    - 该行为已有测试锁定：``tests/unit/test_divergence_macd.py`` 的
+      ``test_signal_first_buy_differs_between_models`` 所用 fixture 中
+      ``zs_start_idx == 0``，enter_bi 为中枢自身第一笔（Direction.Up）而
+      leave_bi 为 Direction.Down——方向相反，测试将其作为合法输入对待；
+      ``test_divergence_power_ignores_leg_direction_mismatch`` 进一步直接锁定
+      反向笔对不被过滤、正常返回幅度比较结果。若未来经缠论领域评审确认需要
+      强制方向匹配，应作为独立任务单独评估回归影响，而非默认现状是缺陷。
+
     注意: 单级别信号中不会输出"确认"，确认需要次级别协同
     """
     k1 = freq
@@ -321,6 +336,8 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
             leave_bi = after_zs_bis[-1]  # 最后的离开笔
 
             # 寻找进入段: 中枢之前的最后一笔（或中枢第一笔之前的笔）
+            # 注: 进入段仅按位置选取，其方向未与 leave_bi 校验（允许反向）——
+            # 详见本函数 docstring「方向约束」段。
             zs_start_idx = last_zs["start_idx"]
             if zs_start_idx > 0:
                 enter_bi = bi_list[zs_start_idx - 1]
@@ -459,7 +476,8 @@ def signal_first_buy(c: CZSC, freq: str = "30分钟") -> dict:
         value = f"{v1}_任意_任意_{score}"
         return {key: value}
 
-    # 计算进入段力度
+    # 计算进入段力度（进入段仅按位置选取，方向未与 leave_bi 校验，允许反向；
+    # 详见 signal_divergence_status docstring「方向约束」段）
     if zs_start_idx > 0:
         enter_bi = bi_list[zs_start_idx - 1]
     else:

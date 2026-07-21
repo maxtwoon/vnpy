@@ -2,6 +2,32 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.38（2026-07-22）
+- A100 文档化背驰力度比较「进入段/离开段方向可能不一致」为已接受行为（re-audit M-NEW-2；
+  **纯 docstring/注释 + 回归测试，无任何信号生成逻辑变化**——本次是对已存在、已测试行为的
+  文档澄清，不是行为修改，与 A95 M1、A96 M3 的保守先例一致）：
+  - `chan_strategy/signals.py` `signal_divergence_status` docstring 新增「方向约束」段，
+    明确三点：(a) 进入段 `enter_bi` 仅按位置选取（中枢前一笔；中枢前无笔时回退为中枢自身
+    第一笔），其方向与离开段 `leave_bi` **不保证、也不要求一致**；(b) `_divergence_power`/
+    `_bi_power`/`_macd_power_for_segment` 只做纯幅度比较，与方向无关，反向笔对不会被过滤
+    或报错；(c) 该行为已被既有测试 `test_signal_first_buy_differs_between_models`（fixture 中
+    `zs_start_idx == 0`，enter_bi 与 leave_bi 方向相反）作为合法输入对待——声明这是对现状的
+    描述而非缠论权威论断，若未来经领域评审确认需强制方向匹配，应作为独立任务单独评估回归影响；
+  - 三处 `enter_bi`/`enter_idx` 选取点（`signals.py` `signal_divergence_status` 与
+    `signal_first_buy`；`sell_signals.py` `signal_first_sell`）各加一两行内联注释，指向
+    docstring 的完整说明，未重复展开；
+  - **零逻辑变化**：未触碰 `_divergence_power`/`_bi_power`/`_macd_power_for_segment`、未触碰任何
+    `enter_bi`/`leave_bi` 选取代码、未触碰任何方向过滤代码（diff 仅含 docstring/注释行）；
+    审核报告自带的修复建议 (b)（向前搜索最近同向笔）是真实的信号生成行为变化，影响全部
+    背驰/一买/一卖分类与历史回测结果，且需缠论领域权威确认，明确不属于本任务范围；
+  - 新增回归测试 `tests/unit/test_divergence_macd.py::`
+    `test_divergence_power_ignores_leg_direction_mismatch`：直接构造方向相反的 enter/leave
+    笔对，断言 `_divergence_power` 在 amplitude 与 macd 两种模式下均正常运行、返回纯幅度比较
+    结果、不按方向过滤——把既有测试只是顺带覆盖的行为显式钉住；
+  - 单测通过数 772 → 773（not-realdb，净增 1 条新测试）；`-m realdb` 等价门禁不变，
+    双侧 sync_check、Preflight、ruff 均通过（见 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.37（2026-07-22）
 - A99 SimNow 准备度门禁夏普比率口径统一为已强制执行的 0.3（re-audit M-NEW-1；**纯文档/提示文案对齐，
   未改动强制门禁本身**——`checks["夏普比率>=0.3"]` 的键名与 0.3 阈值逐字节不变，强制门槛仍是 0.3，

@@ -326,3 +326,48 @@ def test_macd_mode_does_not_fallback_to_close_difference_on_short_history():
         assert macd_enter < macd_leave
     finally:
         STRATEGY_CONFIG["divergence_model"] = "amplitude"
+
+
+def test_divergence_power_ignores_leg_direction_mismatch():
+    """A100 regression pin: enter/leave legs are NOT required to share direction.
+
+    ``_divergence_power``/``_bi_power`` compare pure magnitudes and never filter
+    on direction.  An opposite-direction enter_bi/leave_bi pair must run without
+    raising and return the plain magnitude comparison, exactly as a same-direction
+    pair would.  This pins the behavior documented in ``signal_divergence_status``'s
+    docstring (re-audit M-NEW-2), which the existing
+    ``test_signal_first_buy_differs_between_models`` only exercises incidentally
+    (its fixture has ``zs_start_idx == 0``, so enter_bi is the zhongshu's own
+    first bi, direction-opposite to leave_bi) without naming it.
+    """
+    base = datetime(2024, 1, 1)
+    # Enter leg: Direction.Up; Leave leg: Direction.Down — intentionally opposite.
+    enter_bars = _flat_bars(base, 40, 100.0)
+    enter_bi = _bi_with_bars(
+        Direction.Up, 95, 105, base, base + timedelta(minutes=39), enter_bars
+    )
+    leave_start = base + timedelta(minutes=40)
+    leave_bars = _flat_bars(leave_start, 40, 100.0)
+    leave_bi = _bi_with_bars(
+        Direction.Down, 96, 104, leave_start, leave_start + timedelta(minutes=79), leave_bars
+    )
+    c = _czsc_from_bis([enter_bi, leave_bi])
+
+    # The directions are opposite — this is the pinned accepted case, not an
+    # invalid fixture.
+    assert enter_bi.direction != leave_bi.direction
+
+    STRATEGY_CONFIG["divergence_model"] = "amplitude"
+    try:
+        amp_enter, amp_leave = _divergence_power(enter_bi, leave_bi, c)
+        # Pure magnitude comparison: no direction filtering, no error.
+        assert amp_enter == pytest.approx(10.0)
+        assert amp_leave == pytest.approx(8.0)
+        assert amp_leave < amp_enter
+
+        STRATEGY_CONFIG["divergence_model"] = "macd"
+        macd_enter, macd_leave = _divergence_power(enter_bi, leave_bi, c)
+        assert macd_enter >= 0.0
+        assert macd_leave >= 0.0
+    finally:
+        STRATEGY_CONFIG["divergence_model"] = "amplitude"

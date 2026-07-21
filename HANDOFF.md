@@ -1,8 +1,8 @@
 ---
 task: A100 - Document divergence enter/leave-leg direction mismatch as accepted behavior (re-audit M-NEW-2)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -10,13 +10,14 @@ deliverables:
   - examples/czsc_strategy/chan_strategy/sell_signals.py
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
+  - examples/czsc_strategy/tests/unit/test_divergence_macd.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -108,58 +109,55 @@ task.
 
 ## Acceptance Criteria
 
-- [ ] `signal_divergence_status`'s docstring documents that enter/leave leg directions are not
+- [x] `signal_divergence_status`'s docstring documents that enter/leave leg directions are not
       required/guaranteed to match, referencing the existing test that already exercises this.
-- [ ] Short inline comments added at all three `enter_bi`/`enter_idx` selection sites, pointing back to the
+- [x] Short inline comments added at all three `enter_bi`/`enter_idx` selection sites, pointing back to the
       fuller docstring explanation.
-- [ ] **Zero changes to comparison logic, direction filtering, or leg-selection logic** in `signals.py` or
+- [x] **Zero changes to comparison logic, direction filtering, or leg-selection logic** in `signals.py` or
       `sell_signals.py` — verified in the diff (docstring/comment lines only).
-- [ ] New regression test added pinning the mismatched-direction case as accepted/tested behavior.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (count increases only
+- [x] New regression test added pinning the mismatched-direction case as accepted/tested behavior.
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes (count increases only
       by the new test(s) added — note the exact delta in the Decision Log).
-- [ ] `-m realdb` equivalence gate still passes unchanged (this task does not touch `backtest_engine.py`,
+- [x] `-m realdb` equivalence gate still passes unchanged (this task does not touch `backtest_engine.py`,
       `positions.py`, or any numeric signal-generation logic — verify rather than assume per AGENTS.md rule).
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] `ruff check` clean on touched files (or, if pre-existing lint errors exist in these files, verify via
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `ruff check` clean on touched files (or, if pre-existing lint errors exist in these files, verify via
       diff against HEAD that the count is unchanged — same pattern A99 used for `validation.py`'s 45
       pre-existing errors).
-- [ ] VERSION/CHANGELOG bumped — CHANGELOG entry must state this is a **documentation clarification of
+- [x] VERSION/CHANGELOG bumped — CHANGELOG entry must state this is a **documentation clarification of
       already-existing, already-tested behavior, not a signal-generation logic change** — be explicit, same
       as A96's (M3) CHANGELOG wording.
-- [ ] Include a literal `## Manual Verification` heading with natively-run command output.
-- [ ] **Remember the `synccheck:ignore` marker** for any version-like string in this task's own HANDOFF
+- [x] Include a literal `## Manual Verification` heading with natively-run command output.
+- [x] **Remember the `synccheck:ignore` marker** for any version-like string in this task's own HANDOFF
       notes.
 
 ## Notes for the Next Agent
 
-(dev = kimi-code must read this before starting)
+(review = claude-code must read this before starting)
 
-1. **This is documentation/comments-only — no signal-generation logic changes anywhere.** Read the
-   "Decision: scope this to documentation only" section above in full before touching anything; do not
-   "fix" this by adding direction-matching logic or searching backward for a same-direction bi — that was
-   explicitly considered (it's the audit's own suggested option (b)) and rejected as out of scope for this
-   task, since neither claude-code nor kimi-code has the chan-theory domain authority to make that call
-   unilaterally.
-2. **Scope is exactly**: one docstring addition, three short inline comments, one new regression test. Do
-   not touch `_divergence_power`, `_bi_power`, `_macd_power_for_segment`, any `enter_bi`/`leave_bi`
-   selection code, or any direction-filtering code.
-3. **Do not touch the unrelated files currently sitting modified in the working tree**
-   (`diagnostics/WORK_LOG.md`, `diagnostics/simnow_20d_promotion_decision.md`, and any other SimNow-workstream
-   files you see) — these belong to a concurrent, unrelated workstream. **Before committing, run
-   `git status --short` and confirm only your own A100-scoped files are staged.**
-4. **Include a literal `## Manual Verification` heading** — required every time; do not omit it.
-5. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A100 divergence direction-mismatch documented"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`. If the command itself crashes/times out
-   for environment reasons, do not manually hand-edit HANDOFF.md's stage/owner fields to bypass it — leave
-   the working tree with your changes uncommitted and note the failure in the Decision Log; claude-code will
-   verify and commit properly.
-6. **This is the LAST of the three re-audit follow-up tasks** (H-NEW-1 closed via A98, M-NEW-1 closed via
-   A99, this is M-NEW-2). After this closes, all High/Medium findings from BOTH the original 2026-07-21
-   audit and the 2026-07-22 re-audit are closed or explicitly, permanently documented/parked. Per the
-   user's standing instruction, claude-code will then launch another comprehensive re-audit subagent to
-   check for any remaining or newly-introduced issues.
+1. **Dev work is complete; all acceptance criteria above are ticked and evidenced in
+   `## Manual Verification` below.** Verify each criterion against the diff and the recorded command
+   output; the diff scope is exactly: one docstring section in `signals.py`
+   (`signal_divergence_status`), three two-line inline comments (two in `signals.py`, one in
+   `sell_signals.py`), one new test function in `tests/unit/test_divergence_macd.py`, VERSION bump
+   (`0.2.38`, synccheck:ignore), and one CHANGELOG entry. **Zero logic changes** — the `git diff` on
+   `chan_strategy/` contains docstring/comment lines only (shown in Manual Verification item 7).
+2. **The new regression test** `test_divergence_power_ignores_leg_direction_mismatch` deliberately
+   constructs enter_bi (Direction.Up) / leave_bi (Direction.Down) with opposite directions and asserts
+   `_divergence_power` returns the plain magnitude comparison under both `amplitude` and `macd`
+   models without raising or direction-filtering. Unit count delta is exactly +1 (772 → 773,
+   synccheck:ignore).
+3. **realdb gate**: `test_research_mode_equivalence_to_baseline` still fails with the identical
+   last-ulp float-repr diff A99 already documented as pre-existing/environmental; A100 re-ran the
+   control on unmodified HEAD code (A100 edits copied aside, `git checkout --`, rerun, restore) and
+   the failure reproduces byte-identically — out of A100 scope, flagged for awareness only.
+4. **Unrelated SimNow-workstream files** (`diagnostics/WORK_LOG.md`,
+   `diagnostics/simnow_20d_promotion_decision.md`) were left untouched; `git status --short` before
+   handoff shows only A100-scoped files plus those two concurrent-workstream files.
+5. **This closes the last of the three re-audit follow-up tasks** (H-NEW-1 via A98, M-NEW-1 via A99,
+   M-NEW-2 via this task). After review passes, per the user's standing instruction, launch another
+   comprehensive re-audit subagent to check for any remaining or newly-introduced issues.
 
 ## Decision Log
 
@@ -175,10 +173,117 @@ task.
   (`signal_divergence_status`, `signal_first_buy` in `signals.py`; `signal_first_sell` in
   `sell_signals.py`) share the identical `enter_bi`/`enter_idx` selection pattern, so the docstring/comment
   clarification needs to touch all three, not just the one the audit's code excerpt happened to show.
+- 2026-07-22 (kimi-code, dev) - Implemented exactly the designed scope: (a) new 「方向约束」 section in
+  `signal_divergence_status`'s docstring (framed as a description of current, tested behavior referencing
+  `test_signal_first_buy_differs_between_models`, explicitly NOT a chan-theory justification); (b) two-line
+  inline comments at all three `enter_bi`/`enter_idx` selection sites pointing back to that docstring
+  section; (c) one new regression test `test_divergence_power_ignores_leg_direction_mismatch` in
+  `tests/unit/test_divergence_macd.py` pinning the opposite-direction enter/leave pair as accepted behavior
+  under both `amplitude` and `macd` divergence models. Diff on `chan_strategy/` is docstring/comment lines
+  only — verified in Manual Verification item 7.
+- 2026-07-22 (kimi-code, dev) - Unit suite delta is exactly +1: 772 → 773 passed (not-realdb), matching
+  the single new test; no existing test was modified. `test_divergence_macd.py` alone: 10 → 11 passed
+  (synccheck:ignore).
+- 2026-07-22 (kimi-code, dev) - VERSION bumped `0.2.37` → `0.2.38` (synccheck:ignore) with a CHANGELOG
+  entry explicitly worded as a documentation clarification of already-existing, already-tested behavior,
+  not a signal-generation logic change (A96 M3 wording pattern). Added
+  `tests/unit/test_divergence_macd.py` to the deliverables list (pre-existing file, extended in-place).
+- 2026-07-22 (kimi-code, dev) - realdb gate: `test_research_mode_equivalence_to_baseline` fails with the
+  same last-ulp float-repr diff A99 documented as pre-existing/environmental; control run on unmodified
+  HEAD code (A100 edits aside) reproduces the identical failure, so it is not caused by A100. All other
+  realdb tests pass (3 passed).
 
 ## Manual Verification
 
-(pending — dev fills in)
+Environment: repo-root `python` for sync_check/handoff; `D:\repo\vnpy\.venv_new\Scripts\python.exe`
+for pytest; system `ruff` for lint. All commands run natively on Windows from `D:\repo\vnpy` unless noted.
+
+1. New regression test file (10 -> 11, delta = exactly the 1 new test):
+
+   ```text
+   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit/test_divergence_macd.py -q
+   11 passed, 2 warnings in 0.16s
+   ```
+
+2. Full unit suite, not realdb (772 -> 773, synccheck:ignore; delta = exactly the 1 new test):
+
+   ```text
+   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+   773 passed, 4 deselected, 2 warnings in 45.30s
+   ```
+
+3. realdb equivalence gate (same 1 pre-existing environmental failure A99 documented, proven not caused
+   by A100):
+
+   ```text
+   $ .venv_new\Scripts\python.exe -m pytest examples/czsc_strategy/tests/unit -q -m "realdb"
+   FAILED .../test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
+   1 failed, 3 passed, 773 deselected, 2 warnings in 71.40s
+   ```
+
+   Control run with A100 code edits reverted to HEAD (copied aside, `git checkout --`, rerun, restored;
+   files re-verified identical after restore):
+
+   ```text
+   $ git checkout -- examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py
+   $ .venv_new\Scripts\python.exe -m pytest "...::test_research_mode_equivalence_to_baseline" -q --tb=line
+   FAILED .../test_position_sizing_research_equivalence.py::test_research_mode_equivalence_to_baseline
+   1 failed, 2 warnings in 30.47s        # identical failure on unmodified HEAD code
+   ```
+
+   A100's `chan_strategy/` diff is docstring/comment-only (item 7), and the failing test exercises
+   `backtest_engine`/snapshot comparison untouched by this task. Pre-existing, out of A100 scope.
+
+4. ruff (all three touched code/test files — clean, and byte-identical result on the HEAD baseline via
+   `git stash` / `git stash pop`):
+
+   ```text
+   $ ruff check examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py examples/czsc_strategy/tests/unit/test_divergence_macd.py
+   All checks passed!        # exit=0; baseline (HEAD, stashed) also: All checks passed!
+   ```
+
+5. Preflight (from `examples/czsc_strategy/`, run twice; second run captured for the record):
+
+   ```text
+   $ powershell -ExecutionPolicy Bypass -File diagnostics\run_next_work.ps1 -Preflight
+   ==> Compile SimNow capture script
+   ==> Run SimNow workflow unit tests
+   205 passed in 29.49s
+   ==> Build pending replay backfill plan
+   ==> Preflight complete; live SimNow capture was not requested
+   (exit code 0)
+   ```
+
+6. sync_check, both roots:
+
+   ```text
+   $ python tools/sync_check.py
+   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)   # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致   (exit 0)
+   $ python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = 0.2.38  (source: VERSION::)   # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致   (exit 0)
+   ```
+
+7. Diff scope check — `chan_strategy/` changes are docstring/comment lines only (insertions: 15-line
+   docstring section + 3 two-line comments; the single "deletion" is the one-line `# 计算进入段力度`
+   comment replaced by its expanded two-line form); unrelated SimNow-workstream files left untouched:
+
+   ```text
+   $ git diff --stat examples/czsc_strategy/chan_strategy/signals.py examples/czsc_strategy/chan_strategy/sell_signals.py
+    examples/czsc_strategy/chan_strategy/sell_signals.py |  2 ++
+    examples/czsc_strategy/chan_strategy/signals.py      | 20 +++++++++++++++++++-
+    2 files changed, 21 insertions(+), 1 deletion(-)
+   $ git status --short
+    M examples/czsc_strategy/CHANGELOG.md
+    M examples/czsc_strategy/VERSION
+    M examples/czsc_strategy/chan_strategy/sell_signals.py
+    M examples/czsc_strategy/chan_strategy/signals.py
+    M examples/czsc_strategy/diagnostics/WORK_LOG.md                      (concurrent workstream, untouched)
+    M examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md (concurrent workstream, untouched)
+    M examples/czsc_strategy/tests/unit/test_divergence_macd.py
+    M HANDOFF.md
+   ```
 
 ## 交接历史
 
@@ -186,3 +291,4 @@ task.
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A100 (divergence direction-mismatch documentation, re-audit M-NEW-2) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A100 promoted design->dev |
+| 2026-07-22 | kimi-code → codex | dev → review | A100 divergence direction-mismatch documented |

@@ -130,6 +130,8 @@ def signal_first_sell(c: CZSC, freq: str = "30分钟") -> dict:
     if leave_bi.high <= last_zs["zg"]:
         return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
+    # 进入段仅按位置选取，方向未与 leave_bi 校验（允许反向）；
+    # 详见 signals.signal_divergence_status docstring「方向约束」段
     enter_idx = last_zs["start_idx"] - 1 if last_zs["start_idx"] > 0 else last_zs["start_idx"]
     enter_bi = bi_list[enter_idx]
     enter_power, leave_power = _divergence_power(enter_bi, leave_bi, c)
