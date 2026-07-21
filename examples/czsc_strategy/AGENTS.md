@@ -8,6 +8,14 @@
 铁律（沿用 A 系列基线）：诊断/工具一律只读——不发送委托、不调交易接口、不改策略参数与买卖信号；
 输出不得包含 password/auth_code/api_key/account_id 等敏感字段；不得把诊断结果包装成盈利能力证明。
 
+## 测试验证守则（realdb 提醒）
+
+默认验收命令 `pytest tests/unit -q -m "not realdb"` 会**静默跳过**所有 `@pytest.mark.realdb`
+测试（如 research 模式等价性门禁 `test_position_sizing_research_equivalence.py`）。因此：
+任何触及 `chan_strategy/positions.py`、`chan_strategy/backtest_engine.py` 报告生成
+（`generate_report()`）或 research 模式仓位逻辑的改动，其 Manual Verification 必须额外包含一次
+`python -m pytest tests/unit -m realdb -q` 的实跑输出，不能只跑 `-m "not realdb"`。
+
 ## 多 agent 协作与交接
 
 本工作流由多个 agent 分阶段协作，**HANDOFF.md 是跨 agent 上下文的单一真相**：

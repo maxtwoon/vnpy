@@ -189,10 +189,75 @@ loosening an assertion until it stops catching anything — that is the opposite
   Bucket B computed-output classification) rather than a blacklist/exception-list, so future config-echo
   additions don't require another manual test update. Explicitly scoped OUT building a CI-runnable
   synthetic fixture DB — too large a separate task; scoped in a lightweight process note instead.
+- 2026-07-21 (kimi-code, dev) - Implemented the whitelist fix. Independently re-derived the pre-regen
+  proof (did not trust the HANDOFF numbers): pairs and equity_curve byte-identical vs old baseline for
+  both symbols; zero shared-key Bucket-B value differences. One nuance the design's classification
+  glossed over: `unparseable_rows_skipped` was classified Bucket B yet is one of the 8 keys ABSENT from
+  the old baseline (it was added to `generate_report()` after the freeze) — its current value is 0, so
+  this is a newly surfaced computed field, not a value regression; it is pinned in the regenerated
+  snapshot so future changes to it ARE caught. Judged this consistent with the design's own 8-key list,
+  proceeded rather than escalating. Test rewritten: pairs/equity_curve full equality + Bucket-B
+  whitelist (`EQUIVALENCE_REPORT_FIELDS`) equality + Bucket-A presence/type shape checks; sibling test
+  now pins Bucket-A research-mode defaults (`mode_label == "RESEARCH_BASELINE"` etc.). Throwaway-edit
+  proofs done both directions (additive config-echo key passes; mutated `total_trades` fails) and
+  reverted — `chan_strategy/` has zero modifications. `sub_strategies` classified Bucket B but kept
+  excluded from the snapshot (aggregate stats already pin combined behavior). VERSION 0.2.27 +
+  CHANGELOG + czsc AGENTS.md realdb process note. All acceptance commands green (see Manual
+  Verification).
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review — MUST include the `-m realdb` run)
+Independent Bucket-B re-verification vs the OLD baseline (run BEFORE regenerating the snapshot;
+script `.tmp/a91_bucket_b_diff.py`, full log `.tmp/a91_diff_proof.txt`):
+
+    === SC888 ===
+    pairs identical: True (27 vs 27)
+    equity_curve identical: True (4432 vs 4432)
+    Bucket-B report diffs: 1
+      unparseable_rows_skipped: baseline='<MISSING>' actual=0
+    keys only in current report: ['limit_halt_model', 'mode_label', 'portfolio_risk',
+      'resonance_filter', 'rollover_open_gating', 'sizing_caveat',
+      'unparseable_rows_skipped', 'weighting']
+    keys only in baseline: []
+    === RB888 ===
+    pairs identical: True (10 vs 10)
+    equity_curve identical: True (2780 vs 2780)
+    Bucket-B report diffs: 1
+      unparseable_rows_skipped: baseline='<MISSING>' actual=0
+    (same 8 current-only keys)
+
+=> Zero shared-key Bucket-B value differences; pairs/equity_curve byte-identical for both symbols.
+The only flagged item is `unparseable_rows_skipped` (one of the 8 post-baseline additions listed in
+this HANDOFF's own background section), value 0 — a newly surfaced computed field, not a value
+regression; it is now pinned in the regenerated snapshot.
+
+Throwaway-edit proofs (both scratch edits reverted; `chan_strategy/` left untouched):
+
+- Added `a91_throwaway_config_echo` key to `generate_report()` output:
+  `1 passed in 33.98s` (additive config-echo key does NOT fail equivalence).
+- Mutated `report["total_trades"] = len(all_pairs) + 1`:
+  `FAILED ... test_research_mode_equivalence_to_baseline — 1 failed in 34.32s`
+  (Bucket-B change IS caught).
+
+Snapshot regenerated from current code only after the above proof; then:
+
+    $ python -m pytest tests/unit -m realdb -q          (examples/czsc_strategy)
+    4 passed, 755 deselected in 78.06s (0:01:18)
+
+    $ python -m pytest tests/unit -q -m "not realdb"    (examples/czsc_strategy)
+    755 passed, 4 deselected in 38.01s                  (count unchanged)
+
+    $ python tools/sync_check.py                        (repo root)
+    [SYNC-CHECK] PASS: 版本与文档一致。  (exit 0)
+
+    $ python tools/sync_check.py --root examples/czsc_strategy
+    [SYNC-CHECK][OK] 版本单一真相 = 0.2.27 ... PASS  (exit 0)
+
+    $ powershell -File diagnostics/run_next_work.ps1 -Preflight
+    195 passed in 19.81s ... ==> Preflight complete  (exit 0)
+
+VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained the
+"测试验证守则（realdb 提醒）" section.
 
 ## 交接历史
 

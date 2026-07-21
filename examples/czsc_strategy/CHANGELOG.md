@@ -2,6 +2,24 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.27（2026-07-21）
+
+- A91 恢复 research 模式等价性门禁效力（audit H1；`generate_report()` 新增 8 个报告字段后
+  全字典 `==` 比较必然失败，而 `-m "not realdb"` 默认验收静默跳过该测试）：
+  - `tests/unit/test_position_sizing_research_equivalence.py`：改为白名单比较——`pairs` /
+    `equity_curve` 全等 + `report` 仅比较 Bucket-B 计算字段（`EQUIVALENCE_REPORT_FIELDS`）；
+    Bucket-A 配置回显字段不做基线值比较，但断言其存在性与类型（防形状回归）；模块 docstring
+    内记录 `generate_report()` 全部 key 的 Bucket A/B 分类（对照 backtest_engine.py 现行实现）；
+  - 同文件 `test_research_mode_additive_fields_take_default_values` 扩展：断言 research 模式下
+    `mode_label == "RESEARCH_BASELINE"` 及其余 Bucket-A 字段默认值、`sizing_caveat` 非空；
+  - 基线快照重新生成前独立复核：两品种 `pairs`/`equity_curve` 与旧基线逐字节一致、
+    Bucket-B 共有 key 零值差异（仅 `unparseable_rows_skipped` 为旧基线缺失的新增计算字段，
+    值=0，已随新基线固定）；快照已按当前代码重生成；
+  - 正向/反向证明：临时新增配置回显 key 测试仍通过、篡改 Bucket-B 字段测试必失败
+    （scratch edit 均已回退，`chan_strategy/` 零改动）；
+  - `AGENTS.md` 新增“测试验证守则（realdb 提醒）”：触及 `positions.py` / 报告生成 /
+    research 仓位逻辑的改动，验收必须实跑 `-m realdb`。
+
 ## 0.2.26（2026-07-20）
 
 - A90 熔断强平实现（按 `docs/design/a89-forced-liquidation-design.md` 逐条落地，daily loss limit

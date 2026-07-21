@@ -1,10 +1,46 @@
-"""A40 research-mode equivalence regression test.
+"""A40/A91 research-mode equivalence regression test.
 
 Requires the local historical SQLite database.  Verifies that with
-STRATEGY_CONFIG['sizing_model'] == 'research' the observable backtest output
-(pnl_pct, open/close price, bars_held, reason, equity curve) is unchanged from
-the stored baseline.  New additive fields (volume, pnl_currency) are allowed but
-must take their research-mode default values.
+STRATEGY_CONFIG['sizing_model'] == 'research' the computed backtest output is
+unchanged from the stored baseline.  What is compared (A91 whitelist-based):
+
+* ``pairs``        — full equality (trade list: strategy, open/close dt & price,
+                     pnl_pct, bars_held, reason, reason_code).
+* ``equity_curve`` — full equality (per-bar price/equity/exposure fields).
+* ``report``       — full equality on the Bucket-B whitelist
+                     (``EQUIVALENCE_REPORT_FIELDS``) only.
+
+Bucket-A (config echo / label) report fields are deliberately NOT diffed
+against the baseline: new keys may appear and existing ones may change when a
+new opt-in feature is added, without breaking research-mode equivalence.  They
+are instead shape-checked (presence + type) here and default-value-checked in
+``test_research_mode_additive_fields_take_default_values``.
+
+Key classification of ``BacktestEngine.generate_report()`` output
+(cross-checked against backtest_engine.py on 2026-07-21):
+
+* Bucket A — config echo / labels (value is a passthrough of STRATEGY_CONFIG
+  or run metadata, not derived from what the strategy decided on the data):
+  ``symbol``, ``freq``, ``sizing_model``, ``limit_halt_model``,
+  ``exit_event_semantics``, ``stop_execution_model``, ``stop_penalty_bp``,
+  ``resonance_filter``, ``portfolio_risk``, ``rollover_open_gating``,
+  ``weighting``, ``period``, ``mode_label``, ``sizing_caveat``.
+* Bucket B — computed strategy output (derived from the trade/equity sequence
+  produced for this input data; a silent change here IS a regression):
+  ``total_bars``, ``unparseable_rows_skipped``, ``traded_bars``,
+  ``sub_strategies``, ``max_long_exposure``, ``max_short_exposure``,
+  ``max_gross_exposure``, ``both_long_short_bars``, ``total_trades``,
+  ``win_rate``, ``avg_profit_pct``, ``avg_loss_pct``, ``profit_factor``,
+  ``max_profit_pct``, ``max_loss_pct``, ``avg_bars_held``, ``final_equity``,
+  ``total_return_pct``, ``max_drawdown_pct``, ``sharpe_ratio``,
+  plus conditional keys: ``max_total_open_margin``,
+  ``max_margin_utilization_pct``, ``final_total_open_margin`` (risk sizing
+  only) and ``rollover_open_gating_rejected_opens``,
+  ``rollover_open_gating_unavailable`` (gating on only).
+  ``sub_strategies`` is Bucket B but excluded from the snapshot by
+  ``_run_symbol()`` (per-strategy detail; the aggregate stats above already
+  pin the combined behavior).  The conditional keys never appear under the
+  research-default config this test runs, so they are not in the whitelist.
 
 RESEARCH-ONLY, not a trading recommendation.
 """
@@ -21,6 +57,49 @@ SYMBOLS = ["SC888", "RB888"]
 START = "2023-01-01"
 END = "2023-12-31"
 SNAPSHOT_PATH = Path(__file__).with_name("test_position_sizing_research_equivalence.snapshot.json")
+
+# Bucket B whitelist: computed report fields diffed against the baseline.
+# ``sub_strategies`` is excluded (not snapshotted, see module docstring).
+EQUIVALENCE_REPORT_FIELDS = (
+    "total_bars",
+    "unparseable_rows_skipped",
+    "traded_bars",
+    "max_long_exposure",
+    "max_short_exposure",
+    "max_gross_exposure",
+    "both_long_short_bars",
+    "total_trades",
+    "win_rate",
+    "avg_profit_pct",
+    "avg_loss_pct",
+    "profit_factor",
+    "max_profit_pct",
+    "max_loss_pct",
+    "avg_bars_held",
+    "final_equity",
+    "total_return_pct",
+    "max_drawdown_pct",
+    "sharpe_ratio",
+)
+
+# Bucket A shape contract: presence + type, so a wholesale-missing config-echo
+# key is still caught as a shape regression (values are free to change).
+BUCKET_A_EXPECTED_TYPES = {
+    "symbol": str,
+    "freq": str,
+    "sizing_model": str,
+    "limit_halt_model": str,
+    "exit_event_semantics": str,
+    "stop_execution_model": str,
+    "stop_penalty_bp": (int, float),
+    "resonance_filter": str,
+    "portfolio_risk": str,
+    "rollover_open_gating": str,
+    "weighting": str,
+    "period": str,
+    "mode_label": str,
+    "sizing_caveat": (str, type(None)),
+}
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +172,13 @@ def _fmt_dt(value):
 @pytest.mark.realdb
 @pytest.mark.slow
 def test_research_mode_equivalence_to_baseline():
-    """Research mode must reproduce the stored baseline (empty diff on observable fields)."""
+    """Research mode must reproduce the stored baseline on computed output.
+
+    Compares ``pairs`` and ``equity_curve`` by full equality, and ``report``
+    by full equality restricted to the Bucket-B whitelist
+    (``EQUIVALENCE_REPORT_FIELDS``).  Bucket-A config-echo fields are
+    shape-checked (presence + type) but never value-diffed against baseline.
+    """
     actual = {symbol: _run_symbol(symbol) for symbol in SYMBOLS}
 
     if not SNAPSHOT_PATH.exists():
@@ -101,13 +186,61 @@ def test_research_mode_equivalence_to_baseline():
         pytest.skip(f"Baseline snapshot created at {SNAPSHOT_PATH}; re-run to compare.")
 
     baseline = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
-    assert actual == baseline, "Research-mode output differs from stored baseline."
+
+    for symbol in SYMBOLS:
+        act = actual[symbol]
+        base = baseline[symbol]
+
+        assert act["pairs"] == base["pairs"], (
+            f"{symbol}: trade pairs differ from stored baseline."
+        )
+        assert act["equity_curve"] == base["equity_curve"], (
+            f"{symbol}: equity curve differs from stored baseline."
+        )
+
+        diffs = []
+        for field in EQUIVALENCE_REPORT_FIELDS:
+            missing = object()
+            a_val = act["report"].get(field, missing)
+            b_val = base["report"].get(field, missing)
+            if a_val is missing:
+                diffs.append(f"{field}: MISSING in current report")
+            elif b_val is missing:
+                diffs.append(f"{field}: MISSING in baseline report")
+            elif a_val != b_val:
+                diffs.append(f"{field}: baseline={b_val!r} actual={a_val!r}")
+        assert not diffs, (
+            f"{symbol}: computed (Bucket-B) report fields differ from baseline:\n  "
+            + "\n  ".join(diffs)
+        )
+
+        for field, expected_type in BUCKET_A_EXPECTED_TYPES.items():
+            assert field in act["report"], (
+                f"{symbol}: config-echo field {field!r} missing from report "
+                f"(shape regression)."
+            )
+            assert isinstance(act["report"][field], expected_type), (
+                f"{symbol}: config-echo field {field!r} has unexpected type "
+                f"{type(act['report'][field]).__name__} (expected {expected_type})."
+            )
 
 
 @pytest.mark.realdb
 @pytest.mark.slow
 def test_research_mode_additive_fields_take_default_values():
-    """volume=1, multiplier=1, pnl_currency = pnl_pct * open_price in research mode."""
+    """volume=1, multiplier=1, pnl_currency = pnl_pct * open_price in research mode.
+
+    Also pins the Bucket-A config-echo fields to their expected research-mode
+    defaults (pure-default config => mode_label == "RESEARCH_BASELINE").
+    """
+    expected_config_echo = {
+        "sizing_model": "research",
+        "limit_halt_model": "off",
+        "resonance_filter": "off",
+        "portfolio_risk": "off",
+        "rollover_open_gating": "off",
+        "mode_label": "RESEARCH_BASELINE",
+    }
     for symbol in SYMBOLS:
         STRATEGY_CONFIG["sizing_model"] = "research"
         engine = BacktestEngine(
@@ -120,6 +253,16 @@ def test_research_mode_additive_fields_take_default_values():
         report = engine.run()
         if "error" in report:
             pytest.skip(f"{symbol}: {report['error']}")
+
+        for field, expected in expected_config_echo.items():
+            assert report.get(field) == expected, (
+                f"{symbol}: research-mode default for {field!r} is {expected!r}, "
+                f"got {report.get(field)!r}."
+            )
+        assert isinstance(report.get("sizing_caveat"), str) and report["sizing_caveat"], (
+            f"{symbol}: research mode must surface a non-empty sizing_caveat."
+        )
+
         for p in engine.strategy.get_combined_trades():
             assert p.get("volume", 1) == 1
             assert p.get("contract_multiplier", 1) == 1
