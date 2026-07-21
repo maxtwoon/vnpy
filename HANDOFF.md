@@ -1,19 +1,19 @@
 ---
 task: A94 - Document the always-false "确认" branch in divergence gating (audit M4)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: done
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/positions.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -175,3 +175,5 @@ $ git diff examples/czsc_strategy/chan_strategy/positions.py | Select-String '^[
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A94 (document dead 确认 branch, audit M4) promoted; handoff design->dev |
+| 2026-07-21 | kimi-code → codex | dev → review | A94 divergence dead-branch documented |
+| 2026-07-21 | codex → codex | review → done | A94 review passed |
