@@ -1,8 +1,8 @@
 ---
 task: A91 - Revive research-mode equivalence gate (audit H1: whitelist-based comparison, not dict==)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -10,11 +10,11 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.json
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -264,3 +264,4 @@ VERSION bumped 0.2.26 -> 0.2.27; CHANGELOG entry added; czsc AGENTS.md gained th
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A91 (revive research-mode equivalence gate, audit H1) promoted; handoff design->dev |
+| 2026-07-21 | kimi-code → codex | dev → review | A91 equivalence gate whitelist fix completed |
