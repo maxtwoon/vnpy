@@ -7,8 +7,14 @@ updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/diagnostics/joint_replay_acceptance_check.py
+  - examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.py
+  - examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.json
+  - examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_2026-07-21.md
   - examples/czsc_strategy/chan_strategy/backtest_engine.py
   - examples/czsc_strategy/chan_strategy/portfolio_engine.py
+  - examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.py
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
 last_transition_actor: claude-code
@@ -165,10 +171,107 @@ honest about when it doesn't apply.
   reach code that has a circuit breaker concept. Explicitly forbade silently patching the flatten mechanism
   if a real bug surfaces during Part 1 — that's a scope change requiring its own review, not something to
   bundle into a validation task.
+- 2026-07-21 (kimi-code, dev) - Part 1 done via shadow-probe-guided threshold search. A single shadow
+  replay (`.tmp/a92_shadow_probe.py`, limit disarmed at 10.0, 358.8s, 68,223 check samples) mapped the
+  full daily-PnL trajectory: thresholds 0.025/0.02/0.015/0.01/0.0075 ALL first-cross at 2022-03-30 09:29
+  (the known empty-flatten case — no open positions), so they would prove nothing new; 0.005 first-crosses
+  2022-01-14 22:29 with ZN888 一买多头 genuinely open. Real run at 0.005 (plausible risk parameter, same
+  magnitude as the A87/A90 unit fixtures' 0.4-0.5%, not an absurd forcing value): 49 triggers, 101
+  flat_events (68 immediate + 33 deferred), every flat_price verified against independently re-loaded bar
+  data == that symbol's OWN tick close; deferred invariant proven with real skew (trigger 2022-04-22 21:59:
+  A888 flattened immediately at own close 6115.0; lagging AP888 flattened 3,570 min later at 2022-04-25
+  09:29 at its own close 8561.0). NO bug found in the flatten mechanism; `portfolio_ledger.py` and the
+  flatten driver untouched.
+- 2026-07-21 (kimi-code, dev) - Deviation from the literal "open_dt predates flat_dt" wording, with
+  evidence: exactly 1 of 101 events (ZN888 一买多头 @ 2024-09-05 13:59, immediate/triggering symbol) has
+  open_dt == flat_dt — the triggering symbol opened at the trigger bar's own pre_open (bar open 23030.0,
+  limit not yet active so the open was allowed) and was flattened at the SAME bar's close (22900.0).
+  Causally ordered within the bar, no lookahead. The checker therefore gates `open_dt <= flat_dt` plus a
+  `same_bar => immediate-kind` rule, which preserves the design's intent (never close before the position
+  exists). Documented in the evidence artifact.
+- 2026-07-21 (kimi-code, dev) - Chose a NEW dedicated script `diagnostics/joint_replay_flatten_stress_check.py`
+  over extending `joint_replay_acceptance_check.py` (the design left this open): the stress scenario needs
+  a tightened-threshold override the A88 acceptance check must never carry, and mixing them would blur the
+  A88 checker's production-default semantics.
+- 2026-07-21 (kimi-code, dev) - PRE-EXISTING FAILURE FOUND (not caused by A92, escalated not fixed):
+  `pytest tests/unit -m realdb` fails `test_research_mode_equivalence_to_baseline` on SC888 with a 1-ULP
+  float diff `sharpe_ratio: baseline=0.8091974663759458 actual=0.809197466375945`. Reproduced byte-identical
+  on PRISTINE HEAD (A92 changes stashed — pairs/equity_curve/sub_strategies all match; only sharpe_ratio
+  differs), so the A91-regenerated baseline does not reproduce on this machine/environment. A92 does not
+  touch sharpe computation. Per the escalation rule this is recorded here rather than silently patched —
+  fixing the equivalence gate's float-strictness (or regenerating the baseline) is out of A92 scope and
+  needs its own task. The HANDOFF acceptance command `-m "not realdb"` passes (760 passed).
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+All commands run natively on this machine (Windows PowerShell, `.venv_new` Python 3.13.13).
+
+### Part 1 — threshold search (shadow probe, one full joint replay)
+
+```
+$ .\.venv_new\Scripts\python.exe .tmp\a92_shadow_probe.py
+# .tmp/a92_shadow_probe.out.json:
+#   elapsed_sec=358.8, n_check_samples=68223, n_pairs=242, symbol_errors={}
+#   threshold 0.025/0.02/0.015/0.01/0.0075 -> first crossing ALWAYS 2022-03-30 09:29 (-3.004%),
+#     open_symbols_at_crossing = {} (the known empty-flatten case; proves nothing new)
+#   threshold 0.005 -> first crossing 2022-01-14 22:29 (-0.5148%),
+#     open_symbols_at_crossing = {"ZN888": ["一买多头"]}  <- chosen
+```
+
+### Part 1 — real stress run + independent price verification
+
+```
+$ python diagnostics\joint_replay_flatten_stress_check.py 0.005   # (cwd: examples/czsc_strategy)
+# diagnostics/joint_replay_flatten_stress_check.json:
+#   no_symbol_errors=True, n_triggers=49, flat_events_count=101
+#   by_symbol: ZN888:31, AP888:30, RB888:22, A888:18
+#   immediate_flat_events_count=68, deferred_flat_events_count=33, deferred_invariant_exercised=True
+#   all_prices_match_own_bar_close=True   (verified against independently re-loaded trade bars)
+#   all_open_dt_not_after_flat_dt=True, same_bar_open_flatten_count=1 (ZN888 2024-09-05 13:59,
+#     immediate kind; bar open 23030.0 -> close 22900.0, causally ordered, not a bug)
+#   overall_accepted=True
+# Deferred-invariant showcase: trigger 2022-04-22 21:59 -> A888 immediate @ own close 6115.0;
+#   AP888 deferred 3570 min (weekend) -> 2022-04-25 09:29 @ its OWN close 8561.0 (not 6115).
+# First trigger 2022-01-14 22:29: ZN888 一买多头 (opened 2022-01-13 09:29) flattened @ own close
+#   24460.0 — exactly as the shadow probe predicted.
+```
+
+### Unit tests (acceptance command)
+
+```
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+760 passed, 4 deselected, 2 warnings in 40.78s
+```
+
+### realdb run (required by czsc AGENTS.md because generate_report() was touched)
+
+```
+$ python -m pytest tests/unit -m realdb -q
+1 failed, 3 passed, 760 deselected in 72.21s
+FAILED test_research_mode_equivalence_to_baseline
+  E  sharpe_ratio: baseline=0.8091974663759458 actual=0.809197466375945   # 1-ULP float diff
+# PRE-EXISTING, NOT caused by A92 — identical failure reproduced with all A92 changes stashed
+# (pristine HEAD), same single-field diff:
+$ git stash push -- <a92 files>; pytest <same test>  -> same sharpe_ratio diff; git stash pop
+# Escalated in Decision Log; not silently patched (equivalence-gate fix is out of A92 scope).
+```
+
+### sync_check (both roots) + Preflight
+
+```
+$ python tools/sync_check.py
+[SYNC-CHECK] PASS: 版本与文档一致。   (version 4.4.0)
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.29  (source: VERSION::)
+[SYNC-CHECK] PASS: 版本与文档一致。
+$ powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Preflight   # (cwd: examples/czsc_strategy)
+200 passed in 22.32s
+==> Preflight complete; live SimNow capture was not requested
+```
+
+### VERSION/CHANGELOG
+
+`examples/czsc_strategy/VERSION` 0.2.28 -> 0.2.29; `CHANGELOG.md` entry added (same commit).
 
 ## 交接历史
 

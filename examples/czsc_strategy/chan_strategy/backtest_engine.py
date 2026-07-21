@@ -964,6 +964,22 @@ class BacktestEngine:
         else:
             report["sizing_caveat"] = None
 
+        # A92 circuit-breaker caveat: a per-symbol report never itself models
+        # the portfolio-level daily-loss-limit / forced-liquidation mechanism
+        # (A90) — that exists only in PortfolioEngine._build_joint_report().
+        if sizing_model == "risk" and portfolio_risk == "on":
+            report["circuit_breaker_caveat"] = (
+                "本报告为单品种口径：组合级日亏损限额/强制平仓保护（A90）只在 "
+                "PortfolioEngine._build_joint_report() 的联合回放报告中体现，"
+                "未反映在本单品种报告内。"
+            )
+        else:
+            report["circuit_breaker_caveat"] = (
+                "本回测不包含任何组合级日亏损限额/强制平仓保护；该机制（A90）"
+                "仅存在于 PortfolioEngine._build_joint_report() "
+                "（需 sizing_model='risk' 且 portfolio_risk='on'）。"
+            )
+
         # 总体绩效
         all_pairs = self.strategy.get_combined_trades()
         report["total_trades"] = len(all_pairs)

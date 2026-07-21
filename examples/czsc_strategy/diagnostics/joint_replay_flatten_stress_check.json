@@ -1,0 +1,1543 @@
+{
+  "config": {
+    "symbols": [
+      "AP888",
+      "RB888",
+      "SC888",
+      "A888",
+      "ZN888"
+    ],
+    "window": "2022-01-01 ~ 2026-04-24",
+    "db_path": "D:\\BaiduNetdiskDownload\\新数据库\\ssquant数据库_20260425\\kline_data.db",
+    "initial_capital": 1000000.0,
+    "sizing_model": "risk",
+    "portfolio_risk": "on",
+    "daily_loss_limit_pct_stress": 0.005,
+    "daily_loss_limit_pct_production_default": 0.03,
+    "stress_threshold_is_temporary_override": true
+  },
+  "symbol_errors": {},
+  "no_symbol_errors": true,
+  "loss_limit_triggers": [
+    {
+      "dt": "2022-01-14 22:29:00",
+      "trading_day": "2022-01-14",
+      "equity": 995200.0,
+      "day_pnl_pct": -0.005148198130654271
+    },
+    {
+      "dt": "2022-02-22 14:59:00",
+      "trading_day": "2022-02-22",
+      "equity": 991593.1699999999,
+      "day_pnl_pct": -0.005386142958541557
+    },
+    {
+      "dt": "2022-03-30 09:29:00",
+      "trading_day": "2022-03-30",
+      "equity": 973046.625,
+      "day_pnl_pct": -0.03002339267118986
+    },
+    {
+      "dt": "2022-04-22 21:59:00",
+      "trading_day": "2022-04-22",
+      "equity": 973359.9015000002,
+      "day_pnl_pct": -0.005031479122702741
+    },
+    {
+      "dt": "2022-05-05 21:59:00",
+      "trading_day": "2022-05-05",
+      "equity": 988334.1225,
+      "day_pnl_pct": -0.006493805958327824
+    },
+    {
+      "dt": "2022-05-09 14:29:00",
+      "trading_day": "2022-05-09",
+      "equity": 981882.853,
+      "day_pnl_pct": -0.005469557162459906
+    },
+    {
+      "dt": "2022-05-18 21:29:00",
+      "trading_day": "2022-05-18",
+      "equity": 982937.8695,
+      "day_pnl_pct": -0.005312754954841105
+    },
+    {
+      "dt": "2022-06-30 13:59:00",
+      "trading_day": "2022-06-30",
+      "equity": 962889.365,
+      "day_pnl_pct": -0.005057944906973156
+    },
+    {
+      "dt": "2022-08-01 14:29:00",
+      "trading_day": "2022-08-01",
+      "equity": 978418.8305,
+      "day_pnl_pct": -0.005104537104201724
+    },
+    {
+      "dt": "2022-08-29 09:29:00",
+      "trading_day": "2022-08-29",
+      "equity": 981809.1065,
+      "day_pnl_pct": -0.008443002255998986
+    },
+    {
+      "dt": "2022-10-28 22:29:00",
+      "trading_day": "2022-10-28",
+      "equity": 971593.4785000001,
+      "day_pnl_pct": -0.005556224751768844
+    },
+    {
+      "dt": "2022-11-07 09:29:00",
+      "trading_day": "2022-11-07",
+      "equity": 993923.7735,
+      "day_pnl_pct": -0.007284931053714832
+    },
+    {
+      "dt": "2022-11-21 10:14:00",
+      "trading_day": "2022-11-21",
+      "equity": 986633.6135,
+      "day_pnl_pct": -0.0053832077056553684
+    },
+    {
+      "dt": "2022-11-28 09:29:00",
+      "trading_day": "2022-11-28",
+      "equity": 986432.6315,
+      "day_pnl_pct": -0.005474548417847114
+    },
+    {
+      "dt": "2022-12-21 14:59:00",
+      "trading_day": "2022-12-21",
+      "equity": 979439.8864999999,
+      "day_pnl_pct": -0.0051951744011597255
+    },
+    {
+      "dt": "2023-01-16 13:59:00",
+      "trading_day": "2023-01-16",
+      "equity": 1010319.5525,
+      "day_pnl_pct": -0.006197008492023864
+    },
+    {
+      "dt": "2023-02-10 11:29:00",
+      "trading_day": "2023-02-10",
+      "equity": 1004072.4944999999,
+      "day_pnl_pct": -0.005585748448911563
+    },
+    {
+      "dt": "2023-03-02 21:29:00",
+      "trading_day": "2023-03-02",
+      "equity": 1013868.2644999999,
+      "day_pnl_pct": -0.005346710826057213
+    },
+    {
+      "dt": "2023-03-10 09:59:00",
+      "trading_day": "2023-03-10",
+      "equity": 1006410.1294999999,
+      "day_pnl_pct": -0.00547765909203212
+    },
+    {
+      "dt": "2023-04-03 10:59:00",
+      "trading_day": "2023-04-03",
+      "equity": 996234.3905,
+      "day_pnl_pct": -0.0059866235452234766
+    },
+    {
+      "dt": "2023-04-10 11:29:00",
+      "trading_day": "2023-04-10",
+      "equity": 990224.7305000001,
+      "day_pnl_pct": -0.006501423944029329
+    },
+    {
+      "dt": "2023-04-20 21:29:00",
+      "trading_day": "2023-04-20",
+      "equity": 990070.4994999999,
+      "day_pnl_pct": -0.0053467065682236145
+    },
+    {
+      "dt": "2023-05-22 09:29:00",
+      "trading_day": "2023-05-22",
+      "equity": 968766.0405,
+      "day_pnl_pct": -0.005971631591675139
+    },
+    {
+      "dt": "2023-08-08 21:29:00",
+      "trading_day": "2023-08-08",
+      "equity": 959629.4115,
+      "day_pnl_pct": -0.0060254802789387486
+    },
+    {
+      "dt": "2023-09-21 21:59:00",
+      "trading_day": "2023-09-21",
+      "equity": 963911.1275,
+      "day_pnl_pct": -0.005006394107199558
+    },
+    {
+      "dt": "2023-10-17 10:14:00",
+      "trading_day": "2023-10-17",
+      "equity": 958910.9605,
+      "day_pnl_pct": -0.005053015363027604
+    },
+    {
+      "dt": "2024-01-17 14:59:00",
+      "trading_day": "2024-01-17",
+      "equity": 966444.9265000001,
+      "day_pnl_pct": -0.005863323301518048
+    },
+    {
+      "dt": "2024-02-19 09:29:00",
+      "trading_day": "2024-02-19",
+      "equity": 959060.6135000001,
+      "day_pnl_pct": -0.00562991482135352
+    },
+    {
+      "dt": "2024-03-04 13:59:00",
+      "trading_day": "2024-03-04",
+      "equity": 960137.7355,
+      "day_pnl_pct": -0.005118758643251282
+    },
+    {
+      "dt": "2024-04-15 21:29:00",
+      "trading_day": "2024-04-15",
+      "equity": 969097.1754999998,
+      "day_pnl_pct": -0.005331514573302745
+    },
+    {
+      "dt": "2024-04-19 13:59:00",
+      "trading_day": "2024-04-19",
+      "equity": 956755.3394999998,
+      "day_pnl_pct": -0.00706614180501792
+    },
+    {
+      "dt": "2024-06-14 21:29:00",
+      "trading_day": "2024-06-14",
+      "equity": 958335.6144999999,
+      "day_pnl_pct": -0.00560575021249067
+    },
+    {
+      "dt": "2024-07-17 23:29:00",
+      "trading_day": "2024-07-17",
+      "equity": 957747.6895,
+      "day_pnl_pct": -0.005242057236075435
+    },
+    {
+      "dt": "2024-09-05 13:59:00",
+      "trading_day": "2024-09-05",
+      "equity": 944724.2845,
+      "day_pnl_pct": -0.005260134901063671
+    },
+    {
+      "dt": "2024-09-20 21:29:00",
+      "trading_day": "2024-09-20",
+      "equity": 956779.1824999999,
+      "day_pnl_pct": -0.005281438377285545
+    },
+    {
+      "dt": "2024-10-21 14:29:00",
+      "trading_day": "2024-10-21",
+      "equity": 950581.84,
+      "day_pnl_pct": -0.006033344380871375
+    },
+    {
+      "dt": "2024-10-25 14:59:00",
+      "trading_day": "2024-10-25",
+      "equity": 950744.2114999999,
+      "day_pnl_pct": -0.0055020678117587984
+    },
+    {
+      "dt": "2024-12-18 14:59:00",
+      "trading_day": "2024-12-18",
+      "equity": 941767.7355,
+      "day_pnl_pct": -0.005017084285056305
+    },
+    {
+      "dt": "2024-12-27 10:59:00",
+      "trading_day": "2024-12-27",
+      "equity": 941042.3075,
+      "day_pnl_pct": -0.005137951310051118
+    },
+    {
+      "dt": "2025-01-03 10:59:00",
+      "trading_day": "2025-01-03",
+      "equity": 934132.354,
+      "day_pnl_pct": -0.006729892295363832
+    },
+    {
+      "dt": "2025-01-08 14:59:00",
+      "trading_day": "2025-01-08",
+      "equity": 930386.761,
+      "day_pnl_pct": -0.005068831518553878
+    },
+    {
+      "dt": "2025-01-20 10:14:00",
+      "trading_day": "2025-01-20",
+      "equity": 939845.6015,
+      "day_pnl_pct": -0.0050075398861548935
+    },
+    {
+      "dt": "2025-06-09 10:14:00",
+      "trading_day": "2025-06-09",
+      "equity": 919022.3694999998,
+      "day_pnl_pct": -0.006239238330999228
+    },
+    {
+      "dt": "2025-07-04 21:29:00",
+      "trading_day": "2025-07-04",
+      "equity": 914840.7044999998,
+      "day_pnl_pct": -0.00532758849969981
+    },
+    {
+      "dt": "2025-09-26 09:29:00",
+      "trading_day": "2025-09-26",
+      "equity": 922820.6375,
+      "day_pnl_pct": -0.005281762420640341
+    },
+    {
+      "dt": "2026-01-30 09:59:00",
+      "trading_day": "2026-01-30",
+      "equity": 981544.2679999999,
+      "day_pnl_pct": -0.005138786417793828
+    },
+    {
+      "dt": "2026-03-23 10:14:00",
+      "trading_day": "2026-03-23",
+      "equity": 992812.341,
+      "day_pnl_pct": -0.005690528222654285
+    },
+    {
+      "dt": "2026-04-07 09:29:00",
+      "trading_day": "2026-04-07",
+      "equity": 977622.1219999999,
+      "day_pnl_pct": -0.008206496684999733
+    },
+    {
+      "dt": "2026-04-09 09:29:00",
+      "trading_day": "2026-04-09",
+      "equity": 964688.598,
+      "day_pnl_pct": -0.014864782644863704
+    }
+  ],
+  "flatten_status": "本运行中日亏损限额触发并实际强制平仓了 101 笔仍开仓的持仓（详见 flat_events）。",
+  "flat_events_count": 101,
+  "flat_events_non_empty": true,
+  "all_open_dt_not_after_flat_dt": true,
+  "same_bar_open_flatten_count": 1,
+  "same_bar_events_all_immediate": true,
+  "all_prices_match_own_bar_close": true,
+  "immediate_flat_events_count": 68,
+  "deferred_flat_events_count": 33,
+  "deferred_invariant_exercised": true,
+  "flat_events_coherent": true,
+  "classified_flat_events": [
+    {
+      "dt": "2022-01-14 22:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-01-13 09:29:00",
+      "flat_price": 24460.0,
+      "own_bar_close_at_flat_dt": 24460.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-02-22 14:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-02-18 23:29:00",
+      "flat_price": 24860.0,
+      "own_bar_close_at_flat_dt": 24860.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-04-22 21:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-04-20 21:29:00",
+      "flat_price": 6115.0,
+      "own_bar_close_at_flat_dt": 6115.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-04-25 09:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2022-04-22 13:59:00",
+      "flat_price": 8561.0,
+      "own_bar_close_at_flat_dt": 8561.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-05 21:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-04-28 23:59:00",
+      "flat_price": 27110.0,
+      "own_bar_close_at_flat_dt": 27110.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-05 21:59:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2022-05-05 11:29:00",
+      "flat_price": 27110.0,
+      "own_bar_close_at_flat_dt": 27110.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-06 09:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2022-04-25 09:29:00",
+      "flat_price": 9469.0,
+      "own_bar_close_at_flat_dt": 9469.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-09 14:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-05-06 09:29:00",
+      "flat_price": 9200.0,
+      "own_bar_close_at_flat_dt": 9200.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-09 14:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-05-07 00:29:00",
+      "flat_price": 26280.0,
+      "own_bar_close_at_flat_dt": 26280.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-18 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-05-16 23:59:00",
+      "flat_price": 25405.0,
+      "own_bar_close_at_flat_dt": 25405.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-18 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2022-05-17 23:29:00",
+      "flat_price": 25405.0,
+      "own_bar_close_at_flat_dt": 25405.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-05-19 09:29:00",
+      "symbol": "AP888",
+      "strategy": "三买多头",
+      "kind": "deferred",
+      "open_dt": "2022-05-12 13:59:00",
+      "flat_price": 9120.0,
+      "own_bar_close_at_flat_dt": 9120.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-06-30 13:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-06-29 14:59:00",
+      "flat_price": 23855.0,
+      "own_bar_close_at_flat_dt": 23855.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-06-30 13:59:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2022-06-29 14:59:00",
+      "flat_price": 23855.0,
+      "own_bar_close_at_flat_dt": 23855.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-06-30 14:29:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2022-06-30 13:59:00",
+      "flat_price": 5974.0,
+      "own_bar_close_at_flat_dt": 5974.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-08-01 14:29:00",
+      "symbol": "AP888",
+      "strategy": "三买多头",
+      "kind": "immediate",
+      "open_dt": "2022-07-27 09:29:00",
+      "flat_price": 8654.0,
+      "own_bar_close_at_flat_dt": 8654.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-08-01 14:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-07-19 21:29:00",
+      "flat_price": 23975.0,
+      "own_bar_close_at_flat_dt": 23975.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-08-29 09:29:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-08-22 21:29:00",
+      "flat_price": 3984.0,
+      "own_bar_close_at_flat_dt": 3984.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-08-29 09:29:00",
+      "symbol": "RB888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2022-08-23 14:29:00",
+      "flat_price": 3984.0,
+      "own_bar_close_at_flat_dt": 3984.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-08-29 09:59:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2022-08-09 09:59:00",
+      "flat_price": 9203.0,
+      "own_bar_close_at_flat_dt": 9203.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-11-07 09:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-11-03 14:29:00",
+      "flat_price": 23485.0,
+      "own_bar_close_at_flat_dt": 23485.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-11-21 10:14:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-11-18 11:29:00",
+      "flat_price": 8056.0,
+      "own_bar_close_at_flat_dt": 8056.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-11-28 09:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-11-22 09:29:00",
+      "flat_price": 7990.0,
+      "own_bar_close_at_flat_dt": 7990.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2022-12-21 14:59:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-12-21 14:29:00",
+      "flat_price": 7616.0,
+      "own_bar_close_at_flat_dt": 7616.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-01-16 13:59:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2022-12-28 09:59:00",
+      "flat_price": 8596.0,
+      "own_bar_close_at_flat_dt": 8596.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-01-16 13:59:00",
+      "symbol": "ZN888",
+      "strategy": "三买多头",
+      "kind": "immediate",
+      "open_dt": "2023-01-12 10:59:00",
+      "flat_price": 24160.0,
+      "own_bar_close_at_flat_dt": 24160.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-02-10 11:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-02-10 00:29:00",
+      "flat_price": 23090.0,
+      "own_bar_close_at_flat_dt": 23090.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-02-10 13:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2023-02-09 14:29:00",
+      "flat_price": 4039.0,
+      "own_bar_close_at_flat_dt": 4039.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-03-02 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-03-01 09:59:00",
+      "flat_price": 23190.0,
+      "own_bar_close_at_flat_dt": 23190.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-03-02 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2023-03-02 11:29:00",
+      "flat_price": 23190.0,
+      "own_bar_close_at_flat_dt": 23190.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-03-10 10:14:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2023-03-09 14:59:00",
+      "flat_price": 5590.0,
+      "own_bar_close_at_flat_dt": 5590.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-03-10 10:14:00",
+      "symbol": "AP888",
+      "strategy": "三买多头",
+      "kind": "deferred",
+      "open_dt": "2023-03-03 13:59:00",
+      "flat_price": 8896.0,
+      "own_bar_close_at_flat_dt": 8896.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-03 10:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-03-28 21:29:00",
+      "flat_price": 4078.0,
+      "own_bar_close_at_flat_dt": 4078.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-03 10:59:00",
+      "symbol": "RB888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2023-03-30 10:14:00",
+      "flat_price": 4078.0,
+      "own_bar_close_at_flat_dt": 4078.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-10 11:29:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-04-10 09:59:00",
+      "flat_price": 3902.0,
+      "own_bar_close_at_flat_dt": 3902.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-10 11:29:00",
+      "symbol": "RB888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2023-04-07 09:29:00",
+      "flat_price": 3902.0,
+      "own_bar_close_at_flat_dt": 3902.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-20 21:29:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-04-11 09:59:00",
+      "flat_price": 3878.0,
+      "own_bar_close_at_flat_dt": 3878.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-20 21:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2023-04-20 10:14:00",
+      "flat_price": 4916.0,
+      "own_bar_close_at_flat_dt": 4916.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-04-21 09:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2023-04-18 11:29:00",
+      "flat_price": 8351.0,
+      "own_bar_close_at_flat_dt": 8351.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-05-22 09:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-05-15 11:29:00",
+      "flat_price": 20460.0,
+      "own_bar_close_at_flat_dt": 20460.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-08-08 21:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2023-08-08 10:14:00",
+      "flat_price": 3677.0,
+      "own_bar_close_at_flat_dt": 3677.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-09-21 21:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-09-12 09:59:00",
+      "flat_price": 5088.0,
+      "own_bar_close_at_flat_dt": 5088.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-09-21 21:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-09-13 09:59:00",
+      "flat_price": 3767.0,
+      "own_bar_close_at_flat_dt": 3767.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-09-22 09:29:00",
+      "symbol": "AP888",
+      "strategy": "三买多头",
+      "kind": "deferred",
+      "open_dt": "2023-09-15 09:29:00",
+      "flat_price": 9145.0,
+      "own_bar_close_at_flat_dt": 9145.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-10-17 10:14:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-10-17 09:59:00",
+      "flat_price": 4951.0,
+      "own_bar_close_at_flat_dt": 4951.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2023-10-17 10:14:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2023-10-17 00:59:00",
+      "flat_price": 20915.0,
+      "own_bar_close_at_flat_dt": 20915.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-01-17 14:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-01-12 21:59:00",
+      "flat_price": 3857.000000000001,
+      "own_bar_close_at_flat_dt": 3857.000000000001,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-01-17 14:59:00",
+      "symbol": "RB888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-01-17 10:59:00",
+      "flat_price": 3857.000000000001,
+      "own_bar_close_at_flat_dt": 3857.000000000001,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-01-17 21:29:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-01-15 11:29:00",
+      "flat_price": 4779.0,
+      "own_bar_close_at_flat_dt": 4779.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-02-19 09:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-02-06 22:59:00",
+      "flat_price": 20335.0,
+      "own_bar_close_at_flat_dt": 20335.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-02-19 09:59:00",
+      "symbol": "A888",
+      "strategy": "二买多头",
+      "kind": "deferred",
+      "open_dt": "2024-01-26 09:29:00",
+      "flat_price": 4667.0,
+      "own_bar_close_at_flat_dt": 4667.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-03-04 13:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-02-23 22:29:00",
+      "flat_price": 20560.0,
+      "own_bar_close_at_flat_dt": 20560.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-03-04 14:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-02-20 11:29:00",
+      "flat_price": 8639.0,
+      "own_bar_close_at_flat_dt": 8639.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-03-04 14:29:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-02-26 21:29:00",
+      "flat_price": 3725.000000000001,
+      "own_bar_close_at_flat_dt": 3725.000000000001,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-03-04 14:29:00",
+      "symbol": "RB888",
+      "strategy": "二买多头",
+      "kind": "deferred",
+      "open_dt": "2024-02-29 21:29:00",
+      "flat_price": 3725.000000000001,
+      "own_bar_close_at_flat_dt": 3725.000000000001,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-04-15 21:59:00",
+      "symbol": "A888",
+      "strategy": "三买多头",
+      "kind": "deferred",
+      "open_dt": "2024-04-10 14:29:00",
+      "flat_price": 4715.0,
+      "own_bar_close_at_flat_dt": 4715.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-06-14 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-06-13 23:59:00",
+      "flat_price": 23250.0,
+      "own_bar_close_at_flat_dt": 23250.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-06-14 21:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-06-14 09:59:00",
+      "flat_price": 3627.0,
+      "own_bar_close_at_flat_dt": 3627.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-07-17 23:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-07-17 14:29:00",
+      "flat_price": 23630.0,
+      "own_bar_close_at_flat_dt": 23630.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-07-18 09:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-07-02 14:29:00",
+      "flat_price": 6981.0,
+      "own_bar_close_at_flat_dt": 6981.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-07-18 09:29:00",
+      "symbol": "AP888",
+      "strategy": "二买多头",
+      "kind": "deferred",
+      "open_dt": "2024-07-15 09:29:00",
+      "flat_price": 6981.0,
+      "own_bar_close_at_flat_dt": 6981.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-09-05 13:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-09-05 13:59:00",
+      "flat_price": 22900.0,
+      "own_bar_close_at_flat_dt": 22900.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": true
+    },
+    {
+      "dt": "2024-09-05 14:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-09-02 10:14:00",
+      "flat_price": 6803.0,
+      "own_bar_close_at_flat_dt": 6803.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-09-20 21:29:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-09-13 14:29:00",
+      "flat_price": 3151.0,
+      "own_bar_close_at_flat_dt": 3151.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-09-20 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-09-06 13:59:00",
+      "flat_price": 23860.0,
+      "own_bar_close_at_flat_dt": 23860.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-21 14:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-10-14 09:29:00",
+      "flat_price": 6761.0,
+      "own_bar_close_at_flat_dt": 6761.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-21 14:29:00",
+      "symbol": "AP888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-10-17 13:59:00",
+      "flat_price": 6761.0,
+      "own_bar_close_at_flat_dt": 6761.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-21 14:29:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-10-17 09:29:00",
+      "flat_price": 25185.0,
+      "own_bar_close_at_flat_dt": 25185.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-21 14:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2024-10-21 11:29:00",
+      "flat_price": 3964.0,
+      "own_bar_close_at_flat_dt": 3964.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-25 14:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-10-22 21:29:00",
+      "flat_price": 3926.0,
+      "own_bar_close_at_flat_dt": 3926.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-25 14:59:00",
+      "symbol": "A888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-10-22 21:29:00",
+      "flat_price": 3926.0,
+      "own_bar_close_at_flat_dt": 3926.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-10-25 14:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-10-23 21:59:00",
+      "flat_price": 3376.0,
+      "own_bar_close_at_flat_dt": 3376.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-12-18 14:59:00",
+      "symbol": "AP888",
+      "strategy": "三买多头",
+      "kind": "immediate",
+      "open_dt": "2024-12-18 14:29:00",
+      "flat_price": 7255.0,
+      "own_bar_close_at_flat_dt": 7255.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-12-18 14:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-11-27 00:29:00",
+      "flat_price": 25240.0,
+      "own_bar_close_at_flat_dt": 25240.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-12-27 10:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-12-25 11:29:00",
+      "flat_price": 3279.0,
+      "own_bar_close_at_flat_dt": 3279.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-12-27 10:59:00",
+      "symbol": "RB888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-12-26 21:59:00",
+      "flat_price": 3279.0,
+      "own_bar_close_at_flat_dt": 3279.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-12-27 10:59:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2024-12-24 00:29:00",
+      "flat_price": 25300.0,
+      "own_bar_close_at_flat_dt": 25300.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2024-12-27 10:59:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2024-12-25 14:59:00",
+      "flat_price": 25300.0,
+      "own_bar_close_at_flat_dt": 25300.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-01-03 10:59:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-01-03 10:14:00",
+      "flat_price": 6874.0,
+      "own_bar_close_at_flat_dt": 6874.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-01-08 14:59:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-01-06 09:29:00",
+      "flat_price": 6782.0,
+      "own_bar_close_at_flat_dt": 6782.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-01-20 10:14:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-01-16 14:29:00",
+      "flat_price": 6683.0,
+      "own_bar_close_at_flat_dt": 6683.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-01-20 10:14:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-01-10 13:59:00",
+      "flat_price": 3349.0,
+      "own_bar_close_at_flat_dt": 3349.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-06-09 10:14:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-05-30 09:29:00",
+      "flat_price": 7567.0,
+      "own_bar_close_at_flat_dt": 7567.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-06-09 10:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2025-05-30 11:29:00",
+      "flat_price": 4139.0,
+      "own_bar_close_at_flat_dt": 4139.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-06-09 10:59:00",
+      "symbol": "A888",
+      "strategy": "二买多头",
+      "kind": "deferred",
+      "open_dt": "2025-05-08 09:29:00",
+      "flat_price": 4139.0,
+      "own_bar_close_at_flat_dt": 4139.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-07-04 21:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-07-03 11:29:00",
+      "flat_price": 22280.0,
+      "own_bar_close_at_flat_dt": 22280.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-07-04 21:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2025-07-03 10:59:00",
+      "flat_price": 4105.0,
+      "own_bar_close_at_flat_dt": 4105.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-07-04 21:59:00",
+      "symbol": "A888",
+      "strategy": "三买多头",
+      "kind": "deferred",
+      "open_dt": "2025-06-27 09:59:00",
+      "flat_price": 4105.0,
+      "own_bar_close_at_flat_dt": 4105.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:29:00",
+      "symbol": "ZN888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2025-09-25 23:59:00",
+      "flat_price": 22025.0,
+      "own_bar_close_at_flat_dt": 22025.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:29:00",
+      "symbol": "ZN888",
+      "strategy": "二买多头",
+      "kind": "immediate",
+      "open_dt": "2025-08-26 21:59:00",
+      "flat_price": 22025.0,
+      "own_bar_close_at_flat_dt": 22025.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:29:00",
+      "symbol": "ZN888",
+      "strategy": "三买多头",
+      "kind": "immediate",
+      "open_dt": "2025-08-20 00:29:00",
+      "flat_price": 22025.0,
+      "own_bar_close_at_flat_dt": 22025.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:59:00",
+      "symbol": "A888",
+      "strategy": "二买多头",
+      "kind": "deferred",
+      "open_dt": "2025-09-02 13:59:00",
+      "flat_price": 3950.0,
+      "own_bar_close_at_flat_dt": 3950.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:59:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2025-09-15 11:29:00",
+      "flat_price": 8354.0,
+      "own_bar_close_at_flat_dt": 8354.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:59:00",
+      "symbol": "AP888",
+      "strategy": "二买多头",
+      "kind": "deferred",
+      "open_dt": "2025-09-19 09:29:00",
+      "flat_price": 8354.0,
+      "own_bar_close_at_flat_dt": 8354.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2025-09-26 09:59:00",
+      "symbol": "AP888",
+      "strategy": "三买多头",
+      "kind": "deferred",
+      "open_dt": "2025-09-19 14:59:00",
+      "flat_price": 8354.0,
+      "own_bar_close_at_flat_dt": 8354.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2026-01-30 09:59:00",
+      "symbol": "RB888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2026-01-26 14:59:00",
+      "flat_price": 3141.0,
+      "own_bar_close_at_flat_dt": 3141.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2026-01-30 09:59:00",
+      "symbol": "RB888",
+      "strategy": "三买多头",
+      "kind": "immediate",
+      "open_dt": "2025-12-08 09:29:00",
+      "flat_price": 3141.0,
+      "own_bar_close_at_flat_dt": 3141.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2026-01-30 10:14:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2026-01-28 09:29:00",
+      "flat_price": 9532.0,
+      "own_bar_close_at_flat_dt": 9532.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2026-03-23 10:14:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2026-03-23 09:59:00",
+      "flat_price": 10445.0,
+      "own_bar_close_at_flat_dt": 10445.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2026-04-07 09:29:00",
+      "symbol": "AP888",
+      "strategy": "一买多头",
+      "kind": "immediate",
+      "open_dt": "2026-03-31 09:59:00",
+      "flat_price": 9561.0,
+      "own_bar_close_at_flat_dt": 9561.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    },
+    {
+      "dt": "2026-04-07 09:59:00",
+      "symbol": "A888",
+      "strategy": "一买多头",
+      "kind": "deferred",
+      "open_dt": "2026-03-25 09:29:00",
+      "flat_price": 4634.0,
+      "own_bar_close_at_flat_dt": 4634.0,
+      "price_matches_own_close": true,
+      "open_not_after_flat": true,
+      "same_bar_open_flatten": false
+    }
+  ],
+  "overall_accepted": true
+}

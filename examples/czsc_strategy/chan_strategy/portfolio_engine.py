@@ -83,6 +83,37 @@ def _position_sign(strategy: str) -> int:
     return -1 if "空头" in strategy else 1
 
 
+def _flatten_status_note(loss_limit_triggers: list[dict[str, Any]], flat_events: list[dict[str, Any]]) -> str:
+    """A92: one-line status disambiguating an empty ``flat_events`` list.
+
+    An empty ``flat_events`` alone is ambiguous between two very different
+    situations — this helper names them explicitly:
+
+    * no trigger at all (mechanism exists but never armed this run);
+    * a trigger occurred but every position was already closed by the
+      strategy itself before the breach was detected (A90's documented
+      2022-03-30 case: nothing was left to flatten).
+
+    A non-empty ``flat_events`` means the mechanism really closed open
+    positions this run.
+    """
+    if flat_events:
+        return (
+            f"本运行中日亏损限额触发并实际强制平仓了 {len(flat_events)} 笔仍开仓的持仓"
+            "（详见 flat_events）。"
+        )
+    if loss_limit_triggers:
+        return (
+            "日亏损限额在本运行中触发过（见 loss_limit_triggers），但触发时刻组合已无"
+            "未平仓持仓（或唯一持仓已在触发检测前被策略自身退出逻辑平仓），故 "
+            "flat_events 为空——机制存在且已接线，只是本次触发无仓可平。"
+        )
+    return (
+        "本运行中日亏损限额从未触发（loss_limit_triggers 为空），强制平仓机制"
+        "（A90）存在且已接线，但本次未发挥任何作用。"
+    )
+
+
 class PortfolioCoordinator:
     """Stateful cross-symbol coordinator used during a portfolio replay.
 
@@ -434,6 +465,12 @@ class PortfolioEngine:
             "equity_curve": equity_curve,
             "pairs": all_pairs,
             "sizing_caveat": sizing_caveat,
+            # A92: this path has no portfolio-level circuit breaker at all.
+            "circuit_breaker_caveat": (
+                "portfolio_risk='off'：本报告不包含任何组合级日亏损限额/强制平仓保护；"
+                "该机制（A90）仅存在于 sizing_model='risk' 且 portfolio_risk='on' 的"
+                "联合回放路径（PortfolioEngine._build_joint_report()）。"
+            ),
         }
 
     def _build_on_report(self, symbol_results: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -607,6 +644,16 @@ class PortfolioEngine:
             "loss_limit_triggers": coordinator.loss_limit_triggers,
             "flat_events": coordinator.flat_events,
             "sizing_caveat": sizing_caveat,
+            # A92: the weight-based PortfolioCoordinator's "flatten" only
+            # adjusts its own internal weight bookkeeping — it never closes a
+            # real Position, so these flat_events are not real capital actions.
+            # Real forced liquidation exists only in _build_joint_report().
+            "circuit_breaker_caveat": (
+                "权重口径的 PortfolioCoordinator 强平（flat_events）只调整其内部权重簿记，"
+                "并不真正关闭任何 Position，不构成实际资金层面的平仓动作；真正的组合级"
+                "日亏损限额强制平仓（A90）仅存在于 sizing_model='risk' 的联合回放路径"
+                "（PortfolioEngine._build_joint_report()）。"
+            ),
         }
 
     def _build_joint_report(self) -> dict[str, Any]:
@@ -828,6 +875,11 @@ class PortfolioEngine:
             # docs/design/a89-forced-liquidation-design.md).
             "flat_events": flat_events,
             "flatten_on_breach": "implemented_see_A90",
+            # A92: distinguish "mechanism exists but never triggered this run"
+            # from "triggered but nothing was open to flatten" (A90's already-
+            # documented 2022-03-30 case) — an empty flat_events alone is
+            # ambiguous between the two.
+            "flatten_status": _flatten_status_note(ledger.loss_limit_triggers, flat_events),
             "sizing_caveat": sizing_caveat,
         }
 

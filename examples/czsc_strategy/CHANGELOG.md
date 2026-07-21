@@ -2,6 +2,35 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.29（2026-07-21）
+- A92 熔断强平真实数据验证 + 报告熔断警示（audit H3；未改 `portfolio_ledger.py`、未改
+  `_build_joint_report()` 强平驱动逻辑、未改 `config.py` 默认值）：
+  - Part 1 真实数据证明：新增 `diagnostics/joint_replay_flatten_stress_check.py`——同一
+    5 品种/同一窗口（AP888/RB888/SC888/A888/ZN888，2022-01-01~2026-04-24）以**运行时临时收紧**
+    的 `daily_loss_limit_pct=0.005`（上下文管理器覆盖后还原，非配置默认值变更）重跑联合回放：
+    49 次触发、101 笔 `flat_events`（ZN888:31/AP888:30/RB888:22/A888:18；68 笔即时 + 33 笔滞后），
+    逐笔对照独立重载的 bar 数据验证全部 101 笔 `flat_price` 等于**该品种自身 tick 的 `bar.close`**；
+    跨品种滞后强平价不变量以真实时间偏斜证实——2022-04-22 21:59 触发 tick A888 以自身收盘 6115.0
+    即时强平，滞后的 AP888 于 3570 分钟后（跨周末）2022-04-25 09:29 以**自身**收盘 8561.0 强平
+    （绝非触发 tick 价格）；无任一笔平仓早于开仓。阈值搜索全程记录（影子回放一次映射日 PnL 轨迹：
+    0.025~0.0075 首触发均为 2022-03-30 空仓已知案例，0.005 首触发 2022-01-14 ZN888 一买多头实仓）；
+    同 bar 先开后平边界案例（ZN888 2024-09-05 13:59，开盘 23030→收盘 22900，因果有序非 bug）
+    已记录于 `diagnostics/joint_replay_flatten_stress_2026-07-21.md`（含 RESEARCH-ONLY 横幅）；
+  - Part 2 诚实警示：`backtest_engine.py generate_report()` 新增 `circuit_breaker_caveat`
+    （单品种口径声明无组合级熔断保护）；`portfolio_engine.py` `_build_off_report()`/
+    `_build_on_report()` 新增同名字段（off 路径无保护；权重口径 `PortfolioCoordinator` 的
+    flat_events 仅为内部权重簿记、非真实平仓）；`_build_joint_report()` 新增 `flatten_status`
+    （`_flatten_status_note()`），区分「本运行未触发」「触发但无仓可平（A90 已记录的 2022-03-30
+    情形）」「触发且实际强平 N 笔」三种状态，消除空 `flat_events` 的歧义；
+  - `tests/unit/test_position_sizing_research_equivalence.py`：Bucket-A 形状契约补
+    `circuit_breaker_caveat: str` 并在模块 docstring 分类中登记（纯新增键，不触碰既有基线值比较）；
+  - 单测 760 通过（`-m "not realdb"`）；`-m realdb` 实跑（AGENTS.md 守则要求）发现**既有**失败——
+    `test_research_mode_equivalence_to_baseline` 的 SC888 `sharpe_ratio` 与基线差 1 ULP
+    （baseline=0.8091974663759458 actual=0.809197466375945）；已用 pristine HEAD（stash 全部 A92
+    改动后复跑）证明该失败与本任务无关（A92 不触碰夏普计算），按升级规则记录于根 HANDOFF.md
+    决策记录而非顺手修复（等价性门禁的浮点严格性问题属另一任务）；双侧 sync_check 通过。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.28（2026-07-21）
 
 - A91 等价性门禁补强（codex review 打回项 1：`sub_strategies` 分类为 Bucket-B 却未快照/比较）：

@@ -18,14 +18,17 @@ are instead shape-checked (presence + type) here and default-value-checked in
 ``test_research_mode_additive_fields_take_default_values``.
 
 Key classification of ``BacktestEngine.generate_report()`` output
-(cross-checked against backtest_engine.py on 2026-07-21):
+(cross-checked against backtest_engine.py on 2026-07-21; ``circuit_breaker_caveat``
+added by A92 on 2026-07-21):
 
 * Bucket A — config echo / labels (value is a passthrough of STRATEGY_CONFIG
   or run metadata, not derived from what the strategy decided on the data):
   ``symbol``, ``freq``, ``sizing_model``, ``limit_halt_model``,
   ``exit_event_semantics``, ``stop_execution_model``, ``stop_penalty_bp``,
   ``resonance_filter``, ``portfolio_risk``, ``rollover_open_gating``,
-  ``weighting``, ``period``, ``mode_label``, ``sizing_caveat``.
+  ``weighting``, ``period``, ``mode_label``, ``sizing_caveat``,
+  ``circuit_breaker_caveat`` (A92: fixed caveat text gated on
+  ``sizing_model``/``portfolio_risk``, not derived from trade output).
 * Bucket B — computed strategy output (derived from the trade/equity sequence
   produced for this input data; a silent change here IS a regression):
   ``total_bars``, ``unparseable_rows_skipped``, ``traded_bars``,
@@ -107,6 +110,7 @@ BUCKET_A_EXPECTED_TYPES = {
     "period": str,
     "mode_label": str,
     "sizing_caveat": (str, type(None)),
+    "circuit_breaker_caveat": str,
 }
 
 
