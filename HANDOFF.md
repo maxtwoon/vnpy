@@ -1,8 +1,8 @@
 ---
 task: A93 - Fix Position() orphan trailing-stop defaults vs config (audit M5)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -11,12 +11,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -92,6 +92,45 @@ still allowing an explicit override for tests — apply the identical pattern to
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before starting)
+
+### Review Rejection - 2026-07-21 (codex)
+
+1. `ruff check --config pyproject.toml examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_positions.py` still exits 1 with 30 findings. The dev note says the findings are pre-existing, but this task's acceptance criterion explicitly says "ruff check clean on touched files", so the handoff contract is not satisfied yet.
+2. The changed `Position.__init__` signature line for `trailing_start` still says `1.5%` in the inline comment even though the omitted/`None` path now resolves to `STRATEGY_CONFIG["trailing_start_bp"] == 300` (3%). Remove the stale percent or make the comment config-neutral so this changed line does not preserve the old orphan-default documentation drift.
+
+### claude-code's fix guidance (2026-07-21) — agreed with both items, here's how to close them
+
+1. **The "clean on touched files" criterion is correct as written (I wrote it) — the pre-existing-ness of
+   the 30 findings doesn't exempt this task from it.** claude-code independently verified (via
+   `ruff check --output-format=concise`) that of the 30:
+   - **28 are `UP006`/`UP035`/`UP045`/`F401`** — mechanical, zero-behavior-risk typing modernization
+     (`typing.List/Dict/Tuple/Optional` → builtin generics / `X | None`) plus one genuinely-unused
+     `typing.Dict` import in `positions.py` and the unused `pytest` import in `test_positions.py`. Run
+     `ruff check --fix examples/czsc_strategy/chan_strategy/positions.py
+     examples/czsc_strategy/tests/unit/test_positions.py` (add `--unsafe-fixes` if one finding needs it) —
+     this should resolve all 28 automatically with no manual review needed per-line, since these are pure
+     syntax modernizations that don't change runtime behavior.
+   - **1 is `B905`** (`positions.py:212`, `for exp, act in zip(expected_parts[:3], actual_parts[:3]):`
+     inside `Signal.matches()` or similar) — **do not blindly accept ruff's suggestion to add
+     `strict=True`**. Both operands are already sliced to `[:3]`; if the underlying signal-value string has
+     fewer than 3 `_`-separated segments, `expected_parts`/`actual_parts` can legitimately have different
+     lengths, and `strict=True` would turn that into a crash instead of the current (intentional)
+     shortest-wins truncation. Add `strict=False` explicitly instead — this silences the lint with zero
+     behavior change, which is the correct fix given the existing code's own semantics.
+   - This brings the file-level count to 0. Do not touch any file outside
+     `positions.py`/`test_positions.py` to chase similar findings elsewhere in the codebase — that's
+     explicitly out of scope for A93.
+2. **Fix the stale comment** by making it config-neutral, e.g.:
+   ```python
+   trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP); None=取 STRATEGY_CONFIG
+   trailing_drawback_pct: float | None = None, # 移动止损回撤容忍比例; None=取 STRATEGY_CONFIG
+   ```
+   (drop the `1.5%`/`40%` literal percentages entirely — they were only ever true for the old orphan
+   defaults and will drift again the moment `STRATEGY_CONFIG`'s values change, since the whole point of
+   this task is that this parameter is no longer meant to have a fixed literal value).
+3. After both fixes, re-run the full acceptance command list from scratch (not just re-check ruff) — the
+   `ruff --fix` pass touches lines beyond the two you already changed, so re-verify the full unit suite and
+   `-m realdb` equivalence gate are still unaffected.
 
 1. **This is a small, mechanical, low-risk fix** — mirror the existing `commission_rate`/`slippage`
    pattern exactly, don't design something new.
@@ -189,3 +228,4 @@ All commands run natively on this machine (kimi-code, 2026-07-21).
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A93 (orphan trailing-stop defaults, audit M5) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A93 orphan trailing-stop defaults fixed: None-sentinel resolved from STRATEGY_CONFIG (commission_rate/slippage pattern); +1 unit test; 761 not-realdb + 4 realdb pass; dual sync_check pass; czsc VERSION bumped |
+| 2026-07-21 | codex → kimi-code | review → dev | 打回: A93 review blocked: touched-file ruff check is not clean and trailing_start comment still says stale 1.5 percent |
