@@ -2,6 +2,23 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.35（2026-07-22）
+- A97 `rollover_open_gating="on"` 检测失败改为 fail-closed（audit M2 + H2 缓解；真实行为变化）：
+  - `chan_strategy/backtest_engine.py` 回测主循环前的 rollover 检测失败分支（原打印警告并静默禁用门控、
+    降级为无保护运行）改为 `raise ValueError(...)`，对齐 `limit_halt_model` 既有的 fail-closed 模式：
+    报错信息含失败原因（`transitions["unavailable"]` 或捕获的检测异常）与显式退出路径
+    （修复元数据/检测问题，或显式设 `rollover_open_gating="off"` 放弃该保护）；
+    触发条件为配置值本身 `"on"`，不限于 `formal_evaluation_config()` 路径；
+  - 「检测成功但窗口内无排除日期」分支（合法非错误结果）完全未动；`rollover_open_gating="off"`
+    默认路径字节级不变；`rollover_stat_tagging` 使用独立的 `_rollover_excluded_dates()` best-effort
+    路径，与本改动无关、未触碰；
+  - `tests/unit/test_rollover_open_gating.py::test_gating_reports_unavailable_when_metadata_missing`
+    断言方向翻转：同一非存在 DB 构造下断言抛出 `ValueError` 而非优雅降级（修复测试所编码的 bug，
+    非删除覆盖）；该文件其余测试与 `test_formal_evaluation.py` 全部不变通过；
+  - 真实数据冒烟：`formal_evaluation_config()` + `rollover_open_gating="on"` 对真实历史库
+    （AP888/RB888）检测成功、回测正常完成不抛新异常（见 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.34（2026-07-21）
 - A96 文档化 `signals.py` 遗留信号系统为独立维护系统而非冗余副本（audit M3；纯 docstring，无行为变化）：
   - `chan_strategy/signals.py` `signal_second_buy`/`signal_third_buy` 的 `.. deprecated::` 块扩写，

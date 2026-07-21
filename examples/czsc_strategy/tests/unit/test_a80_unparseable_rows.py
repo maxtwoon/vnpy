@@ -33,6 +33,30 @@ def _build_a80_db(db_path: Path, rows: list[tuple]) -> Path:
     return db_path
 
 
+def _add_rollover_metadata_table(db_path: Path, symbol: str, rows: list[tuple]) -> None:
+    """Add a ``real_symbol`` metadata table so rollover detection succeeds.
+
+    A97: ``rollover_open_gating="on"`` (set by ``formal_evaluation_config()``)
+    now fails closed when detection is unavailable, so fixtures exercising the
+    formal-evaluation path must carry complete rollover metadata. A single
+    ``real_symbol`` value yields zero transitions, i.e. the legitimate
+    "no exclusion dates in window" outcome.
+    """
+    table = f"{symbol.lower()}_1M_raw"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        f"create table {table} ("
+        "datetime text, symbol text, open real, high real, low real, "
+        "close real, volume real, amount real, real_symbol text)"
+    )
+    conn.executemany(
+        f"insert into {table} values (?,?,?,?,?,?,?,?,?)",
+        [tuple(r) + (f"{symbol[:2].upper()}2401",) for r in rows],
+    )
+    conn.commit()
+    conn.close()
+
+
 def _make_valid_rows(count: int, start: datetime, symbol: str = "TEST") -> list[tuple]:
     rows: list[tuple] = []
     for i in range(count):
@@ -139,6 +163,9 @@ def test_formal_evaluation_report_includes_unparseable_rows_skipped(
         ("2024-01-02 malformed", symbol, 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0),
     ]
     db = _build_a80_db(tmp_path / "formal.db", valid_rows + bad_rows)
+    # A97: formal_evaluation_config() sets rollover_open_gating='on', which now
+    # fails closed on detection failure; give the fixture valid rollover metadata.
+    _add_rollover_metadata_table(db, symbol, valid_rows)
 
     monkeypatch.setitem(STRATEGY_CONFIG, "trade_freq", "1分钟")
     engine = BacktestEngine(

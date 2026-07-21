@@ -534,10 +534,18 @@ class BacktestEngine:
                 self._rollover_unavailable_reason = f"detection_failed: {e}"
                 transitions = {"unavailable": self._rollover_unavailable_reason}
             if transitions.get("unavailable"):
+                # A97: fail closed (audit M2 + H2 mitigation). Silently disabling
+                # gating would let a metadata/detection failure downgrade what the
+                # caller asked for (an explicitly protected run) into an unprotected
+                # one without notice; mirror limit_halt_model's fail-closed pattern.
                 self._rollover_unavailable_reason = transitions["unavailable"]
-                print(
-                    f"[!] rollover_open_gating='on' but rollover detection unavailable: "
-                    f"{transitions['unavailable']}; gating disabled for this run"
+                raise ValueError(
+                    f"rollover_open_gating='on' requires rollover-transition detection to "
+                    f"succeed for symbol {self.symbol!r} in "
+                    f"[{self.start_date}, {self.end_date}], but detection was unavailable: "
+                    f"{transitions['unavailable']}. Fix the rollover metadata/detection "
+                    f"issue, or explicitly set rollover_open_gating='off' if you intend "
+                    f"to proceed without this protection."
                 )
             else:
                 trading_dates = _trading_dates_from_bars(Path(self.db_path), self.symbol)

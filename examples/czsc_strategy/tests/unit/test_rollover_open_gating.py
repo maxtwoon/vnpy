@@ -3,8 +3,9 @@
 Validates that ``rollover_open_gating="on"`` blocks new long/short opens on
 bars whose trading date falls inside the rollover exclusion window, only
 under formal-evaluation mode by default, without affecting exits or
-risk-control of already-open positions. Also verifies graceful degradation
-when rollover metadata is missing.
+risk-control of already-open positions. Also verifies that a rollover
+detection failure fails closed (ValueError) instead of silently degrading
+(A97, audit M2 + H2 mitigation).
 
 RESEARCH-ONLY, not a trading recommendation.
 """
@@ -214,19 +215,21 @@ def test_gating_does_not_affect_exit_of_already_open_position(synthetic_1m_bars,
     assert report.get("rollover_open_gating_rejected_opens", {}).get("一买多头", 0) == 0
 
 
-# ------------------------------------------------------------------ graceful degradation
+# ------------------------------------------------------------------ fail-closed on detection failure
 
 
 def test_gating_reports_unavailable_when_metadata_missing(synthetic_1m_bars, monkeypatch, tmp_path):
-    """If the metadata DB is missing, the report identifies the degraded state."""
+    """A97: if the metadata DB is missing, gating='on' fails closed with ValueError.
+
+    Detection failure must not silently downgrade an explicitly protected run
+    into an unprotected one; the caller gets a ValueError naming the failure
+    reason and the explicit opt-out (rollover_open_gating='off').
+    """
     bars = synthetic_1m_bars(days=25, per_day=240, start=datetime(2024, 1, 2, 9, 0))
     db = tmp_path / "nonexistent.db"
 
-    pairs, report = _run_symbol(monkeypatch, bars, db, gating="on", open_at=16, close_at=18)
-
-    assert len(pairs) == 1  # gating disabled -> open happens
-    assert report["rollover_open_gating"] == "on"
-    assert report.get("rollover_open_gating_unavailable") is not None
+    with pytest.raises(ValueError, match=r"rollover_open_gating='on'.*detection was unavailable"):
+        _run_symbol(monkeypatch, bars, db, gating="on", open_at=16, close_at=18)
 
 
 def test_gating_off_does_not_add_audit_fields(synthetic_1m_bars, monkeypatch, tmp_path):

@@ -1,20 +1,23 @@
 ---
 task: A97 - Make rollover_open_gating fail-closed on detection failure (audit M2 + H2 mitigation)
 version: 4.4.0
-stage: dev
-owner: kimi-code
-updated: 2026-07-21
+stage: review
+owner: codex
+updated: 2026-07-22
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/backtest_engine.py
   - examples/czsc_strategy/tests/unit/test_rollover_open_gating.py
+  - examples/czsc_strategy/tests/unit/test_a80_unparseable_rows.py
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -154,13 +157,74 @@ anything, in case line numbers have drifted):
   weaker guarantee than the context manager. Checked A76's original design doc for a documented rationale
   behind the original fail-open choice — found none, consistent with the audit's assessment that this was
   an oversight, not a deliberate design decision.
+- 2026-07-22 (kimi-code, dev) - Implemented exactly per design: the detection-failure branch in
+  `backtest_engine.py` now `raise ValueError(...)` (fail-closed) with the detection reason
+  (`transitions["unavailable"]` or caught exception, via the existing `detection_failed:` fallback) and the
+  explicit opt-out (`rollover_open_gating='off'`) in the message, mirroring `limit_halt_model`'s style.
+  Zero-exclusion-dates branch untouched (verified in diff); `"off"` path untouched (verified in diff);
+  `limit_halt_model` untouched.
+- 2026-07-22 (kimi-code, dev) - Task item 7 answer: `rollover_stat_tagging` does NOT share this code path —
+  it uses the separate `BacktestEngine._rollover_excluded_dates()` method (backtest_engine.py:847-861), which
+  has its own independent best-effort handling (returns `set()` on any detection failure, tags nothing).
+  Left alone per scope.
+- 2026-07-22 (kimi-code, dev) - Ripple beyond the design's predicted blast radius (small deviation, recorded
+  per workflow rules): `tests/unit/test_a80_unparseable_rows.py::test_formal_evaluation_report_includes_unparseable_rows_skipped`
+  also encoded the old fail-open behavior — it runs `formal_evaluation_config()` (gating="on") against a
+  synthetic fixture DB with no `real_symbol` metadata, so it hit the detection-failure path and broke under
+  fail-closed. Fixed by giving that fixture a valid single-contract `real_symbol` metadata table
+  (`_add_rollover_metadata_table` helper), which routes detection to the legitimate zero-exclusion-dates
+  outcome; the test's A80 purpose (unparseable-row counting on the formal path) and assertions are unchanged.
+  No test added or removed; suite count unchanged (766 not-realdb before and after).
+- 2026-07-22 (kimi-code, dev) - VERSION bumped to 0.2.35 (synccheck:ignore) with a CHANGELOG entry stating
+  the new fail-closed behavior (real behavior change, H2 mitigation). Deliverables list extended with the two
+  additionally touched files (`test_a80_unparseable_rows.py`, VERSION/CHANGELOG) so it matches reality.
+- 2026-07-22 (kimi-code, dev) - realdb gate first attempt timed out at the 60s shell default (environment
+  quirk, no failure); re-ran with an explicit longer timeout → `4 passed, 766 deselected in 80.02s`.
+  Smoke-check script kept at `D:\repo\vnpy\.tmp\a97_smoke.py` (scratch dir, not a new acceptance artifact).
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+(kimi-code, dev, 2026-07-22 — all commands run natively on this machine from
+`D:\repo\vnpy\examples\czsc_strategy` unless noted)
+
+1. Targeted tests:
+   `python -m pytest tests/unit/test_rollover_open_gating.py tests/unit/test_formal_evaluation.py -q`
+   → `17 passed in 0.49s`
+2. Full unit suite:
+   `python -m pytest tests/unit -q -m "not realdb"`
+   → `766 passed, 4 deselected in 49.73s` (pass count unchanged vs pre-change run — the
+   rewritten test flipped assertion direction only; no test added/removed)
+3. realdb equivalence gate (touches `backtest_engine.py`, so run per AGENTS.md rule):
+   `python -m pytest tests/unit -m realdb -q`
+   → `4 passed, 766 deselected in 80.02s (0:01:20)`
+4. Real-data smoke check (`formal_evaluation_config()` + `rollover_open_gating="on"`,
+   real historical DB, window 2024-01-01~2024-06-30, warmup 100):
+   `python D:\repo\vnpy\.tmp\a97_smoke.py` →
+   ```
+   DB: D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\kline_data.db exists=True
+   AP888: OK | mode=PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,rollover_open_gating=on) | rollover_open_gating=on | unavailable=None | rejected_opens={'一买多头': 0, '二买多头': 0, '三买多头': 0}
+   RB888: OK | mode=PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,rollover_open_gating=on) | rollover_open_gating=on | unavailable=None | rejected_opens={'一买多头': 0, '二买多头': 0, '三买多头': 0}
+   A97 SMOKE CHECK PASSED
+   ```
+   Detection genuinely succeeds on real data; the formal-evaluation path completes
+   without raising the new fail-closed ValueError.
+5. `ruff check chan_strategy/backtest_engine.py tests/unit/test_rollover_open_gating.py tests/unit/test_a80_unparseable_rows.py`
+   → `All checks passed!`
+6. `python tools/sync_check.py` (repo root) → `PASS: 版本与文档一致。` (exit 0);
+   `python tools/sync_check.py --root examples/czsc_strategy` →
+   `[SYNC-CHECK][OK] 版本单一真相 = 0.2.35  (source: VERSION::)   (synccheck:ignore)` + PASS (exit 0)
+7. `powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Preflight`
+   → `205 passed in 32.12s` + `==> Preflight complete; live SimNow capture was not requested` (exit 0)
+8. `git status --short` before handoff: only A97-scoped files changed
+   (`CHANGELOG.md`, `VERSION`, `chan_strategy/backtest_engine.py`,
+   `tests/unit/test_rollover_open_gating.py`, `tests/unit/test_a80_unparseable_rows.py`,
+   `HANDOFF.md`) plus the two pre-existing unrelated SimNow-workstream modifications
+   (`diagnostics/WORK_LOG.md`, `diagnostics/simnow_20d_promotion_decision.md`) which were
+   NOT touched by this task.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A97 (rollover_open_gating fail-closed, audit M2+H2 mitigation) promoted; handoff design->dev |
+| 2026-07-22 | kimi-code → codex | dev → review | A97 rollover_open_gating fail-closed completed |
