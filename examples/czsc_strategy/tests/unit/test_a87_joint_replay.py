@@ -330,8 +330,8 @@ def test_joint_replay_no_trades_smoke(monkeypatch):
     assert report["blocked_opens"] == []
     assert report["loss_limit_triggers"] == []
     assert report["pairs"] == []
-    assert report["flatten_on_breach"] == "not_implemented_see_A89"
-    assert "flat_events" not in report
+    assert report["flatten_on_breach"] == "implemented_see_A90"
+    assert report["flat_events"] == []
     assert len(report["equity_curve"]) == 20  # 120 trade bars, warmup 100
     for entry in report["equity_curve"]:
         assert entry["equity"] == pytest.approx(IC)
@@ -445,6 +445,8 @@ def test_per_symbol_cap_blocks_own_new_open_with_total_headroom(monkeypatch):
     assert [t for t in aaa_buy2.trades if t.operate == Operate.LO] == []
     assert aaa_buy2.margin_cap_skip >= 1
     assert aaa_buy1.pos != 0  # the existing position is left alone
+    # A90: per-symbol cap breaches never force-flatten (only daily-loss does).
+    assert report["flat_events"] == []
 
     blocked = [b for b in report["blocked_opens"] if b["reason"] == "symbol_margin_cap"]
     assert blocked, "expected symbol_margin_cap gating pressure to be recorded"
@@ -487,6 +489,8 @@ def test_cluster_cap_blocks_cluster_mate_case_insensitive(monkeypatch):
     }
     assert {b["reason"] for b in blocked} == {"cluster_gross_cap:grp"}
     assert {b["symbol"] for b in blocked} == {"AAA", "BBB"}
+    # A90: cluster cap breaches never force-flatten (only daily-loss does).
+    assert report["flat_events"] == []
 
 
 def test_daily_loss_limit_blocks_rest_of_day_then_clears(monkeypatch):
@@ -542,13 +546,39 @@ def test_daily_loss_limit_blocks_rest_of_day_then_clears(monkeypatch):
         assert opens[1].dt == trade_bars[113].dt
         assert opens[1].volume == 55
         assert buy1.margin_cap_skip >= 1
-        # The only close is the strategy's own stop-loss, not a portfolio action.
         assert len(buy1.pairs) == 1
-        assert "止损" in buy1.pairs[0]["reason"]
+    # AAA (sorted first) stopped itself out inside its own bar-104 processing,
+    # so the A90 trigger found it already flat and its only close is the
+    # strategy's own stop-loss.  BBB (processed second at the same tick) was
+    # still holding, so the A90 forced liquidation flattened it at the same
+    # 89.5 close BEFORE its own stop logic could run — same economics, different
+    # reason label (the only A87 assertion this task had to update).
+    assert "止损" in _position(engines["AAA"], "一买多头").pairs[0]["reason"]
+    bbb_pair = _position(engines["BBB"], "一买多头").pairs[0]
+    assert bbb_pair["reason"] == "daily_loss_limit_flatten"
+    assert bbb_pair["close_price"] == pytest.approx(89.5)
+    assert report["flat_events"] == [{
+        "dt": trade_bars[104].dt.isoformat(sep=" "),
+        "symbol": "BBB",
+        "strategy": "一买多头",
+        "open_dt": trade_bars[101].dt.isoformat(sep=" "),
+        "open_price": pytest.approx(100.0),
+        "flat_price": pytest.approx(89.5),
+        "reason": "daily_loss_limit_flatten",
+    }]
 
 
-def test_daily_loss_limit_does_not_force_close_positions(monkeypatch):
-    """A breach while positions are open leaves every position alone (A87 scope)."""
+def test_daily_loss_limit_flattens_open_positions(monkeypatch):
+    """A90: a breach while positions are open force-flattens every symbol.
+
+    Both symbols hold a 一买 long when the crash breaches the limit.  The
+    trigger fires while processing BBB (sorted second) at bar 103, so BBB is
+    flattened immediately at its own bar-103 close; AAA (already past bar 103
+    in the same tick) is flattened at its own next pre_open (bar 104) at its
+    own bar-104 close.  This is the A90 replacement for A87's
+    ``test_daily_loss_limit_does_not_force_close_positions`` — same fixture,
+    inverted expectation (flattening is now the designed behavior).
+    """
     _risk_config(
         stop_loss_1buy=1000,          # stop at 90; price only dips to 92 -> never fires
         trailing_start_bp=100000,
@@ -564,17 +594,114 @@ def test_daily_loss_limit_does_not_force_close_positions(monkeypatch):
 
     report = _run_joint()
 
+    # Exactly one trigger, while processing BBB at bar 103: after AAA's
+    # bar-103 post_bar the day PnL is -0.4% (not yet <= -0.5%); BBB's own
+    # -0.4% contribution then pushes it to -0.8%.
     assert len(report["loss_limit_triggers"]) == 1
+    trigger = report["loss_limit_triggers"][0]
+    trade_bars = engines["AAA"].trade_bars
+    assert trigger["dt"] == trade_bars[103].dt.isoformat(sep=" ")
+
+    # Both positions were force-flattened exactly once (no repeated flatten
+    # while daily_loss_limit_active stays True).
     for symbol in ("AAA", "BBB"):
         buy1 = _position(engines[symbol], "一买多头")
-        assert buy1.pos != 0, f"{symbol} position must still be open"
-        assert buy1.pairs == [], f"{symbol} must have no closes at all"
-        assert engines[symbol].strategy.get_combined_trades() == []
-    assert report["pairs"] == []
-    assert "flat_events" not in report
-    assert report["flatten_on_breach"] == "not_implemented_see_A89"
-    # Final shared equity = 1e6 + 2 * (92 - 100) * 50 * 10 (no costs: no closes).
-    assert report["equity_curve"][-1]["equity"] == pytest.approx(992_000.0)
+        assert buy1.pos == 0, f"{symbol} position must be flattened"
+        assert len(buy1.pairs) == 1
+        pair = buy1.pairs[0]
+        assert pair["reason"] == "daily_loss_limit_flatten"
+        assert pair["open_price"] == pytest.approx(100.0)
+        assert pair["close_price"] == pytest.approx(92.0)
+
+    # flat_events: BBB at the trigger tick (bar 103), AAA at its own next
+    # pre_open (bar 104) — both at their own current-tick close of 92.0.
+    assert report["flat_events"] == [
+        {
+            "dt": trade_bars[103].dt.isoformat(sep=" "),
+            "symbol": "BBB",
+            "strategy": "一买多头",
+            "open_dt": trade_bars[101].dt.isoformat(sep=" "),
+            "open_price": pytest.approx(100.0),
+            "flat_price": pytest.approx(92.0),
+            "reason": "daily_loss_limit_flatten",
+        },
+        {
+            "dt": trade_bars[104].dt.isoformat(sep=" "),
+            "symbol": "AAA",
+            "strategy": "一买多头",
+            "open_dt": trade_bars[101].dt.isoformat(sep=" "),
+            "open_price": pytest.approx(100.0),
+            "flat_price": pytest.approx(92.0),
+            "reason": "daily_loss_limit_flatten",
+        },
+    ]
+    assert report["flatten_on_breach"] == "implemented_see_A90"
+    # Final shared equity = initial capital + the two realized flatten PnLs.
+    expected_equity = IC + sum(p["pnl_currency"] for p in report["pairs"])
+    assert report["equity_curve"][-1]["equity"] == pytest.approx(expected_equity)
+    assert report["equity_curve"][-1]["total_open_margin"] == pytest.approx(0.0)
+
+
+def test_daily_loss_limit_lagging_symbol_flattens_at_own_price(monkeypatch):
+    """A90: a symbol with no bar at the trigger tick is flattened at its own
+    next pre_open using its OWN current-tick bar.close — never the trigger
+    tick's price (lookahead for a lagging symbol)."""
+    _risk_config(
+        stop_loss_1buy=1000,          # -10%; AAA dips -9%, BBB -5% -> neither stops
+        trailing_start_bp=100000,
+        daily_loss_limit_pct=0.004,   # 0.4%; AAA's -0.45% day loss breaches it alone
+    )
+    aaa_closes = _flat_closes()
+    aaa_closes[103] = 91.0            # crash at the 09:30 bar of day 18
+    bbb_closes = _flat_closes()
+    for j in range(104, len(bbb_closes)):
+        bbb_closes[j] = 95.0          # BBB's own close at its post-trigger tick
+    aaa_bars = _make_bars(aaa_closes)
+    # BBB has NO bar at AAA's trigger slot (the 30 1-minute bars of slot 103
+    # are removed), so at the trigger tick BBB's generator still sits at its
+    # previous (09:00) bar — a genuinely lagging symbol.
+    bbb_bars = [b for i, b in enumerate(_make_bars(bbb_closes))
+                if not (103 * 30 <= i < 104 * 30)]
+    _patch_load_data(monkeypatch, {"AAA": aaa_bars, "BBB": bbb_bars})
+    _patch_signals(monkeypatch, {}, per_symbol={"AAA": {0: BUY1_SIGNALS},
+                                                "BBB": {0: BUY1_SIGNALS}})
+    engines = _capture_engines(monkeypatch)
+
+    report = _run_joint()
+
+    aaa_trade_bars = engines["AAA"].trade_bars
+    trigger_dt = aaa_trade_bars[103].dt
+    # BBB's next tick after the trigger is AAA's bar-104 timestamp (10:00).
+    bbb_catchup_dt = aaa_trade_bars[104].dt
+    bbb_catchup_close = next(
+        b.close for b in engines["BBB"].trade_bars if b.dt == bbb_catchup_dt
+    )
+    assert bbb_catchup_close == pytest.approx(95.0)
+    # Sanity: BBB really had no bar at the trigger tick.
+    assert all(b.dt != trigger_dt for b in engines["BBB"].trade_bars)
+
+    assert len(report["loss_limit_triggers"]) == 1
+    assert report["loss_limit_triggers"][0]["dt"] == trigger_dt.isoformat(sep=" ")
+
+    # AAA (the triggerer) flattened immediately at its own 91.0 close; BBB
+    # flattened one tick later at its OWN 95.0 close — not the trigger price.
+    events = {ev["symbol"]: ev for ev in report["flat_events"]}
+    assert set(events) == {"AAA", "BBB"}
+    assert events["AAA"]["dt"] == trigger_dt.isoformat(sep=" ")
+    assert events["AAA"]["flat_price"] == pytest.approx(91.0)
+    assert events["BBB"]["dt"] == bbb_catchup_dt.isoformat(sep=" ")
+    assert events["BBB"]["flat_price"] == pytest.approx(95.0)
+    assert events["BBB"]["flat_price"] != events["AAA"]["flat_price"]
+    for ev in events.values():
+        assert ev["strategy"] == "一买多头"
+        assert ev["open_price"] == pytest.approx(100.0)
+        assert ev["reason"] == "daily_loss_limit_flatten"
+
+    for symbol in ("AAA", "BBB"):
+        buy1 = _position(engines[symbol], "一买多头")
+        assert buy1.pos == 0
+        assert len(buy1.pairs) == 1
+        assert buy1.pairs[0]["reason"] == "daily_loss_limit_flatten"
 
 
 def test_symbol_margin_not_carried_past_symbol_end(monkeypatch):

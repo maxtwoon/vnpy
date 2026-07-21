@@ -2,6 +2,58 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.26（2026-07-20）
+
+- A90 熔断强平实现（按 `docs/design/a89-forced-liquidation-design.md` 逐条落地，daily loss limit
+  触发后强制平仓；未改 `positions.py` / `backtest_engine.py`）：
+  - `chan_strategy/portfolio_engine.py` `_build_joint_report()`：
+    - 检测 `ledger.daily_loss_limit_active` 的 False→True 跳变（在调用
+      `check_daily_loss_limit()` 前捕获前值）：触发品种 X 立即以该 tick 自身 `bar.close`
+      （`post_item[2]`）调用既有原语 `ChanTimingStrategy.flatten_all_positions(price, dt,
+      "daily_loss_limit_flatten")`（`positions.py:2122`，本任务未改动）；
+    - 驱动器新增 `flatten_pending: set[symbol]` 循环态（不放在 `PortfolioLedger` 上）：触发时
+      把其余全部成功品种加入；主循环在处理某品种 `"pre_open"` yield 之前检查，若 pending 则
+      用**该品种自己当前 tick 的 `bar.close`**（经 `engines[symbol].trade_bars` + bisect 查找，
+      绝不用触发 tick 的价格——对滞后品种那是未来函数）先强平再走正常 pre_open/gating 流程；
+    - 新增 `flat_events` 诊断列表，形状对齐 `PortfolioCoordinator.flat_events`（
+      `portfolio_engine.py:291-299`）减去权重簿记专用 `weight` 字段、加 `reason` 字段：
+      `dt`/`symbol`/`strategy`/`open_dt`/`open_price`/`flat_price`/`reason`；强平前先捕获
+      该品种 `strategy.positions` 中 `pos.pos != 0` 的持仓快照，只为实际被平的仓位记账；
+    - 报告字段：`"flat_events": flat_events` 新增；`"flatten_on_breach"` 由
+      `"not_implemented_see_A89"` 改为 `"implemented_see_A90"`（A87 的诚实标注已过时）；
+    - 新开仓拦截的起止语义不变（`daily_loss_limit_active` 当日拦截、次日
+      `update_trading_day()` 重置，均沿用 A87）；单品种/cluster 保证金上限仍只拒开不强平；
+  - `chan_strategy/portfolio_ledger.py`：仅更新两处过期文档字符串（A87 “仅拦截不开仓”范围说明
+    改为指向 A90 驱动器侧强平），零行为变化；
+  - `tests/unit/test_a87_joint_replay.py`（16 → 17 项）：
+    - `test_daily_loss_limit_does_not_force_close_positions` 按新设计语义重写为
+      `test_daily_loss_limit_flattens_open_positions`（同 fixture 反转预期：触发品种在触发
+      tick 立即强平、同 tick 已处理品种在下一 pre_open 以自身 close 强平、`flat_events`
+      逐字段精确断言、只强平一次）；
+    - 新增 `test_daily_loss_limit_lagging_symbol_flattens_at_own_price`：构造 BBB 在触发 tick
+      无 bar 的滞后场景，验证 BBB 在自己下一 pre_open 以**自身** 95.0 收盘强平而非触发价 91.0；
+    - `test_daily_loss_limit_blocks_rest_of_day_then_clears`：BBB 在触发 tick 被强平先于自身
+      止损执行（同价 89.5，经济结果一致），其 pair reason 由 "止损" 变为
+      "daily_loss_limit_flatten" —— 本任务唯一改动的既有行为断言；拦截/次日解除断言不变；
+    - 两个 cap 测试补充 `flat_events == []` 断言，锁定“margin-cap 触发不强平”排除项；
+    - 无信号冒烟测试的 `flatten_on_breach` 标记断言同步更新；
+  - 真实数据冒烟检查：`diagnostics/joint_replay_acceptance_check.py` 新增第 6 项
+    `flat_events` 连贯性检查（品种合法、reason 正确、窗口内、open_dt<=dt）并纳入
+    `overall_accepted`；触发日覆盖仅作信息性记录（触发时刻组合已空仓时为空属正常），
+    改为门禁 `flat_events_non_empty_or_explained`：空 flat_events 仅当每个触发都能由
+    “触发 tick 上有策略自身平仓”（`flat_events_trigger_explanations`，检查 pairs 中
+    close_dt 恰等于触发 tick 的平仓）解释时才可通过。
+    对同一 5 品种/窗口（AP888/RB888/SC888/A888/ZN888，2022-01-01~2026-04-24）重跑：
+    已知 2022-03-30 09:29 触发（-3.004%）时刻唯一仍持有的 AP888 一买多头在**同一 tick**
+    被策略自身止损平仓（9887→8401，margin 13841.8→0.0），触发检测发生在其后，组合已空仓，
+    故 `flat_events` 在真实数据上**为空属设计内行为**而非接线故障——探针（截断窗口前缀复跑
+    + 插桩 `flatten_all_positions` 调用记录 + 触发前后 margin/pairs 证据）确认强平机制
+    被正确触发且无仓可平；联合回放交易序列/总已实现 PnL 与 A88 已提交基线逐位一致
+    （-57,473.587），证明 A90 接线对无仓触发零副作用。强平路径本身由新增单测（含滞后品种
+    用自身价格强平的构造场景）覆盖。结果写入 `diagnostics/joint_replay_acceptance_check.json`
+    并在 `diagnostics/joint_replay_acceptance_2026-07-17.md` 追加 A90 补遗（详见该文档）；
+  - 单测总数 751 → 755（含并行工作流既有的 +3）。RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.25（2026-07-17）
 
 - A89 熔断强平设计文档核验与定稿（纯文档变更，未改任何 `chan_strategy/` / `diagnostics/`

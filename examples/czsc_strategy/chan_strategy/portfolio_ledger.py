@@ -30,9 +30,11 @@ existing formula rejects the open (``max_fit <= 0``) without knowing why;
 the "why" is recorded separately by the driver in its ``blocked_opens``
 diagnostic list.
 
-Scope: **block-new-opens only**.  This class never closes positions; forced
-liquidation on a daily-loss breach was explicitly descoped for A87 and is
-deferred to a future task (tentatively A89).
+Scope: **block-new-opens only, on the ledger side**.  This class itself never
+closes positions; the A90 forced liquidation on a daily-loss breach lives in
+the joint driver (``PortfolioEngine._build_joint_report``), which acts on the
+``daily_loss_limit_active`` False→True transition this class reports (see
+``docs/design/a89-forced-liquidation-design.md``).
 
 RESEARCH-ONLY, not a trading recommendation.
 """
@@ -142,8 +144,10 @@ class PortfolioLedger:
         """Arm the daily loss limit once the day PnL breaches the configured limit.
 
         Call after :meth:`update_equity`.  Records the trigger in
-        ``loss_limit_triggers``.  **Does not flatten anything** — A87's scope
-        is block-new-opens only (see module docstring).
+        ``loss_limit_triggers``.  **Does not flatten anything itself** — the
+        A90 forced liquidation is performed by the joint driver on the
+        False→True transition of ``daily_loss_limit_active`` (see module
+        docstring).
         """
         if self.daily_loss_limit_active or self.day_start_equity <= 0:
             return

@@ -18,6 +18,7 @@ exposure are computed from information known at the current bar only.
 """
 from __future__ import annotations
 
+from bisect import bisect_left
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -620,8 +621,13 @@ class PortfolioEngine:
         ``max_margin_pct`` act as a total-portfolio cap — or a deliberately
         saturated value that forces ``Position._size_open()`` to reject the
         open when the daily loss limit, the per-symbol cap or a cluster cap
-        is breached.  Scope is block-new-opens only: no position is ever
-        force-closed here (forced liquidation is deferred to A89).
+        is breached.  A90 adds forced liquidation on a daily-loss-limit
+        breach: the triggering symbol is flattened at the trigger tick via
+        the pre-existing ``ChanTimingStrategy.flatten_all_positions()``;
+        every other symbol is flattened at its own next ``"pre_open"`` yield
+        using that symbol's own current-tick ``bar.close`` (never the
+        trigger tick's price — that would be lookahead for a lagging
+        symbol).  Per-symbol/cluster margin-cap breaches never flatten.
         """
         engines: dict[str, BacktestEngine] = {}
         generators: dict[str, Any] = {}
@@ -674,6 +680,40 @@ class PortfolioEngine:
         blocked_opens: list[dict[str, Any]] = []
         joint_equity_curve: list[dict[str, Any]] = []
 
+        # A90 forced-liquidation driver state.  ``flatten_pending`` holds the
+        # symbols still owed a flatten after a daily-loss-limit trigger; each
+        # is flattened at its own next "pre_open" yield (driver-loop state,
+        # deliberately not on PortfolioLedger).  ``flat_events`` mirrors the
+        # shape of PortfolioCoordinator.flat_events minus the weight field.
+        flatten_pending: set[str] = set()
+        flat_events: list[dict[str, Any]] = []
+        trade_bar_dts: dict[str, list[Any]] = {
+            s: [b.dt for b in engines[s].trade_bars] for s in successful_symbols
+        }
+
+        def _flatten_symbol(symbol: str, price: float, dt: datetime) -> None:
+            """Flatten one symbol via the pre-existing A48-era primitive and
+            record a flat_events entry per position actually closed."""
+            strategy = engines[symbol].strategy
+            open_before = [
+                (pos.name, pos.last_open_dt, pos.cost)
+                for pos in strategy.positions
+                if pos.pos != 0
+            ]
+            if not open_before:
+                return
+            strategy.flatten_all_positions(price, dt, "daily_loss_limit_flatten")
+            for name, open_dt, open_price in open_before:
+                flat_events.append({
+                    "dt": dt.isoformat(sep=" "),
+                    "symbol": symbol,
+                    "strategy": name,
+                    "open_dt": open_dt.isoformat(sep=" ") if open_dt else None,
+                    "open_price": open_price,
+                    "flat_price": price,
+                    "reason": "daily_loss_limit_flatten",
+                })
+
         while any(item is not None for item in pending.values()):
             current_dt = min(item[1] for item in pending.values() if item is not None)
             ledger.update_trading_day(current_dt)
@@ -694,6 +734,18 @@ class PortfolioEngine:
                     f"joint driver invariant violated: expected 'pre_open' for "
                     f"{symbol} at {current_dt}, got {item[0]!r}"
                 )
+                if symbol in flatten_pending:
+                    # A90 deferred flatten: use this symbol's OWN current-tick
+                    # bar.close (the pre_open yield carries bar.open, so look
+                    # the close up from the engine's trade bars).
+                    flatten_pending.discard(symbol)
+                    dts = trade_bar_dts[symbol]
+                    idx = bisect_left(dts, current_dt)
+                    if idx < len(dts) and dts[idx] == current_dt:
+                        flat_price = float(engines[symbol].trade_bars[idx].close)
+                    else:  # defensive: a pre_open yield always maps to a trade bar
+                        flat_price = float(item[2])
+                    _flatten_symbol(symbol, flat_price, current_dt)
                 equity, margin, reason = ledger.pre_open_injection_for(symbol)
                 if reason is not None:
                     # Speculative record of gating pressure: an open attempted
@@ -721,7 +773,15 @@ class PortfolioEngine:
                     symbol_reports[symbol] = stop.value
                     pending[symbol] = None
                     ended[symbol] = current_dt
+                was_active = ledger.daily_loss_limit_active
                 ledger.check_daily_loss_limit()
+                if ledger.daily_loss_limit_active and not was_active:
+                    # A90: False->True trigger transition — flatten the
+                    # triggering symbol immediately at this tick (post_item[2]
+                    # is its own bar.close) and defer every other symbol to
+                    # its own next "pre_open" yield.
+                    _flatten_symbol(symbol, float(post_item[2]), current_dt)
+                    flatten_pending.update(s for s in successful_symbols if s != symbol)
 
             # One entry per unique tick: ledger state has converged by the end
             # of the tick's symbol loop, so this is well-defined.
@@ -763,10 +823,11 @@ class PortfolioEngine:
             "pairs": all_pairs,
             "blocked_opens": blocked_opens,
             "loss_limit_triggers": ledger.loss_limit_triggers,
-            # A87 scope is block-new-opens only; no forced liquidation happens
-            # in this path (deferred to A89), so there is deliberately no
-            # "flat_events" field.
-            "flatten_on_breach": "not_implemented_see_A89",
+            # A90: forced liquidation on a daily-loss-limit breach is now
+            # wired up in this driver (see
+            # docs/design/a89-forced-liquidation-design.md).
+            "flat_events": flat_events,
+            "flatten_on_breach": "implemented_see_A90",
             "sizing_caveat": sizing_caveat,
         }
 

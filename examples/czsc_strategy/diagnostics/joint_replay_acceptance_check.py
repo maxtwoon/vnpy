@@ -23,6 +23,13 @@ then performs independent sanity checks on the joint report:
 5. Case-insensitive cluster membership on real symbol names, plus a live
    :class:`PortfolioLedger` check that ``margin_by_cluster`` groups
    ``RB888``/``SC888``/``ZN888`` under ``industrial_energy``.
+6. ``flat_events`` coherence (A90): forced-liquidation entries reference run
+   symbols, carry the ``daily_loss_limit_flatten`` reason, sit inside the run
+   window, and do not close before they opened.  Trigger-day coverage is
+   reported informationally; an empty ``flat_events`` list is gated on being
+   *explainable* — for every trigger at least one pair must close on the
+   trigger tick itself (i.e. a position existed at the trigger moment but was
+   closed by the strategy's own exit before the breach was detected).
 
 RESEARCH-ONLY — Diagnostic only, not a trading recommendation.
 """
@@ -233,6 +240,90 @@ def _check_blocked_opens(report: dict[str, Any], corr_clusters: dict[str, list[s
     }
 
 
+def _check_flat_events(report: dict[str, Any]) -> dict[str, Any]:
+    """6. flat_events coherence (A90 forced-liquidation smoke check).
+
+    Every entry must reference a run symbol, carry the A90 reason, sit inside
+    the run window, and not close before it opened.  An empty list is a
+    legitimate outcome when the portfolio is already flat at the trigger
+    moment (exactly what happens on 2022-03-30: the only position still open
+    was stopped out by the strategy itself on the trigger tick, before the
+    breach was detected — see the A90 addendum in
+    ``joint_replay_acceptance_2026-07-17.md``), so coverage of the trigger
+    day(s) is reported informationally, not gated.  Instead, an empty list is
+    gated on being *explainable*: for every trigger at least one pair must
+    close exactly on the trigger tick (a position existed at the trigger
+    moment but was closed by the strategy's own exit logic before
+    ``check_daily_loss_limit()`` ran for that tick).
+    """
+    flat_events = report.get("flat_events", []) or []
+    pairs = report.get("pairs", []) or []
+    triggers = report.get("loss_limit_triggers", []) or []
+    run_symbols = set(report.get("symbols", []))
+    trigger_days = {str(t.get("trading_day")) for t in triggers}
+    by_symbol: dict[str, int] = {}
+    by_date: dict[str, int] = {}
+    entries_valid = True
+    for entry in flat_events:
+        symbol = str(entry.get("symbol", ""))
+        by_symbol[symbol] = by_symbol.get(symbol, 0) + 1
+        dt_str = str(entry.get("dt", ""))
+        by_date[dt_str[:10]] = by_date.get(dt_str[:10], 0) + 1
+        if symbol not in run_symbols:
+            entries_valid = False
+        if entry.get("reason") != "daily_loss_limit_flatten":
+            entries_valid = False
+        if not (DEFAULT_START <= dt_str[:10] <= DEFAULT_END):
+            entries_valid = False
+        if str(entry.get("open_dt", "")) > dt_str:
+            entries_valid = False
+        if not entry.get("strategy"):
+            entries_valid = False
+    # Explanation per trigger: which pairs closed exactly on the trigger
+    # tick (any reason).  A non-empty closes list explains an empty
+    # flat_events: positions were open at the trigger moment but closed by
+    # the strategy itself before the breach check ran on that tick.
+    trigger_explanations: list[dict[str, Any]] = []
+    for trigger in triggers:
+        trigger_dt = str(trigger.get("dt", ""))
+        closes_on_trigger = [
+            {
+                "symbol": p.get("symbol"),
+                "strategy": p.get("strategy"),
+                "open_dt": str(p.get("open_dt")),
+                "close_dt": str(p.get("close_dt")),
+                "reason": p.get("reason"),
+            }
+            for p in pairs
+            if str(p.get("close_dt")) == trigger_dt
+        ]
+        trigger_explanations.append({
+            "trigger_dt": trigger_dt,
+            "closes_on_trigger_tick": closes_on_trigger,
+            "explains_empty_flat_events": bool(closes_on_trigger),
+        })
+    return {
+        "flat_events_count": len(flat_events),
+        "flat_events_by_symbol": by_symbol,
+        "flat_events_by_date": by_date,
+        "flat_events_coherent": entries_valid,
+        # Informational only (not gated): an empty list is legitimate when no
+        # position is open at/after the trigger moment.
+        "flat_events_cover_trigger_days": all(
+            day in by_date for day in trigger_days
+        ),
+        # Gated: an empty flat_events is acceptable only when every trigger
+        # is explainable by a strategy-side close on the trigger tick.
+        "flat_events_trigger_explanations": trigger_explanations,
+        "flat_events_non_empty_or_explained": (
+            bool(flat_events)
+            or all(e["explains_empty_flat_events"] for e in trigger_explanations)
+        ),
+        "flat_events_sample": flat_events[:5],
+        "flat_events_full": flat_events,
+    }
+
+
 def _check_clusters(corr_clusters: dict[str, list[str]]) -> dict[str, Any]:
     """5. Case-insensitive cluster membership + live margin_by_cluster grouping."""
     lower_symbols = [s.lower() for s in DEFAULT_SYMBOLS]
@@ -426,6 +517,7 @@ def main() -> dict[str, Any]:
     checks.update(_check_symbol_errors(joint_report))
     checks.update(_check_equity_margin_arithmetic(joint_report))
     checks.update(_check_blocked_opens(joint_report, corr_clusters))
+    checks.update(_check_flat_events(joint_report))
     checks.update(_check_clusters(corr_clusters))
     checks["comparison_vs_independent"] = _compare_with_independent(
         joint_report, independent, a83_payload
@@ -441,6 +533,8 @@ def main() -> dict[str, Any]:
         checks["utilization_not_wildly_discontinuous"],
         checks["all_values_finite"],
         checks["blocked_opens_coherent"],
+        checks["flat_events_coherent"],
+        checks["flat_events_non_empty_or_explained"],
         checks["cluster_membership_case_insensitive"],
         checks["live_cluster_grouping_ok"],
         checks["comparison_vs_independent"]["pnl_reasonably_close"],

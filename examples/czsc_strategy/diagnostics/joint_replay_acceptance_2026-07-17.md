@@ -219,3 +219,53 @@ Test results:
 - `python tools/sync_check.py`: **PASS**
 - `python tools/sync_check.py --root examples/czsc_strategy`: **PASS**
 - `run_next_work.ps1 -Preflight`: **Preflight complete; 192 SimNow unit tests passed**
+
+---
+
+## A90 Addendum (2026-07-20): Forced-Liquidation Wiring + Acceptance-Script Fix
+
+**What changed since the A88 acceptance above:** A90 implemented the forced liquidation that
+A88 explicitly scoped out (`flatten_on_breach` was `"not_implemented_see_A89"`). Per
+`docs/design/a89-forced-liquidation-design.md`, the joint driver now flattens the triggering
+symbol at the trigger tick and every other symbol at its own next `"pre_open"` yield (using
+that symbol's own current-tick `bar.close`), via the pre-existing
+`ChanTimingStrategy.flatten_all_positions()` primitive. The joint report now carries a
+`flat_events` list and `flatten_on_breach="implemented_see_A90"`.
+
+**Honest headline: `flat_events` is EMPTY on this real-data run — and that is the correct
+outcome, not a wiring failure.** Root cause (independently confirmed by claude-code during
+mid-dev due diligence, via a monkeypatch tracing every `flatten_all_positions` call — 0 calls
+traced): the single real trigger (2022-03-30 09:29:00, day PnL −3.0044%) lands on the exact
+bar where AP888's own stop-loss fired (`2022-03-24 14:29:00 -> 2022-03-30 09:29:00 止损`).
+The strategy's exit logic runs inside `strategy.update()`, *before* the post-bar
+`check_daily_loss_limit()` for that tick, so by the time the breach is detected AP888 already
+has zero open positions; the other four symbols also had none open at that moment. The
+driver's `if not open_before: return` guard correctly flattens nothing when there is nothing
+to flatten. The full trade sequence and total realized PnL of the joint replay are unchanged
+from the A88 baseline (−57,473.59), proving the A90 wiring has zero side effects on a
+no-positions-at-trigger run.
+
+**The actual bug found by this re-run was in this acceptance script, not the driver:** check
+`flat_events_cover_trigger_days` previously assumed a trigger day must always produce a
+non-empty `flat_events`, failing `overall_accepted` on this legitimate empty case. Fix
+(applied to `joint_replay_acceptance_check.py`, check 6): trigger-day coverage is now
+informational; instead, an empty `flat_events` is gated on being *explainable* — for every
+trigger at least one pair must close exactly on the trigger tick (here: AP888's stop-loss at
+`2022-03-30 09:29:00`, surfaced under `flat_events_trigger_explanations` /
+`flat_events_non_empty_or_explained` in the check JSON). `_build_joint_report()` itself was
+verified correct and was NOT modified as part of this fix.
+
+**Where the flatten mechanism itself is proven:** the constructed-fixture unit tests in
+`tests/unit/test_a87_joint_replay.py` — including
+`test_daily_loss_limit_flattens_open_positions` (triggering symbol flattened at the trigger
+tick; `flat_events` asserted field-by-field; fires exactly once at the False→True transition)
+and `test_daily_loss_limit_lagging_symbol_flattens_at_own_price` (a lagging symbol is
+flattened at its own next `pre_open` at its OWN close of 95.0, never the trigger tick's 91.0)
+— are the actual proof the wiring fires correctly when positions exist at trigger time. This
+real-data window simply never exercises a non-empty `flat_events`; we do not claim otherwise.
+
+**A88 scope boundary update:** the sentence above saying forced liquidation "is **not**
+implemented (A89, not yet scoped)" was accurate as of A88. As of A90 it is implemented and
+unit-tested; on this specific real-data window it legitimately produced zero flat events.
+Everything else in the A88 acceptance (gating coherence, cluster checks, determinism,
+comparison vs independent runs) is unaffected and re-verified by the re-run.

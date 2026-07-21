@@ -383,6 +383,29 @@
       "reason": "daily_loss_limit"
     }
   ],
+  "flat_events_count": 0,
+  "flat_events_by_symbol": {},
+  "flat_events_by_date": {},
+  "flat_events_coherent": true,
+  "flat_events_cover_trigger_days": false,
+  "flat_events_trigger_explanations": [
+    {
+      "trigger_dt": "2022-03-30 09:29:00",
+      "closes_on_trigger_tick": [
+        {
+          "symbol": "AP888",
+          "strategy": "一买多头",
+          "open_dt": "2022-03-24 14:29:00",
+          "close_dt": "2022-03-30 09:29:00",
+          "reason": "止损"
+        }
+      ],
+      "explains_empty_flat_events": true
+    }
+  ],
+  "flat_events_non_empty_or_explained": true,
+  "flat_events_sample": [],
+  "flat_events_full": [],
   "cluster_membership_case_insensitive": true,
   "uppercase_mapping": {
     "AP888": [],
@@ -504,6 +527,6 @@
       "day_pnl_pct": -0.03004435736718259
     }
   ],
-  "flatten_on_breach": "not_implemented_see_A89",
+  "flatten_on_breach": "implemented_see_A90",
   "overall_accepted": true
 }
