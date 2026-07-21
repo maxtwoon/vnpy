@@ -2,6 +2,32 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.40（2026-07-22）- A102 新增两份 20 日 SimNow 晋升准备度实现的平价回归测试
+  （第三次全面 re-audit M-NEW-3；**纯测试新增，明确不是对底层重复实现的修复**）：
+  - 背景：`diagnostics/simnow_daily_monitor.py::build_20d_report` 与
+    `diagnostics/simnow_promotion_decision.py::decide_promotion` 独立维护同一「20 日晋升准备度」
+    判定，子计数已真实分化（前者 `halt_days` 还检查 `order_safety.status=="halt"`、
+    `consistency_matched_days` 要求 `matched AND verified`；后者只看 `thresholds.status=="halt"`、
+    接受任意真值 `matched`）。当前最终 verdict 仍一致，仅因两者都先经共享且更严格的
+    `is_valid_observation()` 门禁（`valid_observation_days >= min_days`）兜底——属「真实但当前惰性」
+    的分化，非现行 bug。
+  - **范围决定：本次只加回归测试，不合并/不修改任一实现**——两个文件属于正在并发运行的
+    SimNow 20 日晋升决策工作流，删除或改动其实现的风险大于关闭一个已被独立确认非现行的分化；
+    是否合并留给能直接看到该并发工作流状态的人类维护者作为独立任务决定。
+  - 新增 `tests/unit/test_simnow_promotion_parity.py`（全新文件，不扩展既有
+    `test_simnow_daily_monitor.py`，避免与并发工作流产生合并冲突），3 条测试：
+    (a) 全干净 20 日窗口，两实现 `ready_to_expand` 一致为 True；
+    (b) 直接构造分化日（`order_safety` halt 但 `thresholds` 非 halt；`matched=True` 但
+    `verified=False`），断言最终 verdict 仍一致为 False，同时显式钉住两实现
+    `halt_days`（1 vs 0）与 `consistency_matched_days`（19 vs 20）子计数确实不同——
+    这是核心回归钉：未来任何让子计数分化传导到 `ready_to_expand` 分歧的改动会立即 fail；
+    (c) 有效观察日不足 `min_days` 的窗口，两实现以同一原因
+    （`valid_observation_days < min_days`）一致判定 not ready。
+  - 零生产代码变化：`diagnostics/`、`chan_strategy/` 下文件逐字节未动；
+    单测通过：776 → 779（not-realdb，净 +3 条新测试）；`-m realdb` 等价门禁不变通过；
+    双侧 sync_check、Preflight、ruff 均通过（见根 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.39（2026-07-22）
 - A101 SimNow 准备度门禁 docstring 与实际判定逻辑对齐 + 未检测硬门槛 fail-closed 修复
   （第二次全面 re-audit H-NEW-2，两处相互独立的变化）：

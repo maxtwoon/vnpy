@@ -1,8 +1,8 @@
 ---
 task: A102 - Add parity regression test for the two 20d promotion-readiness implementations (3rd re-audit M-NEW-3)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -10,11 +10,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -167,10 +167,80 @@ concurrent workstream's state — explicitly NOT this task.
 - 2026-07-22 (claude-code, design) - Chose to create a brand-new test file rather than extend
   `tests/unit/test_simnow_daily_monitor.py` specifically to minimize any chance of a merge conflict with
   the concurrent workstream, which may independently be modifying that file.
+- 2026-07-22 (kimi-code, dev) - Implemented exactly as scoped: new file
+  `examples/czsc_strategy/tests/unit/test_simnow_promotion_parity.py` (3 tests), zero changes under
+  `diagnostics/` or `chan_strategy/`. Followed the existing `sys.path` shim import pattern from
+  `test_simnow_daily_monitor.py`. Scenario (b) pins the live divergence explicitly:
+  `halt_days` 1 vs 0 and `consistency_matched_days` 19 vs 20 between `build_20d_report` and
+  `decide_promotion`, while both `ready_to_expand` agree (False) because the shared
+  `is_valid_observation()` gate excludes both divergent days. VERSION bumped 0.2.39 -> 0.2.40  # synccheck:ignore
+  with a CHANGELOG entry stating this is test-only and NOT a fix to the underlying duplication.
+- 2026-07-22 (kimi-code, dev) - Minor deviation note: `run_next_work.ps1` lives under
+  `examples/czsc_strategy/diagnostics/`, not the czsc_strategy root; preflight was run from that
+  directory and passed. Pre-existing unrelated working-tree modifications (`diagnostics/WORK_LOG.md`,
+  `diagnostics/simnow_20d_promotion_decision.md`) belong to the concurrent SimNow workstream and were
+  not touched; `git status --short` confirms only A102-scoped files (CHANGELOG.md, VERSION, the new
+  test file) are mine.
 
 ## Manual Verification
 
-(pending — dev fills in)
+All commands run natively on Windows PowerShell from `D:\repo\vnpy` (unless noted).
+
+1. New parity tests alone:
+
+   ```
+   > python -m pytest examples/czsc_strategy/tests/unit/test_simnow_promotion_parity.py -q
+   ...                                                                      [100%]
+   3 passed in 0.10s
+   ```
+
+2. Full unit suite (baseline before change: 776 passed; after: +3 new tests):
+
+   ```
+   > python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+   ...........................................................              [100%]
+   779 passed, 4 deselected in 45.67s
+   ```
+
+3. `-m realdb` equivalence gate (from `examples/czsc_strategy/`), verified rather than assumed:
+
+   ```
+   > python -m pytest tests/unit -m realdb -q
+   ....                                                                     [100%]
+   4 passed, 779 deselected in 77.77s (0:01:17)
+   ```
+
+4. Both sync_check gates:
+
+   ```
+   > python tools/sync_check.py
+   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+   [SYNC-CHECK] PASS: 版本与文档一致。
+
+   > python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = 0.2.40  (source: VERSION::)  # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致。
+   ```
+
+5. Preflight (script lives under `diagnostics/`; run from there):
+
+   ```
+   > powershell -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight
+   ==> Run SimNow workflow unit tests
+   205 passed in 30.72s
+   ==> Preflight complete; live SimNow capture was not requested
+   ```
+
+6. Ruff on the new test file:
+
+   ```
+   > ruff check examples/czsc_strategy/tests/unit/test_simnow_promotion_parity.py
+   All checks passed!
+   ```
+
+7. `git status --short` confirms only A102-scoped files are mine (CHANGELOG.md, VERSION,
+   `tests/unit/test_simnow_promotion_parity.py`); the two `diagnostics/` modifications pre-date this
+   task and belong to the concurrent SimNow workstream — untouched.
 
 ## 交接历史
 
@@ -178,3 +248,4 @@ concurrent workstream's state — explicitly NOT this task.
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A102 (promotion-readiness parity test, 3rd re-audit M-NEW-3) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A102 promoted design->dev |
+| 2026-07-22 | kimi-code → codex | dev → review | A102 promotion-readiness parity test completed |
