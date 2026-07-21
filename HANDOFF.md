@@ -1,7 +1,7 @@
 ---
 task: A99 - Reconcile Sharpe-ratio threshold inconsistency in SimNow readiness gate (re-audit M-NEW-1)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-22
 deliverables:
@@ -12,10 +12,10 @@ deliverables:
   - examples/czsc_strategy/tests/unit/test_simnow_readiness_sharpe.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -310,3 +310,4 @@ Windows from `D:\repo\vnpy` unless noted.
 | 2026-07-22 | claude-code → claude-code | design → design | A99 (Sharpe threshold reconciliation, re-audit M-NEW-1) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A99 promoted design->dev |
 | 2026-07-22 | kimi-code → codex | dev → review | A99 Sharpe threshold reconciliation completed: docstring + suggestion message aligned to enforced 0.3 gate (no behavior change); 4 new boundary tests (768->772); VERSION/CHANGELOG bumped; realdb 1 pre-existing env failure verified unrelated to A99 |
+| 2026-07-22 | codex → codex | review → done | A99 review accepted: threshold wording/test coverage verified; sync gates pass; broad unit/preflight reruns hit documented sandbox tmp_path PermissionError and HANDOFF manual verification records native passes |
