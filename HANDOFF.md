@@ -1,8 +1,8 @@
 ---
 task: A101 - Fix SimNow readiness gate soft-quota/docstring mismatch and None-passes-as-True gap (2nd re-audit H-NEW-2)
 version: 4.4.0
-stage: design
-owner: claude-code
+stage: dev
+owner: kimi-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -10,12 +10,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: fix
+last_transition_kind: next
 last_transition_actor: claude-code
 last_transition_from_stage: design
-last_transition_to_stage: design
+last_transition_to_stage: dev
 last_transition_from_owner: claude-code
-last_transition_to_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -220,3 +220,4 @@ in `validation.py:999-1004` only. Reasoning:
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A101 (SimNow readiness gate fix, 2nd re-audit H-NEW-2) scoped; drafting design brief |
+| 2026-07-22 | claude-code → kimi-code | design → dev | A101 promoted design->dev |
