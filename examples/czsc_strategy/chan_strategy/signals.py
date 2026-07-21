@@ -490,9 +490,27 @@ def signal_second_buy(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None)
     二买信号（已废弃）
 
     .. deprecated::
-        The authoritative implementation is now in ``chan_strategy.sell_signals``.
-        This version is kept only for backward compatibility with existing imports
-        and tests; do not use it in new code.
+        The authoritative implementation for new code is
+        ``chan_strategy.sell_signals.signal_second_buy``. This version is part of
+        a self-contained "legacy signal system" assembled by
+        :func:`get_legacy_signals` (together with ``signal_bi_direction``,
+        ``signal_zs_position``, ``signal_first_buy`` and the other signals defined
+        in this module) and is kept only for backward compatibility with
+        historical callers of :func:`get_legacy_signals` / this module's
+        deprecated ``get_all_signals`` wrapper.
+
+        This is **not** a stray duplicate of ``sell_signals``'s implementation:
+        the two are independently maintained code paths that have already
+        diverged and may continue to diverge, so this version is **not
+        guaranteed to produce the same result** as
+        ``sell_signals.signal_second_buy`` for the same input. Do not
+        "reconcile" them by forwarding one to the other —
+        :func:`get_legacy_signals` depends on this module-local implementation,
+        and this implementation has its own dedicated unit test coverage
+        (``tests/unit/test_remaining_coverage.py``, e.g.
+        ``test_base_second_buy_edge_branches``) which monkeypatches this
+        module's own references to validate its own behavior; forwarding to
+        ``sell_signals`` would silently invalidate those tests.
 
     信号名: {freq}_D1BSP_二买V260615
     分类: 非二买 / 二买候选 / 二买确认
@@ -631,9 +649,27 @@ def signal_third_buy(c: CZSC, freq: str = "30分钟") -> dict:
     三买信号（已废弃）
 
     .. deprecated::
-        The authoritative implementation is now in ``chan_strategy.sell_signals``.
-        This version is kept only for backward compatibility with existing imports
-        and tests; do not use it in new code.
+        The authoritative implementation for new code is
+        ``chan_strategy.sell_signals.signal_third_buy``. This version is part of
+        a self-contained "legacy signal system" assembled by
+        :func:`get_legacy_signals` (together with ``signal_bi_direction``,
+        ``signal_zs_position``, ``signal_first_buy`` and the other signals defined
+        in this module) and is kept only for backward compatibility with
+        historical callers of :func:`get_legacy_signals` / this module's
+        deprecated ``get_all_signals`` wrapper.
+
+        This is **not** a stray duplicate of ``sell_signals``'s implementation:
+        the two are independently maintained code paths that have already
+        diverged and may continue to diverge, so this version is **not
+        guaranteed to produce the same result** as
+        ``sell_signals.signal_third_buy`` for the same input. Do not
+        "reconcile" them by forwarding one to the other —
+        :func:`get_legacy_signals` depends on this module-local implementation,
+        and this implementation has its own dedicated unit test coverage
+        (``tests/unit/test_remaining_coverage.py``, e.g.
+        ``test_base_third_buy_edge_branches``) which monkeypatches this
+        module's own references to validate its own behavior; forwarding to
+        ``sell_signals`` would silently invalidate those tests.
 
     信号名: {freq}_D1BSP_三买阶段V260615
     分类: 非三买 / 离开中枢 / 回抽不入中枢 / 三买确认
@@ -862,6 +898,16 @@ def get_legacy_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None
         该函数已被 ``chan_strategy.sell_signals.get_all_signals`` 取代，保留此
         入口仅用于兼容历史脚本。新代码应始终从 ``chan_strategy.sell_signals``
         导入 ``get_all_signals``。
+
+        本函数汇总的是一套**自包含的"遗留信号系统"**：所有被组装的信号函数
+        （``signal_bi_direction``、``signal_zs_position``、``signal_first_buy``、
+        本模块自己的 ``signal_second_buy``/``signal_third_buy`` 等）均定义在
+        本模块内，并非 ``sell_signals`` 同名实现的冗余副本。两套系统是**独立
+        维护**的代码路径，已经分叉且可能继续分叉——对同一输入，本系统的结果
+        **不保证**与 ``sell_signals.get_all_signals`` 一致。请勿试图通过转发/
+        委托来"统一"二者：本系统有自己的专属单测覆盖
+        （``tests/unit/test_remaining_coverage.py``），直接针对本模块实现本身
+        的行为进行验证，转发会使这些测试的 monkeypatch 静默失效。
     """
     signals = {}
     signals.update(signal_bi_direction(c, freq))
@@ -884,6 +930,13 @@ def get_all_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None) -
     .. deprecated::
         此入口已弃用，请改用 ``chan_strategy.sell_signals.get_all_signals``。
         内部仅转发到 :func:`get_legacy_signals` 并触发 ``DeprecationWarning``。
+
+        注意：转发目标 :func:`get_legacy_signals` 组装的是本模块自包含的"遗留
+        信号系统"（使用本模块自己的 ``signal_second_buy``/``signal_third_buy``
+        等实现），它与 ``sell_signals`` 的信号系统是**独立维护**的两条代码路
+        径，不是同一份逻辑的冗余副本——对同一输入，二者结果**不保证**一致。
+        该遗留系统拥有专属单测覆盖（``tests/unit/test_remaining_coverage.py``），
+        请勿为"去重"而改为转发到 ``sell_signals``，那会静默使这些测试失效。
     """
     warnings.warn(
         "chan_strategy.signals.get_all_signals is deprecated; use "

@@ -1,19 +1,19 @@
 ---
 task: A96 - Document signals.py's legacy signal system as independently-maintained, not a duplicate (audit M3)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/signals.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -77,24 +77,24 @@ the audit's suggested fixes ("forward to sell_signals, or remove entirely and ce
 
 ## Acceptance Criteria
 
-- [ ] `signal_second_buy`/`signal_third_buy`'s docstrings explicitly state: (a) they belong to the
+- [x] `signal_second_buy`/`signal_third_buy`'s docstrings explicitly state: (a) they belong to the
       self-contained legacy signal system used by `get_legacy_signals()`, (b) they are independently
       maintained and not guaranteed to match `sell_signals`'s same-named functions, (c) they have their own
       dedicated test coverage, (d) new code should use `sell_signals` instead.
-- [ ] `get_legacy_signals()`/`get_all_signals()`'s existing deprecation notes are strengthened with the
+- [x] `get_legacy_signals()`/`get_all_signals()`'s existing deprecation notes are strengthened with the
       same "independently-maintained system, not a duplicate" framing.
-- [ ] No change to any function's logic, signature, or return value in `signals.py` or `sell_signals.py`.
-- [ ] No change to any test's assertions; `test_second_buy_bug.py` and
+- [x] No change to any function's logic, signature, or return value in `signals.py` or `sell_signals.py`.
+- [x] No change to any test's assertions; `test_second_buy_bug.py` and
       `tests/unit/test_remaining_coverage.py`'s second/third-buy tests still pass unchanged.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes, exact same pass count.
-- [ ] `-m realdb` equivalence gate still passes unchanged (comment-only change to `signals.py`, but verify
+- [x] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes, exact same pass count.
+- [x] `-m realdb` equivalence gate still passes unchanged (comment-only change to `signals.py`, but verify
       rather than assume, same discipline as A94/A95).
-- [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
-- [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] `ruff check` clean on touched files.
-- [ ] VERSION/CHANGELOG bumped.
-- [ ] Include a literal `## Manual Verification` heading with natively-run command output.
-- [ ] **Remember the `synccheck:ignore` marker** for any version-like string mentioned in this task's own
+- [x] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
+- [x] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
+- [x] `ruff check` clean on touched files.
+- [x] VERSION/CHANGELOG bumped.
+- [x] Include a literal `## Manual Verification` heading with natively-run command output.
+- [x] **Remember the `synccheck:ignore` marker** for any version-like string mentioned in this task's own
       HANDOFF notes — this has bitten nearly every task in this session.
 
 ## Notes for the Next Agent
@@ -139,12 +139,59 @@ the audit's suggested fixes ("forward to sell_signals, or remove entirely and ce
   that any future decision to actually unify or retire the legacy system is a real architectural decision
   needing its own design conversation, not something to resolve inside this task.
 
+- 2026-07-21 (kimi-code, dev) - Implemented A96 as scoped: docstring-only edits to `signals.py`
+  (`signal_second_buy`, `signal_third_buy`, `get_legacy_signals`, `get_all_signals`), no logic/signature/
+  return-value changes, `sell_signals.py` and all tests untouched. Small deviation recorded: the acceptance
+  item says `run_next_work.ps1 -Preflight` "from `examples/czsc_strategy/`", but the script actually lives
+  at `examples/czsc_strategy/diagnostics/run_next_work.ps1`; Preflight was run from there and passed
+  (exit 0). czsc_strategy VERSION bumped to 0.2.34 with CHANGELOG entry (synccheck:ignore).
+
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+All commands run natively by kimi-code on 2026-07-21 (Windows PowerShell). VERSION bumped to
+0.2.34 with a CHANGELOG entry (synccheck:ignore). `git diff` on `signals.py` shows 59 insertions /
+6 deletions, all inside docstrings — no logic line touched; `sell_signals.py` untouched.
+
+```
+$ python -m pytest tests/unit -q -m "not realdb"        (cwd: examples/czsc_strategy)
+761 passed, 4 deselected in 40.31s                      # same pass count as A95 baseline (761)
+
+$ python -m pytest tests/unit -m realdb -q              (cwd: examples/czsc_strategy)
+4 passed, 761 deselected in 81.71s (0:01:21)            # equivalence gate unchanged
+
+$ python -m pytest tests/unit/test_remaining_coverage.py -k "second_buy or third_buy" -q
+2 passed, 6 deselected in 0.09s                         # dedicated legacy second/third-buy tests
+
+$ python tools/sync_check.py                            (repo root)
+[SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+[SYNC-CHECK] PASS: 版本与文档一致。  (exit 0)
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.34  (source: VERSION::)   (synccheck:ignore)
+[SYNC-CHECK] PASS: 版本与文档一致。  (exit 0)
+
+$ ruff check examples/czsc_strategy/chan_strategy/signals.py
+All checks passed!  (exit 0)
+
+$ .\run_next_work.ps1 -Preflight                        (cwd: examples/czsc_strategy/diagnostics)
+200 passed in 23.75s  (SimNow workflow unit tests)
+==> Preflight complete; live SimNow capture was not requested   (exit 0)
+
+$ git status --short                                    # only A96-scoped files + pre-existing
+ M examples/czsc_strategy/CHANGELOG.md                  # unrelated SimNow-workstream modifications
+ M examples/czsc_strategy/VERSION
+ M examples/czsc_strategy/chan_strategy/signals.py
+ M examples/czsc_strategy/diagnostics/WORK_LOG.md               (pre-existing, not touched by A96)
+ M examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md  (pre-existing, not touched)
+```
+
+Note: `run_next_work.ps1` actually lives under `examples/czsc_strategy/diagnostics/` (not the
+`examples/czsc_strategy/` root as the acceptance item literally says), so Preflight was run from
+there; it passed with exit 0.
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A96 (document legacy signal system, audit M3) promoted; handoff design->dev |
+| 2026-07-21 | kimi-code → codex | dev → review | A96 legacy signal system documented |

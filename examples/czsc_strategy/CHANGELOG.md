@@ -2,6 +2,19 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.34（2026-07-21）
+- A96 文档化 `signals.py` 遗留信号系统为独立维护系统而非冗余副本（audit M3；纯 docstring，无行为变化）：
+  - `chan_strategy/signals.py` `signal_second_buy`/`signal_third_buy` 的 `.. deprecated::` 块扩写，
+    明确四点：(a) 属于 `get_legacy_signals()` 自包含的「遗留信号系统」，(b) 与 `sell_signals`
+    同名实现为独立维护的代码路径、已分叉且不保证同输入同结果，(c) 拥有专属单测覆盖
+    （`tests/unit/test_remaining_coverage.py`，具名 `test_base_second_buy_edge_branches`/
+    `test_base_third_buy_edge_branches`），转发会静默使 monkeypatch 失效，(d) 新代码应使用
+    `sell_signals` 的实现；
+  - `get_legacy_signals()` 的 `.. note::` 与废弃的 `get_all_signals()` 包装器的 `.. deprecated::`
+    块以同样的「独立维护、非冗余副本」框架强化说明；
+  - 未改任何函数逻辑/签名/返回值，未触碰 `sell_signals.py`、未触碰任何测试；单测通过数不变
+    （761 not-realdb），`-m realdb` 等价门禁逐字节一致，双侧 sync_check、Preflight、ruff 均通过。
+    RESEARCH-ONLY，不构成交易建议。
 ## 0.2.33（2026-07-21）
 - A95 文档化 `risk_per_trade_pct` 为名义风险预算而非硬亏损上限（audit M1；纯注释/docstring，无行为变化）：
   - `chan_strategy/config.py:87` 内联注释改为明确说明该参数是**名义**单笔风险预算（权益的 0.5%），
