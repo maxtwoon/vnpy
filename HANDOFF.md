@@ -1,8 +1,8 @@
 ---
 task: A95 - Document risk_per_trade_pct as a nominal budget, not a hard loss cap (audit M1)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -10,11 +10,11 @@ deliverables:
   - examples/czsc_strategy/chan_strategy/positions.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -116,13 +116,67 @@ acceptance artifact, not documentation to update).
   document (`diagnostics/joint_replay_acceptance_2026-07-17.md`, explicitly excluded from this task's
   scope). Scoped the fix to comment/docstring clarification only, matching the audit's own recommendation
   ("应在文档中明确其名义属性").
+- 2026-07-21 (kimi-code, dev) - Implemented exactly as scoped: rewrote the `config.py:87` inline comment
+  to state `risk_per_trade_pct` is a NOMINAL risk budget (sized off stop-loss distance), not a guaranteed
+  max loss, naming the three non-stop exit paths; added a Note paragraph to `_size_open()`'s docstring
+  explaining the same with concrete exit paths (structural failure, timeout, gap-through incl. the
+  `intrabar` `min(trigger, close)` partial modeling). Independent grep for `risk_per_trade|risk per
+  trade|风险预算|每笔风险` found no other production-code comment implying a hard cap (test files only
+  read the value / assert the default — untouched per scope). No logic, default, or test changes.
+  VERSION bumped to 0.2.33 with a specific CHANGELOG entry. <!-- synccheck:ignore -->
+- 2026-07-21 (kimi-code, dev) - `run_next_work.ps1` lives under `examples/czsc_strategy/diagnostics/`,
+  not directly under `examples/czsc_strategy/`; ran Preflight from there (passed).
+- 2026-07-21 (kimi-code, dev) - One background pytest invocation (not-realdb + realdb chained) hit the
+  60s default background timeout after the not-realdb half completed (761 passed); reran `-m realdb`
+  separately with an explicit longer timeout — 4 passed, 761 deselected, equivalence gate green. No
+  hand-editing of stage/owner fields involved.
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+All commands run natively on this machine (Windows PowerShell, repo root `D:\repo\vnpy` unless noted).
+
+```text
+# 1. Baseline unit tests (before edits)
+PS> cd examples/czsc_strategy; python -m pytest tests/unit -q -m "not realdb"
+761 passed, 4 deselected in 42.50s
+
+# 2. Post-change unit tests (identical pass count)
+PS> cd examples/czsc_strategy; python -m pytest tests/unit -q -m "not realdb"
+761 passed, 4 deselected in 42.42s
+
+# 3. realdb equivalence gate
+PS> cd examples/czsc_strategy; python -m pytest tests/unit -q -m "realdb"
+4 passed, 761 deselected in 79.47s (0:01:19)
+
+# 4. ruff on touched files
+PS> cd examples/czsc_strategy; ruff check chan_strategy/config.py chan_strategy/positions.py
+All checks passed!
+
+# 5. sync_check (root + czsc_strategy)
+PS> python tools/sync_check.py
+[SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+[SYNC-CHECK] PASS: 版本与文档一致。
+PS> python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.33  (source: VERSION::)  <!-- synccheck:ignore -->
+[SYNC-CHECK] PASS: 版本与文档一致。
+
+# 6. Preflight (script lives under diagnostics/)
+PS> cd examples/czsc_strategy/diagnostics; powershell -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight
+200 passed in 23.74s
+==> Preflight complete; live SimNow capture was not requested
+
+# 7. Working tree scope check — only A95 files modified
+PS> git status --short
+ M examples/czsc_strategy/CHANGELOG.md
+ M examples/czsc_strategy/VERSION
+ M examples/czsc_strategy/chan_strategy/config.py
+ M examples/czsc_strategy/chan_strategy/positions.py
+ M HANDOFF.md  (this file's own dev-stage update)
+```
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A95 (document risk_per_trade_pct nominal budget, audit M1) promoted; handoff design->dev |
+| 2026-07-21 | kimi-code → codex | dev → review | A95 risk_per_trade_pct nominal-budget documentation completed |

@@ -2,6 +2,21 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.33（2026-07-21）
+- A95 文档化 `risk_per_trade_pct` 为名义风险预算而非硬亏损上限（audit M1；纯注释/docstring，无行为变化）：
+  - `chan_strategy/config.py:87` 内联注释改为明确说明该参数是**名义**单笔风险预算（权益的 0.5%），
+    按止损距离反推手数，**不是**保证的最大亏损——实际亏损可经非止损退出路径（结构破坏退出、
+    超时退出、跳空穿越止损价）超过该预算；
+  - `chan_strategy/positions.py` `_size_open()` docstring 新增说明段：预算仅在「固定止损恰好
+    在止损价成交」时精确实现，并具名列出三条可超预算的退出路径（structural failure、timeout、
+    gap-through，含 `stop_execution_model="intrabar"` 仅以 `min(trigger, close)` 部分建模跳空
+    的说明）；
+  - grep 确认 `risk_per_trade_pct` 生产代码仅两处（`config.py:87`、`positions.py:1030`），
+    无其他暗示硬上限的注释；冻结验收文档 `diagnostics/joint_replay_acceptance_2026-07-17.md`
+    按任务范围未触碰；未改任何逻辑、默认值或测试断言；单测通过数不变（761 not-realdb），
+    `-m realdb` 等价门禁逐字节一致，双侧 sync_check、Preflight、ruff 均通过。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.32（2026-07-21）
 - A94 文档化背驰门禁中恒假的「确认」分支（audit M4；纯注释，无行为变化）：
   `chan_strategy/positions.py` 两处消费点（`_research_second_buy_allowed` 与

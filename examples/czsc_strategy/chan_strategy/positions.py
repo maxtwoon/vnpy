@@ -1015,6 +1015,15 @@ class Position:
         """Compute integer-lot size under A40 risk-mode sizing model.
 
         Returns (volume, contract_multiplier).  volume < 1 means the open should be skipped.
+
+        Note: ``risk_per_trade_pct`` is a NOMINAL risk budget, not a guaranteed
+        maximum loss.  ``equity * risk_per_trade_pct`` is divided by the position's
+        own fixed stop-loss distance, so the budget is realized exactly only when
+        the exit is the fixed stop-loss hit precisely at the stop price.  Actual
+        realized loss on a trade can exceed the budget via non-stop-loss exit
+        paths: structural-failure exits, timeout exits, or an overnight gap that
+        jumps past the stop price (``stop_execution_model="intrabar"`` only
+        partially models gap-through via ``min(trigger, close)``).
         """
         spec = _research_contract_spec(self.symbol)
         multiplier = int(spec.get("multiplier", 1))

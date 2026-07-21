@@ -84,7 +84,10 @@ STRATEGY_CONFIG = {
     # A40 real position sizing (P3). "research" is the legacy byte-identical default;
     # "risk" sizes integer lots from equity, stop distance, contract multiplier and margin cap.
     "sizing_model": "research",           # "research" (legacy, default) | "risk"
-    "risk_per_trade_pct": 0.005,          # fraction of equity risked per trade (0.5%)
+    "risk_per_trade_pct": 0.005,          # NOMINAL risk budget per trade (0.5% of equity), sized off the
+                                          # stop-loss distance; NOT a guaranteed max loss — actual loss can
+                                          # exceed it via non-stop exits (structural failure, timeout,
+                                          # gap-through the stop price). See Position._size_open docstring.
     "max_margin_pct": 0.50,               # cap on total open initial margin vs equity
     "max_symbol_margin_pct": 1.0,         # A87 joint replay only: per-symbol margin cap as a
                                           # fraction of shared portfolio equity (1.0 = no tighter
