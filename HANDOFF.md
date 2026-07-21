@@ -1,7 +1,7 @@
 ---
 task: A93 - Fix Position() orphan trailing-stop defaults vs config (audit M5)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-21
 deliverables:
@@ -12,10 +12,10 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -256,3 +256,4 @@ scratch AFTER the ruff-fix pass, per claude-code guidance item 3).
 | 2026-07-21 | kimi-code → codex | dev → review | A93 orphan trailing-stop defaults fixed: None-sentinel resolved from STRATEGY_CONFIG (commission_rate/slippage pattern); +1 unit test; 761 not-realdb + 4 realdb pass; dual sync_check pass; czsc VERSION bumped |
 | 2026-07-21 | codex → kimi-code | review → dev | 打回: A93 review blocked: touched-file ruff check is not clean and trailing_start comment still says stale 1.5 percent |
 | 2026-07-21 | kimi-code → codex | dev → review | A93 reject-fix: stale 1.5% comment removed (config-neutral); 30 ruff findings on touched files cleared (28 auto-fixed UP006/UP035/UP045/F401 + B905 strict=False); 761 not-realdb + 4 realdb pass unchanged; dual sync_check PASS; czsc VERSION patch-bumped |
+| 2026-07-21 | codex → codex | review → done | A93 review passed: None-sentinel trailing defaults resolved from STRATEGY_CONFIG, direct-construction test present, factory path unchanged, ruff and sync gates pass; sandbox pytest/preflight WinError 5 handled via recorded native verification counts. |
