@@ -1,8 +1,8 @@
 ---
 task: A92 - Validate A90 forced-liquidation actually flattens real positions + circuit-breaker caveat (audit H3)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -16,12 +16,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -135,6 +135,10 @@ honest about when it doesn't apply.
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before starting)
+
+### Codex review rejection - 2026-07-21
+
+1. `python -m ruff check examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.py examples/czsc_strategy/chan_strategy/backtest_engine.py examples/czsc_strategy/chan_strategy/portfolio_engine.py examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.py` fails with `F401` because `examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.py` imports `datetime` at line 53 but never uses it. Remove that import and rerun Ruff. CI runs `ruff check .`, so this blocks acceptance even though the A92 functional evidence and sync gates otherwise look coherent.
 
 1. **Part 1 is exploratory — you will not get the threshold right on the first try, and that's expected.**
    Do not force a result by picking an absurdly extreme threshold (e.g. 0.0001%) just to guarantee a
@@ -279,3 +283,4 @@ $ powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Pref
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A92 (A90 real-data flatten validation + circuit-breaker caveats, audit H3) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A92 forced-liquidation real-data validation completed |
+| 2026-07-21 | codex → kimi-code | review → dev | 打回: Ruff F401 unused datetime import in A92 stress checker |
