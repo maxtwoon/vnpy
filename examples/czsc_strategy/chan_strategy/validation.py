@@ -879,17 +879,27 @@ class SimNowReadinessChecker:
         """
         评估策略是否满足进入SimNow仿真的条件
 
-        条件:
+        条件共 10 项，分两类（与下方代码的实际判定逻辑一致）:
+
+        硬门槛（条件 1-4）——任何一项未显式通过（[NG] 或未检测/[?]）即 ready=False:
         1. 增量一致性检查 [OK]/[NG]
         2. 无重绘检查 [OK]/[NG]
         3. 冻结快照确定性检查 [OK]/[NG]
         4. 交易样本数量 >= 100 [OK]/[NG]
+
+        软配额（条件 5-10）——不单独否决 ready，仅计入 passed_count:
         5. 胜率 >= 45% [OK]/[NG]
         6. 盈亏比 >= 1.0 [OK]/[NG]
         7. 最大回撤 <= 20% [OK]/[NG]
         8. 夏普比率 >= 0.3 [OK]/[NG]
         9. 样本外表现未显著失效 [OK]/[NG]
         10. 参数轻微变化结果稳定 [OK]/[NG]
+
+        判定规则: ready = 硬门槛 1-4 全部显式通过（passed is True）
+        且 passed_count >= 7（即 10 项中显式通过的不少于 7 项，含已通过的硬门槛项）。
+        因此条件 5-10 中单项未通过不会单独否决 ready，只会降低 passed_count；
+        未提供对应输入的检查记为"未检测"（passed=None），既不计入 passed_count，
+        对硬门槛 1-4 而言也视同未通过（fail-closed）。
         """
         checks = {}
 
@@ -997,11 +1007,11 @@ class SimNowReadinessChecker:
         # - 交易样本<100：统计意义不足，无法评估策略表现。
         # 任何一项失败都不应进入仿真。
         signal_stable = (
-            checks.get("增量一致性检查", {}).get("passed") is not False
-            and checks.get("无重绘检查", {}).get("passed") is not False
-            and checks.get("冻结快照确定性检查", {}).get("passed") is not False
+            checks.get("增量一致性检查", {}).get("passed") is True
+            and checks.get("无重绘检查", {}).get("passed") is True
+            and checks.get("冻结快照确定性检查", {}).get("passed") is True
         )
-        enough_trades = checks.get("交易样本>=100", {}).get("passed") is not False
+        enough_trades = checks.get("交易样本>=100", {}).get("passed") is True
 
         return {
             "checks": checks,

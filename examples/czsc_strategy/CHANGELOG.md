@@ -2,6 +2,32 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.39（2026-07-22）
+- A101 SimNow 准备度门禁 docstring 与实际判定逻辑对齐 + 未检测硬门槛 fail-closed 修复
+  （第二次全面 re-audit H-NEW-2，两处相互独立的变化）：
+  - **(a) 纯文档澄清（无行为变化，与 A95 M1/A96 M3/A99 保守先例一致）**：
+    `chan_strategy/validation.py` `SimNowReadinessChecker.check_readiness` docstring 的
+    「条件:」清单此前以 10 项并列 [OK]/[NG] 呈现，读起来像 10 项都是强制门槛；实际代码中
+    只有条件 1-4（增量一致性/无重绘/冻结快照确定性/交易样本>=100）是逐项否决 ready 的硬门槛，
+    条件 5-10（胜率/盈亏比/回撤/夏普/样本外/参数稳定性）只计入 `passed_count >= 7` 的软配额。
+    docstring 现已明确区分两类并写明判定规则（硬门槛全部显式通过 + 10 项中显式通过不少于 7 项）。
+    **未触碰 `passed_count >= 7`、未增删任何 checks{} 条目、未触碰 `:993-998` 已准确的硬门槛内联注释**；
+  - **(b) 真实的、收窄范围的行为变化（fail-closed，与 A97 `rollover_open_gating` 先例一致）**：
+    `signal_stable` 三项与 `enough_trades` 的比较由 `passed is not False` 改为 `passed is True`——
+    此前未提供稳定性检查输入（`passed=None`，「未检测」）时硬门槛被静默视为通过，
+    现在「尚未证明安全」正确阻断 ready 而非默认放行。已核实唯一生产调用点
+    `run_full_validation`（`validation.py:1233-1239`）始终为四项硬门槛提供具体非 None 字典，
+    两种写法在该路径行为完全一致，本次收紧只影响省略稳定性参数的直接调用路径；
+    未触碰 `passed_count`/配额逻辑，本文件唯一逻辑变化即这四处比较符；
+  - 扩展 `tests/unit/test_simnow_readiness_sharpe.py`（A99 文件）新增 3 条回归测试：
+    软配额语义钉住（win_rate=0.40 失败但其余全过时 ready 仍为 True、passed_count=8，
+    证明这是文档化后的有意设计而非 bug）；fail-closed 回归（省略 signal_freeze 且其余全过时
+    ready=False，修复前为 True）；正向用例（四项硬门槛显式通过 + 配额满足时 ready=True、
+    passed_count=9）。A99 既有 4 条测试（从不读 ready）原样通过；
+  - 单测通过数 773 → 776（not-realdb，净增 3 条新测试）；`-m realdb` 等价门禁不变，
+    双侧 sync_check、Preflight、ruff 均通过（见 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.38（2026-07-22）
 - A100 文档化背驰力度比较「进入段/离开段方向可能不一致」为已接受行为（re-audit M-NEW-2；
   **纯 docstring/注释 + 回归测试，无任何信号生成逻辑变化**——本次是对已存在、已测试行为的

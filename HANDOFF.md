@@ -1,8 +1,8 @@
 ---
 task: A101 - Fix SimNow readiness gate soft-quota/docstring mismatch and None-passes-as-True gap (2nd re-audit H-NEW-2)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -11,11 +11,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -210,10 +210,73 @@ in `validation.py:999-1004` only. Reasoning:
   `check_readiness`: the one production path (`run_full_validation`, always supplies concrete non-None
   values for all four hard-gate inputs) and A99's test helpers (never read `ready`) — so the Problem 2 fix
   is safe today and only tightens behavior for future/direct callers that omit stability params.
+- 2026-07-22 (kimi-code, dev) - Implemented exactly as designed, no deviations. Re-verified line numbers
+  before editing: docstring at `validation.py:879-893`, inline hard-gate comment at `:993-998` (untouched),
+  `is not False` comparisons at `:999-1004`. Diff confirms the only logic change is the four
+  `is not False` -> `is True` comparisons; everything else is docstring-only. `passed_count >= 7`, the
+  `checks{}` membership, and the inline comment are byte-identical to HEAD.
+- 2026-07-22 (kimi-code, dev) - Added 3 regression tests to `tests/unit/test_simnow_readiness_sharpe.py`:
+  `test_readiness_quota_win_rate_failure_still_ready` (win_rate=0.40 fails its check yet ready=True,
+  passed_count=8 — pins the INTENTIONAL soft-quota design), `test_readiness_untested_stability_check_blocks_ready`
+  (two stability checks passing, signal_freeze omitted, everything else passing: passed_count=8 >= 7 but
+  ready=False — the Problem 2 fail-closed regression; was True before the fix),
+  `test_readiness_all_gates_passing_ready_true` (all hard gates explicitly passing: ready=True,
+  passed_count=9). A99's 4 existing tests pass unchanged; not-realdb count 773 -> 776 (+3 net).
+- 2026-07-22 (kimi-code, dev) - VERSION bumped 0.2.38 -> 0.2.39 (synccheck:ignore) with a CHANGELOG entry
+  that explicitly separates (a) the documentation-only quota clarification from (b) the real fail-closed
+  behavior change. `git status --short` verified only A101-scoped files modified by me; the two
+  pre-existing SimNow-workstream files (`diagnostics/WORK_LOG.md`,
+  `diagnostics/simnow_20d_promotion_decision.md`) were already modified before I started and were left
+  untouched.
+- 2026-07-22 (kimi-code, dev) - Environment note: `run_next_work.ps1` lives under
+  `examples/czsc_strategy/diagnostics/` (not the czsc_strategy root); ran it from there. Ruff baseline
+  comparison required extracting HEAD's validation.py via `cmd /c "git show ... > file"` because
+  PowerShell 5.1 pipeline redirection mangles UTF-8 Chinese bytes (first attempt produced a corrupted
+  stash that was safely popped back; working tree verified intact afterwards).
 
 ## Manual Verification
 
-(pending — dev fills in)
+All commands run natively on Windows (PowerShell) from the repo root / `examples/czsc_strategy`.
+
+1. Target test file (3 new + 4 A99 tests):
+   ```
+   PS> python -m pytest tests/unit/test_simnow_readiness_sharpe.py -q
+   .......                                                                  [100%]
+   7 passed in 0.23s
+   ```
+2. Full unit suite, not-realdb (773 -> 776, +3 net new tests, 4 realdb deselected):
+   ```
+   PS> python -m pytest tests/unit -q -m "not realdb"
+   776 passed, 4 deselected in 46.35s
+   ```
+3. realdb equivalence gate (unchanged; the recurring A98/A99/A100 ULP float discrepancy did NOT recur):
+   ```
+   PS> python -m pytest tests/unit -q -m realdb
+   4 passed, 776 deselected in 77.38s (0:01:17)
+   ```
+4. Both sync_check gates:
+   ```
+   PS> python tools/sync_check.py
+   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)  # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致
+   PS> python tools/sync_check.py --root examples/czsc_strategy
+   [SYNC-CHECK][OK] 版本单一真相 = 0.2.39  (source: VERSION::)  # synccheck:ignore
+   [SYNC-CHECK] PASS: 版本与文档一致
+   ```
+5. Preflight (script located at `examples/czsc_strategy/diagnostics/run_next_work.ps1`):
+   ```
+   PS> .\run_next_work.ps1 -Preflight
+   ==> Preflight complete; live SimNow capture was not requested
+   exit=0  (SimNow workflow unit tests: 205 passed in 28.84s)
+   ```
+6. Ruff parity check (A99 pattern): HEAD `validation.py` extracted via `cmd /c "git show HEAD:... > tmp"`
+   shows **45 errors**; current `validation.py` shows **45 errors** with an identical rule breakdown
+   (25x UP006-list, 5x UP006-dict, 4x UP045, 2x UP035, 8x F401, 1x B905) — zero new lint errors;
+   `test_simnow_readiness_sharpe.py` is fully clean ("All checks passed!").
+7. Diff scope verification: `git diff examples/czsc_strategy/chan_strategy/validation.py` contains only
+   (a) the docstring rewrite and (b) the four `is not False` -> `is True` lines; the inline comment at
+   `:993-998`, `passed_count >= 7`, and all `checks{}` entries are unchanged. `git status --short` shows
+   only the four A101 files plus the two pre-existing, untouched SimNow-workstream files.
 
 ## 交接历史
 
@@ -221,3 +284,4 @@ in `validation.py:999-1004` only. Reasoning:
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A101 (SimNow readiness gate fix, 2nd re-audit H-NEW-2) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A101 promoted design->dev |
+| 2026-07-22 | kimi-code → codex | dev → review | A101 SimNow readiness gate fix completed |
