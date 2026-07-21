@@ -1,8 +1,8 @@
 ---
 task: A92 - Validate A90 forced-liquidation actually flattens real positions + circuit-breaker caveat (audit H3)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
@@ -17,12 +17,42 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
+
+## claude-code pre-review due-diligence (2026-07-21) — sent back before codex ever ran
+
+The dev round's actual work is excellent (see Decision Log below for the full stress-check summary) —
+this is a small, mechanical fix, not a substantive rejection. Caught this myself before triggering codex,
+to save a round-trip.
+
+1. **Fix required**: `ruff check` on this round's touched files reports one error:
+   ```
+   F401 `datetime.datetime` imported but unused
+     --> examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.py:53
+   ```
+   Run `ruff check --fix examples/czsc_strategy/diagnostics/joint_replay_flatten_stress_check.py` (or
+   remove the import by hand) and re-verify `ruff check` is clean on all A92-touched files before
+   re-requesting review.
+2. **The `sharpe_ratio` 1-ULP-class escalation you recorded is accepted as-is, no action needed in this
+   task.** claude-code independently re-read your reproduction (git-stash-based, reproduces identical on
+   pristine HEAD with A92 changes removed) and agrees this is pre-existing, unrelated to A92, and not
+   something to fix here. Likely cause: `sharpe_ratio` is computed via pandas `.std()` on a floating-point
+   series, and reduction order for float sums/std is not strictly associative across runs/environments —
+   this is exactly the kind of thing an exact-equality baseline diff (A91's gate) is too strict for.
+   claude-code will open a separate follow-up task to either give `sharpe_ratio` (and any other
+   float-reduction-derived Bucket-B field) a tolerance-based comparison in the equivalence gate, or pin
+   down why the reduction order isn't stable — do not attempt that here, it's out of scope for A92 and
+   already correctly escalated rather than fixed inline.
+3. Everything else in this round — the threshold-search methodology, the real stress run at
+   `daily_loss_limit_pct=0.005`, the independently-verified `flat_price` invariant, the deferred cross-symbol
+   proof, the same-bar edge case documentation, the honest scope statement — was independently reviewed by
+   claude-code and is accepted. Once ruff is clean, re-run the acceptance commands and go straight back to
+   `handoff.py next`.
 
 ## Background
 
