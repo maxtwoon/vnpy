@@ -1,148 +1,95 @@
 ---
-task: A93 - Fix Position() orphan trailing-stop defaults vs config (audit M5)
+task: A94 - Document the always-false "确认" branch in divergence gating (audit M4)
 version: 4.4.0
-stage: done
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-21
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/chan_strategy/positions.py
-  - examples/czsc_strategy/tests/unit/test_positions.py
-  - examples/czsc_strategy/VERSION
-  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
 
-`diagnostics_ai_stock_review_report.md` (2026-07-21 full project audit) flagged **M5**:
-`Position.__init__`'s `trailing_start`/`trailing_drawback_pct` default parameter values
-(`positions.py:589-590`, `150`/`0.4`) do not match `STRATEGY_CONFIG`'s `trailing_start_bp`/
-`trailing_drawback_pct` (`config.py:58-59`, `300`/`0.25`). The production path
-(`_research_trailing_params()`, `positions.py:360-367`, used by the `create_*` factory functions) already
-reads from `STRATEGY_CONFIG` correctly and passes the right values explicitly — so this doesn't affect any
-existing backtest report. The gap is an "orphan default": any code that constructs `Position(...)` directly
-without going through a `create_*` factory (a test, a future diagnostic script, an external caller) would
-silently get 150/0.4 instead of the configured 300/0.25, diverging from the project's single-source-of-truth
-discipline without any error or warning.
-
-**claude-code independently confirmed the existing pattern this project already uses to solve exactly this
-problem elsewhere in the same `__init__`**: `commission_rate: float | None = None` /
-`slippage: float | None = None` (`positions.py:592-593`) use a `None`-sentinel default, resolved inside
-`__init__` via `commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]`
-(`positions.py:608-609`). This is the established, minimal-diff way to eliminate an "orphan default" while
-still allowing an explicit override for tests — apply the identical pattern to `trailing_start`/
-`trailing_drawback_pct`, do not invent a different mechanism.
+`diagnostics_ai_stock_review_report.md` (2026-07-21 full project audit) flagged **M4**:
+`signal_divergence_status()` (`signals.py:295-347`) only ever produces `v1 = "无"` or `v1 = "疑似"` — there
+is no code path in that function that produces `"确认"` (confirmed the function's docstring already says
+single-level divergence can only ever yield "疑似", never a confirmed level; `grep` confirms the literal
+string `"确认"` never appears as an assigned value of `v1` anywhere in the function). Two consumer sites —
+`positions.py:396` and `positions.py:468` — gate on
+`div_val.startswith("疑似") or div_val.startswith("确认")`. Since the producer can never emit `"确认"`,
+that half of the `or` is permanently dead — not a logic bug (the gating still works correctly via the
+`"疑似"` branch), but a maintenance trap: a future reader could reasonably assume a "confirmed divergence"
+tier exists and is being checked for, when it does not exist anywhere in the codebase.
 
 ## Goal
 
-1. Change `Position.__init__`'s signature (`positions.py:589-590`) from:
-   ```python
-   trailing_start: int = 150,
-   trailing_drawback_pct: float = 0.4,
-   ```
-   to `int | None = None` / `float | None = None`, matching `commission_rate`/`slippage`'s existing style.
-2. Inside `__init__`, resolve them the same way `commission_rate`/`slippage` already are
-   (`positions.py:608-609`):
-   ```python
-   self.trailing_start = trailing_start if trailing_start is not None else STRATEGY_CONFIG.get("trailing_start_bp", 300)
-   self.trailing_drawback_pct = trailing_drawback_pct if trailing_drawback_pct is not None else STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25)
-   ```
-   (exact literal fallback values `300`/`0.25` must match `config.py`'s current defaults — re-read
-   `config.py:58-59` yourself before writing this, don't trust these numbers blindly in case they've
-   drifted since this HANDOFF was written).
-3. **Do not touch `_research_trailing_params()` or any `create_*` factory function** — they already pass
-   explicit values and this change is invisible to them (passing an explicit int/float still overrides the
-   new `None` default exactly as before).
-4. **This must not change any existing backtest's output.** The production path never relied on the old
-   150/0.4 defaults (it always passed explicit values), so no existing report, snapshot, or equivalence
-   baseline should change. Verify this explicitly: run the full unit suite and confirm the pass count is
-   unchanged, and specifically re-run the A91/A92 equivalence gate (`-m realdb`) to confirm
-   `test_research_mode_equivalence_to_baseline` still passes unchanged (it does not touch `chan_strategy/`
-   in a way that should affect it, but this task does touch `positions.py`, so don't skip this check).
-5. Add or extend a unit test proving the fix: construct `Position(...)` directly (not via a `create_*`
-   factory) with `trailing_start=None, trailing_drawback_pct=None` (or simply omitted) and assert
-   `pos.trailing_start == STRATEGY_CONFIG["trailing_start_bp"]` and `pos.trailing_drawback_pct ==
-   STRATEGY_CONFIG["trailing_drawback_pct"]` — proving the orphan-default gap is actually closed, not just
-   that the signature changed.
+**This is a documentation-only clarification, not a behavior change or a dead-code removal.** claude-code
+deliberately chose "add a comment explaining the intent" over "delete the dead half of the `or`" for this
+task: removing `startswith("确认")` would carry a small forward-looking risk (if a future divergence-level
+enhancement ever does produce a `"确认"` value, silently having removed this check would require someone
+to remember to re-add it) for zero present-day benefit (the check costs nothing at runtime). A one-line
+comment fully addresses the audit's actual concern (a maintainer being misled into thinking a "confirmed"
+tier is being actively distinguished) without taking on any removal risk.
+
+1. At both `positions.py:396` and `positions.py:468`, add a short comment directly above (or on the same
+   line as) the `if not (div_val.startswith("疑似") or div_val.startswith("确认")):` check, stating plainly
+   that `signal_divergence_status()` (`signals.py`) currently only ever emits `"疑似"` (never `"确认"`), so
+   the `"确认"` half of this check is presently dead but kept for forward compatibility should a future
+   divergence-level enhancement add a genuine "confirmed" tier. Chinese or English is fine — match the
+   surrounding code's language (this file mixes both; existing nearby comments are Chinese, so Chinese is
+   probably the better fit, dev's call).
+2. **Do not change the `if` condition itself, do not touch `signal_divergence_status()` in `signals.py`,
+   do not add a new divergence tier.** This task is exactly two comment additions, nothing else.
+3. Optionally (dev's call, not required): if you want to make the always-false-half explicit for a future
+   test-coverage tool without changing behavior, you may add a `# pragma: no branch` or equivalent marker
+   consistent with how this codebase already marks other known-dead-but-intentional branches (e.g.
+   `signals.py:340`'s existing `# pragma: no branch - complementary divergence direction` comment is the
+   established style for exactly this situation in this codebase — follow that precedent if you add a
+   marker, don't invent a new annotation style).
 
 ## Acceptance Criteria
 
-- [ ] `Position.__init__`'s `trailing_start`/`trailing_drawback_pct` defaults are `None`-sentinel,
-      resolved from `STRATEGY_CONFIG` exactly like `commission_rate`/`slippage` already are.
-- [ ] A new/extended test proves a directly-constructed `Position()` with no explicit trailing params now
-      gets the config-sourced values, not the old orphan 150/0.4.
-- [ ] `_research_trailing_params()` and all `create_*` factory functions are unchanged.
-- [ ] No existing test's assertions changed; full unit suite pass count unchanged plus the new test.
-- [ ] `-m realdb` equivalence gate (`test_research_mode_equivalence_to_baseline`,
-      `test_research_mode_additive_fields_take_default_values`) still passes unchanged.
-- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes.
+- [ ] A comment exists at both `positions.py:396` and `positions.py:468` explaining that the `"确认"`
+      branch is currently unreachable because `signal_divergence_status()` never emits it, and why it's
+      being kept (forward compatibility, zero cost).
+- [ ] No change to the `if` condition's logic, to `signals.py`, or to any test's assertions.
+- [ ] `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` passes, exact same pass
+      count as before this change (pure comment addition).
+- [ ] `-m realdb` equivalence gate still passes unchanged (comment-only change should not need this, but
+      this task touches `positions.py` again right after A93, so verify rather than assume).
 - [ ] `python tools/sync_check.py` and `python tools/sync_check.py --root examples/czsc_strategy` pass.
 - [ ] `run_next_work.ps1 -Preflight` (from `examples/czsc_strategy/`) passes.
-- [ ] `ruff check` clean on touched files.
-- [ ] VERSION/CHANGELOG bumped.
+- [ ] `ruff check` clean on touched files (positions.py is already clean after A93 — do not reintroduce
+      any findings).
+- [ ] VERSION/CHANGELOG bumped (even for a comment-only change, per house convention — document which
+      case this is in the Decision Log; if the team convention actually treats pure comments as not
+      needing a version bump, state that reasoning explicitly rather than silently skipping it).
 - [ ] Include a literal `## Manual Verification` heading with natively-run command output.
 
 ## Notes for the Next Agent
 
 (dev = kimi-code must read this before starting)
 
-### Review Rejection - 2026-07-21 (codex)
-
-1. `ruff check --config pyproject.toml examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_positions.py` still exits 1 with 30 findings. The dev note says the findings are pre-existing, but this task's acceptance criterion explicitly says "ruff check clean on touched files", so the handoff contract is not satisfied yet.
-2. The changed `Position.__init__` signature line for `trailing_start` still says `1.5%` in the inline comment even though the omitted/`None` path now resolves to `STRATEGY_CONFIG["trailing_start_bp"] == 300` (3%). Remove the stale percent or make the comment config-neutral so this changed line does not preserve the old orphan-default documentation drift.
-
-### claude-code's fix guidance (2026-07-21) — agreed with both items, here's how to close them
-
-1. **The "clean on touched files" criterion is correct as written (I wrote it) — the pre-existing-ness of
-   the 30 findings doesn't exempt this task from it.** claude-code independently verified (via
-   `ruff check --output-format=concise`) that of the 30:
-   - **28 are `UP006`/`UP035`/`UP045`/`F401`** — mechanical, zero-behavior-risk typing modernization
-     (`typing.List/Dict/Tuple/Optional` → builtin generics / `X | None`) plus one genuinely-unused
-     `typing.Dict` import in `positions.py` and the unused `pytest` import in `test_positions.py`. Run
-     `ruff check --fix examples/czsc_strategy/chan_strategy/positions.py
-     examples/czsc_strategy/tests/unit/test_positions.py` (add `--unsafe-fixes` if one finding needs it) —
-     this should resolve all 28 automatically with no manual review needed per-line, since these are pure
-     syntax modernizations that don't change runtime behavior.
-   - **1 is `B905`** (`positions.py:212`, `for exp, act in zip(expected_parts[:3], actual_parts[:3]):`
-     inside `Signal.matches()` or similar) — **do not blindly accept ruff's suggestion to add
-     `strict=True`**. Both operands are already sliced to `[:3]`; if the underlying signal-value string has
-     fewer than 3 `_`-separated segments, `expected_parts`/`actual_parts` can legitimately have different
-     lengths, and `strict=True` would turn that into a crash instead of the current (intentional)
-     shortest-wins truncation. Add `strict=False` explicitly instead — this silences the lint with zero
-     behavior change, which is the correct fix given the existing code's own semantics.
-   - This brings the file-level count to 0. Do not touch any file outside
-     `positions.py`/`test_positions.py` to chase similar findings elsewhere in the codebase — that's
-     explicitly out of scope for A93.
-2. **Fix the stale comment** by making it config-neutral, e.g.:
-   ```python
-   trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP); None=取 STRATEGY_CONFIG
-   trailing_drawback_pct: float | None = None, # 移动止损回撤容忍比例; None=取 STRATEGY_CONFIG
-   ```
-   (drop the `1.5%`/`40%` literal percentages entirely — they were only ever true for the old orphan
-   defaults and will drift again the moment `STRATEGY_CONFIG`'s values change, since the whole point of
-   this task is that this parameter is no longer meant to have a fixed literal value).
-3. After both fixes, re-run the full acceptance command list from scratch (not just re-check ruff) — the
-   `ruff --fix` pass touches lines beyond the two you already changed, so re-verify the full unit suite and
-   `-m realdb` equivalence gate are still unaffected.
-
-1. **This is a small, mechanical, low-risk fix** — mirror the existing `commission_rate`/`slippage`
-   pattern exactly, don't design something new.
+1. **This is the smallest task in the M-series so far — two comments, nothing else.** Do not use this as
+   an opportunity to also touch `signals.py` or add a real "confirmed divergence" tier — that would be a
+   scope change requiring its own design, not something to bundle in here.
 2. **Do not touch the unrelated files currently sitting modified in the working tree**
    (`diagnostics/ACCEPTANCE.md`, `AUTOMATION_PROMPT.md`, `NEXT_WORK.md`, `WORK_LOG.md`,
    `run_next_work.ps1`, `simnow_20d_promotion_decision.md`,
    `tests/unit/test_run_next_work_wrapper.py`, `tests/unit/test_simnow_docs.py`) — these belong to a
    concurrent, unrelated SimNow-observation workstream. **Before committing, run `git status --short`
-   and confirm only your own A93-scoped files are staged.**
+   and confirm only your own A94-scoped files are staged.**
 3. **Include a literal `## Manual Verification` heading** — required every time; do not omit it.
 4. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A93 orphan trailing-stop defaults fixed"`.
+   `python tools/handoff.py next --actor kimi-code --summary "A94 divergence dead-branch documented"`.
    Transactional gate — fix and retry if it blocks; no `--no-gate`. If the command itself crashes/times
    out for environment reasons (this has happened repeatedly on this machine, apparently correlated with
    the pipeline's timeout landing right at the finish line), do not manually hand-edit HANDOFF.md's
@@ -151,109 +98,22 @@ still allowing an explicit override for tests — apply the identical pattern to
 
 ## Decision Log
 
-- 2026-07-21 (kimi-code, dev, reject-fix round 2) - Closed both codex rejection items exactly per
-  claude-code's fix guidance: (1) stale `1.5%` literal removed from the `trailing_start` signature
-  comment (now config-neutral: `None=取 STRATEGY_CONFIG`); (2) all 30 ruff findings on the two touched
-  files cleared — 28 mechanical `UP006`/`UP035`/`UP045`/`F401` via `ruff check --fix --unsafe-fixes`
-  (typing modernization + unused-import removal, zero runtime change) and 1 `B905` at `Signal.matches()`
-  resolved with explicit `strict=False` (NOT `strict=True` — both operands are `[:3]`-sliced and
-  shortest-wins truncation is the existing intentional semantics). `ruff check` on the two touched
-  files now exits 0. Re-ran the full acceptance list from scratch after the fix pass: 761 not-realdb +
-  4 realdb equivalence gate pass unchanged, dual sync_check PASS, preflight 200 passed, git status
-  shows only A93-scoped files. czsc VERSION bumped one patch with CHANGELOG entry (literal numbers kept
-  out of this file to satisfy the root version gate; the rejected round's bump was already committed,
-  so this follow-up is a separate visible change with its own bump).
-- 2026-07-21 (kimi-code, dev) - Implemented A93 exactly per design: `trailing_start`/
-  `trailing_drawback_pct` are now `None`-sentinel params resolved from `STRATEGY_CONFIG`
-  (`trailing_start_bp`/`trailing_drawback_pct`, literal fallbacks 300/0.25 re-verified against
-  `config.py:58-59`) using the identical `commission_rate`/`slippage` pattern. No deviation from
-  design. Ruff on touched files: 30 findings both before (HEAD) and after the change — identical
-  rule set, all pre-existing legacy `typing.List/Dict/Optional` style issues; zero new findings
-  introduced, so left untouched to keep the diff minimal. czsc VERSION bumped one patch with
-  CHANGELOG entry (literal numbers kept out of this file to satisfy the root version gate). Working tree confirmed clean of the unrelated SimNow workstream files
-  (`git status --short` shows only A93-scoped files).
-- 2026-07-21 - User asked to drive the audit report's 🔴/🟠 findings to closure via sync-guardian. H1
-  (A91) and H3 (A92) both `done`. H2's root cause (raw 888 splice) stays parked (no adjusted-price data
-  source available); only its mitigation is in scope, bundled with M2 in a later task. This task (A93)
-  starts the M-series: M5 first (smallest, lowest-risk, purely mechanical), then M4, M1, M3, M2+H2-mitigation
-  in roughly that order.
-- 2026-07-21 (claude-code, design) - Confirmed the existing `commission_rate`/`slippage` None-sentinel
-  pattern in the same `Position.__init__` is the right template to copy — no new mechanism needed.
+- 2026-07-21 - Continuing the M-series from the audit report after M5 (A93) closed. This task (A94) is
+  M4, chosen next for being the smallest/lowest-risk remaining item (pure comment, no logic touched).
+- 2026-07-21 (claude-code, design) - Deliberately chose "document the dead branch" over "remove it" —
+  removal carries small forward-looking risk for zero present-day benefit; a comment fully addresses the
+  audit's actual concern (maintainer confusion) without that risk. Confirmed via grep that
+  `signal_divergence_status()` never assigns `"确认"` to `v1` anywhere in its body, and noted the existing
+  `signals.py:340` `# pragma: no branch - complementary divergence direction` comment as this codebase's
+  established precedent for marking known-but-intentional dead branches, in case dev wants to add a similar
+  marker here.
 
 ## Manual Verification
 
-All commands run natively on this machine (kimi-code, 2026-07-21, reject-fix round 2 — re-run from
-scratch AFTER the ruff-fix pass, per claude-code guidance item 3).
-
-1. Ruff on touched files (rejection item 1 — now clean):
-   ```
-   $ ruff check --config pyproject.toml examples/czsc_strategy/chan_strategy/positions.py examples/czsc_strategy/tests/unit/test_positions.py
-   All checks passed!   (exit=0; was: Found 30 errors)
-   ```
-   Fix composition: 28 UP006/UP035/UP045/F401 via `ruff check --fix --unsafe-fixes` (typing
-   modernization + unused `typing.Dict`/`pytest` imports); 1 B905 at `positions.py` `Signal` value
-   match via explicit `strict=False` (shortest-wins semantics preserved, NOT `strict=True`).
-   Verified via `git diff`: only type-annotation syntax, the two removed imports, `strict=False`,
-   and the stale-comment fix — zero runtime-logic changes.
-
-2. Stale comment (rejection item 2):
-   ```python
-   trailing_start: int | None = None,          # 启动移动止损的盈利阈值(BP); None=取 STRATEGY_CONFIG
-   trailing_drawback_pct: float | None = None, # 移动止损回撤容忍比例; None=取 STRATEGY_CONFIG
-   ```
-   (`1.5%` literal removed; comments are now config-neutral.)
-
-3. Unit suite (`-m "not realdb"`):
-   ```
-   $ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
-   761 passed, 4 deselected in 41.32s
-   ```
-   (Same 761 as the rejected round — the ruff-fix pass changed no test outcomes; still exactly +1
-   new test `test_position_direct_construction_uses_config_trailing_defaults` vs pre-A93; no existing
-   assertion changed.)
-
-4. realdb equivalence gate (A91/A92 baseline):
-   ```
-   $ python -m pytest examples/czsc_strategy/tests/unit -q -m realdb
-   4 passed, 761 deselected in 78.98s (0:01:18)
-   ```
-   (`test_research_mode_equivalence_to_baseline` and
-   `test_research_mode_additive_fields_take_default_values` pass unchanged — no backtest output drift.)
-
-5. sync_check (both roots, after the czsc VERSION patch bump):
-   ```
-   $ python tools/sync_check.py --root examples/czsc_strategy
-   [SYNC-CHECK][OK] 版本单一真相 = <czsc VERSION file>  (source: VERSION::)
-   [SYNC-CHECK] PASS: 版本与文档一致。
-   $ python tools/sync_check.py
-   [SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
-   [SYNC-CHECK] PASS: 版本与文档一致。
-   ```
-
-6. Preflight:
-   ```
-   $ powershell -NoProfile -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight   # from examples/czsc_strategy/diagnostics
-   200 passed in 22.24s
-   ==> Preflight complete; live SimNow capture was not requested
-   ```
-
-7. Scope check:
-   ```
-   $ git status --short
-    M examples/czsc_strategy/CHANGELOG.md
-    M examples/czsc_strategy/VERSION
-    M examples/czsc_strategy/chan_strategy/positions.py
-    M examples/czsc_strategy/tests/unit/test_positions.py
-   ```
-   (HANDOFF.md itself also modified by this round's Decision Log / Manual Verification update.
-   None of the unrelated SimNow workstream files touched.)
+(dev to fill in with actual command output before requesting review)
 
 ## 交接历史
 
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
-| 2026-07-21 | claude-code → kimi-code | design → dev | A93 (orphan trailing-stop defaults, audit M5) promoted; handoff design->dev |
-| 2026-07-21 | kimi-code → codex | dev → review | A93 orphan trailing-stop defaults fixed: None-sentinel resolved from STRATEGY_CONFIG (commission_rate/slippage pattern); +1 unit test; 761 not-realdb + 4 realdb pass; dual sync_check pass; czsc VERSION bumped |
-| 2026-07-21 | codex → kimi-code | review → dev | 打回: A93 review blocked: touched-file ruff check is not clean and trailing_start comment still says stale 1.5 percent |
-| 2026-07-21 | kimi-code → codex | dev → review | A93 reject-fix: stale 1.5% comment removed (config-neutral); 30 ruff findings on touched files cleared (28 auto-fixed UP006/UP035/UP045/F401 + B905 strict=False); 761 not-realdb + 4 realdb pass unchanged; dual sync_check PASS; czsc VERSION patch-bumped |
-| 2026-07-21 | codex → codex | review → done | A93 review passed: None-sentinel trailing defaults resolved from STRATEGY_CONFIG, direct-construction test present, factory path unchanged, ruff and sync gates pass; sandbox pytest/preflight WinError 5 handled via recorded native verification counts. |
+| 2026-07-21 | claude-code → kimi-code | design → dev | A94 (document dead 确认 branch, audit M4) promoted; handoff design->dev |
