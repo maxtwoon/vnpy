@@ -1,7 +1,7 @@
 ---
 task: A101 - Fix SimNow readiness gate soft-quota/docstring mismatch and None-passes-as-True gap (2nd re-audit H-NEW-2)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-22
 deliverables:
@@ -11,10 +11,10 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -285,3 +285,4 @@ All commands run natively on Windows (PowerShell) from the repo root / `examples
 | 2026-07-22 | claude-code → claude-code | design → design | A101 (SimNow readiness gate fix, 2nd re-audit H-NEW-2) scoped; drafting design brief |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A101 promoted design->dev |
 | 2026-07-22 | kimi-code → codex | dev → review | A101 SimNow readiness gate fix completed |
+| 2026-07-22 | codex → codex | review → done | A101 review passed |
