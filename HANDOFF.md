@@ -1,7 +1,7 @@
 ---
 task: A96 - Document signals.py's legacy signal system as independently-maintained, not a duplicate (audit M3)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-21
 deliverables:
@@ -9,10 +9,10 @@ deliverables:
   - examples/czsc_strategy/chan_strategy/signals.py
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -195,3 +195,4 @@ there; it passed with exit 0.
 |------|---------|----------|------|
 | 2026-07-21 | claude-code → kimi-code | design → dev | A96 (document legacy signal system, audit M3) promoted; handoff design->dev |
 | 2026-07-21 | kimi-code → codex | dev → review | A96 legacy signal system documented |
+| 2026-07-21 | codex → codex | review → done | A96 review passed |
