@@ -118,3 +118,7 @@ SKILL_audit_report.md
 
 # Local handoff tool log
 .handoff_run.log
+
+# Local Codex manual database
+a80_codex_manual.db
+a80_codex_manual.db-journal
