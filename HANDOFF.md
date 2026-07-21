@@ -100,6 +100,14 @@ tier is being actively distinguished) without taking on any removal risk.
 
 - 2026-07-21 - Continuing the M-series from the audit report after M5 (A93) closed. This task (A94) is
   M4, chosen next for being the smallest/lowest-risk remaining item (pure comment, no logic touched).
+- 2026-07-21 (kimi-code, dev) - Implemented exactly two comment additions in `positions.py`
+  (above both `if not (div_val.startswith("疑似") or div_val.startswith("确认")):` sites), in English to
+  match the surrounding comments at those sites. Did **not** add a `# pragma: no branch` marker: coverage
+  branch analysis does not split the two halves of an `or` into separate branch arcs, so the marker would
+  be meaningless here — unlike `signals.py:340`'s pragma, which marks a genuinely complementary
+  `elif` branch. VERSION/CHANGELOG bumped to 0.2.32 <!-- synccheck:ignore --> per house convention (every externally visible
+  change = code + version bump + changelog entry, same commit); a comment-only change still counts as
+  externally visible since it ships in the tracked source tree.
 - 2026-07-21 (claude-code, design) - Deliberately chose "document the dead branch" over "remove it" —
   removal carries small forward-looking risk for zero present-day benefit; a comment fully addresses the
   audit's actual concern (maintainer confusion) without that risk. Confirmed via grep that
@@ -110,7 +118,57 @@ tier is being actively distinguished) without taking on any removal risk.
 
 ## Manual Verification
 
-(dev to fill in with actual command output before requesting review)
+Run natively on this machine (kimi-code, 2026-07-21). All commands from repo root `D:\repo\vnpy`
+unless noted. Pass counts identical to A93 baseline (pure comment addition, no behavior change).
+
+```
+$ git status --short   # pre-change baseline: clean working tree
+(no output — clean)
+
+$ ruff check examples/czsc_strategy/chan_strategy/positions.py
+All checks passed!
+
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+761 passed, 4 deselected in 40.90s
+
+$ python -m pytest examples/czsc_strategy/tests/unit -q -m realdb
+4 passed, 761 deselected in 78.03s (0:01:18)
+
+$ python tools/sync_check.py
+[SYNC-CHECK][OK] 版本单一真相 = 4.4.0  (source: vnpy/__init__.py::__version__)
+[SYNC-CHECK][WARN] archive_dir 不存在: docs/archive/（仅提示，不 FAIL）
+[SYNC-CHECK] PASS: 版本与文档一致。
+(exit 0)
+
+$ python tools/sync_check.py --root examples/czsc_strategy
+[SYNC-CHECK][OK] 版本单一真相 = 0.2.32  (source: VERSION::) <!-- synccheck:ignore -->
+[SYNC-CHECK] PASS: 版本与文档一致。
+(exit 0)
+
+$ cd examples\czsc_strategy; powershell -ExecutionPolicy Bypass -File .\diagnostics\run_next_work.ps1 -Preflight
+Repository: D:\repo\vnpy
+Diagnostics: D:\repo\vnpy\examples\czsc_strategy\diagnostics
+Date: 2026-07-21
+==> Compile SimNow capture script
+==> Run SimNow workflow unit tests
+200 passed in 23.25s
+==> Build pending replay backfill plan
+==> Preflight complete; live SimNow capture was not requested
+(exit 0)
+```
+
+Note: `run_next_work.ps1` lives at `examples/czsc_strategy/diagnostics/run_next_work.ps1` (not the
+workspace root as the acceptance line literally suggests); it was invoked from
+`examples/czsc_strategy/` as the working directory, per the intent of the criterion.
+
+Verification of the actual deliverable (comment-only, no logic touched):
+
+```
+$ git diff --stat examples/czsc_strategy/chan_strategy/positions.py
+... 8 insertions(+)
+$ git diff examples/czsc_strategy/chan_strategy/positions.py | Select-String '^[+-]'
+(only '+' comment lines; no '-' lines; the `if` conditions are untouched)
+```
 
 ## 交接历史
 

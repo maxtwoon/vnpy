@@ -393,6 +393,10 @@ def _research_second_buy_allowed(
         # P4 MACD divergence signal (amplitude or macd model depending on config).
         div_key = f"{freq}_D1BI_背驰V260615"
         div_val = signals_dict.get(div_key, "")
+        # signal_divergence_status() (signals.py) currently only ever emits "疑似" —
+        # never "确认" — so the "确认" half of this check is presently dead but kept
+        # for forward compatibility should a future divergence-level enhancement add
+        # a genuine "confirmed" tier (audit M4; zero runtime cost, do not remove).
         if not (div_val.startswith("疑似") or div_val.startswith("确认")):
             return False
 
@@ -465,6 +469,10 @@ def _research_short_open_allowed(
     # P4 MACD/top divergence signal (amplitude or macd model depending on config).
     div_key = f"{freq}_D1BI_背驰V260615"
     div_val = signals_dict.get(div_key, "")
+    # signal_divergence_status() (signals.py) currently only ever emits "疑似" —
+    # never "确认" — so the "确认" half of this check is presently dead but kept
+    # for forward compatibility should a future divergence-level enhancement add
+    # a genuine "confirmed" tier (audit M4; zero runtime cost, do not remove).
     if not (div_val.startswith("疑似") or div_val.startswith("确认")):
         return False
 

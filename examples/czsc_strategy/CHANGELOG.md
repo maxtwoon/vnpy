@@ -2,6 +2,18 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.32（2026-07-21）
+- A94 文档化背驰门禁中恒假的「确认」分支（audit M4；纯注释，无行为变化）：
+  `chan_strategy/positions.py` 两处消费点（`_research_second_buy_allowed` 与
+  `_research_short_open_allowed` 的 P4 背驰检查）在 `if not (div_val.startswith("疑似") or div_val.startswith("确认")):`
+  上方各加一段注释，明确说明 `signal_divergence_status()`（`signals.py`）当前只会产生
+  「疑似」、永远不会产生「确认」，因此该 `or` 的「确认」半边当前为死代码，但出于前向兼容
+  （未来背驰分级增强若新增真正的「确认」档）保留，且运行时零成本、请勿删除。
+  未改动 `if` 条件本身，未触碰 `signals.py`，未新增背驰档位；未加 `# pragma: no branch`
+  标记（coverage 分支分析不会把 `or` 的两半拆成独立分支，该标记在此处无意义——与
+  `signals.py:340` 已有的互补方向 `pragma` 场景不同）。单测通过数不变（761 not-realdb），
+  `-m realdb` 等价门禁逐字节一致，双侧 sync_check、Preflight、ruff 均通过。RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.31（2026-07-21）
 - A93 review 打回修复（codex 拒绝项闭环，无行为变化）：
   - `chan_strategy/positions.py` 签名行 `trailing_start` 注释删除过时的 `1.5%` 字面量
