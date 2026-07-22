@@ -2,6 +2,35 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.42（2026-07-22）- A104 遗留 A 股脚本卫生治理（硬编码 token、过期 sync 门禁、合规披露缺失、选股前视披露）
+  （用户新一轮全项目 4-subagent 只读审计的 4 个 examples 范围发现，纯披露/卫生修复，
+  不触碰 chan_strategy/ 与任何生产风控/信号/回测逻辑）：
+  - **发现1（硬编码 Tushare token）**：`debug_pos.py` 不再含 token 字面量，改为
+    `os.environ["TUSHARE_TOKEN"]` 读取，未设置时以带可操作提示的 `RuntimeError`
+    fail-closed（无任何默认/回退 token）；模块 docstring 增加环境变量要求说明。
+    设计范围外的同源问题：`run_stock_backtest.py` 的 `TUSHARE_TOKEN` 常量含同一字面量，
+    已按完全相同的 fail-closed 模式一并修复（小偏离，已记入 HANDOFF.md 决策记录）。
+    该 token 已存在于 git 历史（commit adac8808），轮换/吊销属仓库外操作，用户已被单独告知。
+  - **发现2（过期重复的 sync_check 副本）**：`tools/sync_check.py` 由 314 行独立旧副本
+    替换为薄 wrapper（`runpy.run_path()` 委托仓库根 `tools/sync_guardian/sync_check.py`
+    共享引擎，经 `__file__` 相对定位 `parents[3]` 到仓库根），自动继承
+    `deliverables_policy` 等后续新增门禁；本子项目治理配置 `.synccheck.yml` 保持不变
+    （去重的是引擎代码，不是治理规则）。已验证在本目录运行 `python tools/sync_check.py`
+    对本地配置 exit 0。
+  - **发现3（遗留 A 股脚本可运行但无合规建模、执行点无警示）**：六个遗留脚本
+    （`debug_pos.py`/`run_stock_backtest.py`/`run_akshare_backtest.py`/
+    `run_baostock_backtest.py`/`czsc_adapter.py`/`czsc_multi_timeframe_strategy.py`）
+    文件顶部统一添加同款警示横幅：声明其为已停维护的 A 股原型、当前活跃实现是
+    `chan_strategy/`（期货 CTA）、未建模 T+1/涨跌停/停牌/卖出侧印花税/禁止做空、
+    成交为即时无约束、输出不得作为策略有效性证据
+    （RESEARCH-ONLY / NOT PROMOTION EVIDENCE）。
+  - **发现4（run_stock_backtest.py 选股前视/幸存者偏差）**：其股票池按回测窗口结束日
+    （2024-12-31）静态选取，构成幸存者偏差/前视；按设计仅在该文件横幅中显式披露该机制，
+    不改写选股逻辑（该脚本本批次即被标记为 legacy；point-in-time 选股的真正修复留待其
+    重新纳入维护时再做）。
+  - 单测通过 780 → 780（not-realdb，**数量不变**——纯注释/banner/token 读取/wrapper
+    修复，未增删测试）；`-m realdb` 等价门禁不变通过；双侧 sync_check、Preflight、
+    ruff 均通过（见 HANDOFF.md Manual Verification）。RESEARCH-ONLY，不构成交易建议。
 ## 0.2.41（2026-07-22）- A103 修复同义反复测试断言 + 删除死代码 utils.py
   （第四次全面 re-audit L-NEW-9、L-NEW-10，两处小而独立的修复）：
   - **L-NEW-9（测试断言修复）**：`tests/unit/test_more_coverage.py`

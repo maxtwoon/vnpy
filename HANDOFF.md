@@ -159,32 +159,82 @@ touched.
 
 ## Notes for the Next Agent
 
-(dev = kimi-code must read this before starting)
+(review = codex must read this before starting; dev stage completed by kimi-code 2026-07-22)
 
-1. **Four independent, low-risk, disclosure/hygiene-only fixes in one task** — none touch
-   `chan_strategy/` or any production risk-control/signal/backtest logic.
-2. **`debug_pos.py` fix is fail-closed**: do not add a default/fallback token value of any kind (empty
-   string, placeholder, etc.) — an unset `TUSHARE_TOKEN` env var must raise, not silently proceed with no
-   auth.
-3. **The `sync_check.py` wrapper's relative path must resolve correctly from wherever it's invoked** — root's
-   own `tools/sync_check.py` computes `ROOT = Path(__file__).resolve().parents[1]` (i.e. it locates the repo
-   root via its own file location, not via cwd). Mirror that pattern so the subproject wrapper also locates
-   `tools/sync_guardian/` via `__file__`-relative resolution, two levels further up
-   (`examples/czsc_strategy/tools/sync_check.py` → repo root is `parents[2]`) — don't assume cwd.
-4. **Warning banner wording must be identical (or near-identical, adapted only for filename) across all six
-   files** — write it once, apply the same block to each, don't let wording drift file-to-file.
-5. **Do not touch the concurrent SimNow-workstream files** — before committing, run `git status --short`
-   and confirm only this task's files are staged (see Acceptance Criteria).
-6. **Include a literal `## Manual Verification` heading** — required every time; do not omit it.
-7. Finish with the acceptance commands, then
-   `python tools/handoff.py next --actor kimi-code --summary "A104 legacy A-share script hygiene completed"`.
-   Transactional gate — fix and retry if it blocks; no `--no-gate`. If the command itself crashes/times out
-   for environment reasons, do not manually hand-edit HANDOFF.md's stage/owner fields to bypass it — leave
-   the working tree with your changes uncommitted and note the failure in the Decision Log; claude-code will
-   verify and commit properly.
+1. **All four plan items are implemented**; verify each Acceptance Criterion above against the diff.
+   Two deliberate deviations from the literal design text, both recorded in the Decision Log:
+   (a) the design's note said repo root from `examples/czsc_strategy/tools/sync_check.py` is
+   `parents[2]` — that is off by one (tools → czsc_strategy → examples → root); the wrapper correctly
+   uses `parents[3]`, verified by actually running it from the subproject dir (exit 0).
+   (b) the design scoped the token fix to `debug_pos.py` only, but grep showed the SAME literal token
+   also hardcoded in `run_stock_backtest.py:44` (`TUSHARE_TOKEN = "..."`), which the design missed —
+   leaving it would have defeated finding 1's stated job ("stop the token from being hardcoded in
+   source going forward"). Fixed with the identical fail-closed `os.environ` + `RuntimeError` pattern.
+   This is a code change beyond "comment-only" for that file; it changes no backtest/signal logic.
+2. **Test count UNCHANGED at 780 passed (not realdb)**, same before/after — note the baseline is 780,
+   not the 779 recorded in A103's changelog: the +1 comes from the concurrent SimNow workstream's
+   uncommitted `tests/unit/test_simnow_replay_readiness.py`, not from this task. No new smoke test
+   for the wrapper was added (dev's call per the acceptance criterion) — the wrapper is verified by
+   the acceptance command that runs it directly (Manual Verification item 5).
+3. **Banners verified byte-identical** across all six files (only the filename in line 4 differs;
+   `run_stock_backtest.py` additionally carries the survivorship/look-ahead disclosure block per
+   Plan item 4). Verification snippet and result in Manual Verification item 8.
+4. **Scope check done**: `git status --short` before staging showed only this task's files modified
+   plus the four pre-existing SimNow-workstream modifications (`diagnostics/WORK_LOG.md`,
+   `diagnostics/simnow_20d_promotion_decision.md`, `diagnostics/simnow_replay_readiness.py`,
+   `tests/unit/test_simnow_replay_readiness.py`) — those four were NOT staged and remain untouched.
+5. **Version bump**: subproject only, 0.2.41 → 0.2.42 <!-- synccheck:ignore -->
+   (`VERSION` + `CHANGELOG.md` entry naming all four findings). Root
+   `vnpy/__init__.py` / this file's `version:` field untouched, per Out of scope.
+6. Commit split follows this series' convention: one dev-work commit ("A104: ..."), then after
+   `handoff.py next` a separate "A104: promote dev->review" commit for the transition metadata.
+
+## Manual Verification
+
+All commands run natively on this machine 2026-07-22 by kimi-code (not transcribed from elsewhere).
+
+1. `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` (repo root)
+   - Baseline BEFORE changes: `780 passed, 4 deselected in 48.54s`
+   - AFTER changes: `780 passed, 4 deselected in 50.40s` — count UNCHANGED (no tests added/removed).
+2. `python -m pytest examples/czsc_strategy/tests/unit -q -m realdb` (repo root, per AGENTS.md rule —
+   verified rather than assumed even though no `backtest_engine.py`/`positions.py`/`signals.py` touched):
+   `4 passed, 780 deselected in 79.42s (0:01:19)` — equivalence gate unchanged, passes.
+3. `python tools/sync_check.py` (repo root): `[SYNC-CHECK] PASS: 版本与文档一致。` ROOT_EXIT=0
+   (version truth 4.4.0; pre-existing WARN about missing `docs/archive/` unchanged).
+4. `python tools/sync_check.py --root examples/czsc_strategy` (repo root): PASS, SUB_EXIT=0,
+   version truth = 0.2.42 <!-- synccheck:ignore --> from `VERSION::`.
+5. `python tools/sync_check.py` run FROM `examples/czsc_strategy/` (the new thin wrapper):
+   PASS, EXIT=0 against local `.synccheck.yml` — wrapper resolves the shared engine at
+   repo-root `tools/sync_guardian/sync_check.py` via `__file__`-relative `parents[3]`, cwd-independent.
+6. `powershell -NoProfile -ExecutionPolicy Bypass -File .\run_next_work.ps1 -Preflight`
+   (from `examples/czsc_strategy/diagnostics/`): `206 passed in 31.58s`, exit 0,
+   "Preflight complete; live SimNow capture was not requested".
+7. ruff touched-file before/after counts (repo ruff baseline is dirty by design; comparing
+   touched-file counts per this series' practice):
+   `debug_pos.py` 4→4, `run_stock_backtest.py` 22→22, `run_akshare_backtest.py` 15→15,
+   `run_baostock_backtest.py` 28→28, `czsc_adapter.py` 7→7, `czsc_multi_timeframe_strategy.py` 10→10,
+   `tools/sync_check.py` 20→0 (net improvement; no new errors introduced).
+8. Banner consistency check (python, byte-level, normalizing only the filename line and the extra
+   bias block): all six files `IDENTICAL`.
+9. Token grep across the six scripts: zero hits for the literal `da1f00839c22e497...` string
+   (it remains only in this HANDOFF.md's Background section, quoting the finding — already committed
+   in git history at design time; rotation is external per the design).
 
 ## Decision Log
 
+- 2026-07-22 (kimi-code, dev) - Implemented all four plan items. Two deviations from the literal design
+  text, both small and recorded here per workflow rules: (a) design note 3's `parents[2]` was off by one —
+  repo root from `examples/czsc_strategy/tools/sync_check.py` is `parents[3]`; the wrapper uses
+  `parents[3]` and was verified by running it from the subproject dir (PASS, exit 0). (b) The design
+  scoped the token fix to `debug_pos.py` only, but the SAME literal token was also hardcoded at
+  `run_stock_backtest.py:44` (`TUSHARE_TOKEN = "..."`) — the design audit missed this second occurrence.
+  Fixed with the identical fail-closed pattern (`os.environ.get("TUSHARE_TOKEN")` + descriptive
+  `RuntimeError`, no default/fallback), since leaving it would defeat finding 1's stated goal. No
+  backtest/signal logic changed anywhere; the other four legacy files are banner-comment-only as designed.
+- 2026-07-22 (kimi-code, dev) - Test-count note: not-realdb baseline is 780 passed (both before and after
+  this task), not the 779 recorded in A103's changelog — the +1 is the concurrent SimNow workstream's
+  uncommitted `test_simnow_replay_readiness.py`, unrelated to this task. No new test added for the wrapper
+  (acceptance criterion left it to dev's call): the wrapper is exercised directly by acceptance command 5.
 - 2026-07-22 (claude-code, design) - User ran a fresh, broader (4-subagent, whole-project) read-only audit
   covering core `vnpy/`, `vnpy.alpha`, and `examples/czsc_strategy` — 14 findings total. User explicitly
   chose "examples/czsc_strategy first" over the audit's own suggested cross-cutting batch order, and

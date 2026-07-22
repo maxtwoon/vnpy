@@ -1,4 +1,23 @@
-"""调试 pos 爆炸问题的脚本"""
+# =============================================================================
+# !! LEGACY / 已停止维护 —— RESEARCH-ONLY / NOT PROMOTION EVIDENCE !!
+# -----------------------------------------------------------------------------
+# 本文件（debug_pos.py）是早期 A 股原型代码，已停止维护，未接入当前回测/测试路径；
+# 当前唯一活跃维护、有测试覆盖的实现是 chan_strategy/（期货 CTA）。
+#
+# 本文件不含任何 A 股交易制度建模：
+#   - 未建模 T+1（当日买入不可当日卖出）
+#   - 未建模 涨跌停 / 停牌（halts）
+#   - 未建模 卖出侧印花税
+#   - 未建模 A 股禁止做空约束
+#   - 成交假设为即时、无约束成交（immediate / unconstrained fills）
+#
+# 其输出【不得】作为策略有效性的证据（NOT PROMOTION EVIDENCE）。
+# =============================================================================
+"""调试 pos 爆炸问题的脚本
+
+运行前需设置环境变量 TUSHARE_TOKEN（Tushare API token）；未设置时脚本以
+RuntimeError fail-closed，不提供任何默认/回退 token。
+"""
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import tushare as ts
@@ -6,7 +25,13 @@ from vnpy.trader.object import BarData
 from vnpy.trader.constant import Exchange, Interval
 import pandas as pd
 
-ts.set_token('da1f00839c22e497ddd81a46973751bc84315ba33d96472fd10547ca')
+_token = os.environ.get("TUSHARE_TOKEN")
+if not _token:
+    raise RuntimeError(
+        "环境变量 TUSHARE_TOKEN 未设置：请将其设为你的 Tushare API token 后再运行本脚本"
+        "（PowerShell: $env:TUSHARE_TOKEN = '<your-token>'）。本脚本不提供任何默认/回退 token。"
+    )
+ts.set_token(_token)
 pro = ts.pro_api()
 df = pro.daily(ts_code='600519.SH', start_date='20230101', end_date='20231231')
 df = df.sort_values('trade_date').reset_index(drop=True)
