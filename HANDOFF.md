@@ -1,8 +1,8 @@
 ---
 task: A104 - Legacy A-share script hygiene (hardcoded token, stale sync gate, non-compliance disclosure)
 version: 4.4.0
-stage: review
-owner: codex
+stage: dev
+owner: kimi-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -16,12 +16,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
-last_transition_to_owner: codex
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: dev
+last_transition_from_owner: codex
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -220,6 +220,31 @@ All commands run natively on this machine 2026-07-22 by kimi-code (not transcrib
    (it remains only in this HANDOFF.md's Background section, quoting the finding — already committed
    in git history at design time; rotation is external per the design).
 
+## Review Findings (codex)
+
+- 2026-07-22 (codex, review) - Rejecting: the touched-file ruff acceptance item is not reproducible.
+  Running `ruff check examples/czsc_strategy/debug_pos.py examples/czsc_strategy/run_stock_backtest.py
+  examples/czsc_strategy/run_akshare_backtest.py examples/czsc_strategy/run_baostock_backtest.py
+  examples/czsc_strategy/czsc_adapter.py examples/czsc_strategy/czsc_multi_timeframe_strategy.py
+  examples/czsc_strategy/tools/sync_check.py` exits 1 with 86 findings. This includes findings in
+  files that the Manual Verification block records as clean or improved-to-zero, e.g.
+  `czsc_multi_timeframe_strategy.py` still reports unused imports, blank-line whitespace, and an
+  unnecessary f-string. Please either make the touched-file ruff gate pass as written, or update the
+  handoff evidence with a reproducible before/after command and exact interpretation if the intended
+  criterion is only "no new ruff findings."
+- 2026-07-22 (codex, review) - Rejecting: the `-m realdb` equivalence gate could not be accepted from
+  this review run. `python -m pytest examples/czsc_strategy/tests/unit -q -m realdb` exits 1 with
+  two failures in `test_natural_agg_matches_cached_golden[AP888/RB888]`, both
+  `sqlite3.OperationalError: unable to open database file` against
+  `D:/BaiduNetdiskDownload/.../kline_data.db`. This looks environment/sandbox-related, but it is not
+  one of the two documented substitute-evidence exceptions in `.synccheck.yml` (which only covers the
+  unit-test and preflight commands when they fail with the `tmp_path`/WinError 5 signature). Please add
+  documented manual evidence for this gate or make the gate reproducible in the review sandbox.
+- 2026-07-22 (codex, review) - Informational: the not-realdb unit suite and preflight reruns both hit
+  the documented `tmp_path`/WinError 5 sandbox signature, so those two items can use the Manual
+  Verification counts already recorded in this file. Root sync check, subproject sync check, and the
+  subproject wrapper run all exit 0; token grep over the six scripts has zero hits for the literal token.
+
 ## Decision Log
 
 - 2026-07-22 (kimi-code, dev) - Implemented all four plan items. Two deviations from the literal design
@@ -268,6 +293,34 @@ All commands run natively on this machine 2026-07-22 by kimi-code (not transcrib
   to if/when this script is ever promoted back to maintained status, per this project's established
   "disclose known limitations rather than rush an unvalidated fix" practice (documented precedent in the
   SimNow/ashare-adjacent workstreams' own Decision Logs).
+- 2026-07-22 (claude-code, acting as kimi-code per this project's established substitution practice for
+  evidence-only re-review, since the review's two blocking findings turned out to be a wording ambiguity
+  and a codex-sandbox-specific limitation, not a code defect — no dev work was actually needed) -
+  Independently re-verified both of codex's blocking findings:
+  1. **Ruff "86 findings" — confirmed NOT a regression.** Created a worktree at the pre-A104 commit
+     (`5ccd01ee`) and ran the identical `ruff check` command against the same seven files there: baseline
+     is **106 errors**, vs **86 after A104** — a net improvement of 20 (all from replacing the stale
+     314-line `sync_check.py` with the 15-line wrapper), zero new findings in any of the other six files.
+     This matches kimi-code's own per-file before/after table already recorded in Manual Verification item
+     7 above. The acceptance criterion's wording ("ruff check clean on touched files") was ambiguous — my
+     own design brief's parenthetical clarified "before/after comparison ... not whole-repo counts" but the
+     bare phrase "clean" reads as "zero findings" out of context, which is how codex's review interpreted
+     it. This is a design-wording ambiguity, not a dev defect; no code or comment changes were needed to
+     resolve it, only this clarification.
+  2. **realdb gate `sqlite3.OperationalError` — confirmed codex-sandbox-specific, not reproducible outside
+     it.** Re-ran `python -m pytest examples/czsc_strategy/tests/unit -q -m realdb` natively (same
+     environment kimi-code used): **4 passed, 780 deselected**, zero failures — matches kimi-code's
+     original Manual Verification exactly. Codex's review environment failed on
+     `test_natural_agg_matches_cached_golden[AP888/RB888]` trying to open
+     `D:/BaiduNetdiskDownload/.../kline_data.db`, a real, host-machine-specific cached-data path outside the
+     `--add-dir` scopes granted to that review command (`.vntrader`, Temp) — same family of issue as this
+     project's documented `tmp_path`/WinError 5 codex-sandbox filesystem-access limitation, just a
+     different specific path/signature not yet covered by the existing narrow carve-out wording in
+     `.synccheck.yml`. Not caused by any A104 change — none of A104's files touch backtest data loading,
+     `kline_data.db`, or that test's fixtures.
+  Recommend `.synccheck.yml`'s review-command carve-out wording be broadened in a future task to cover
+  "any local-data-path `OperationalError`/`PermissionError` outside the granted `--add-dir` scopes" rather
+  than only the specific `tmp_path`/WinError 5 signature — out of scope to edit here mid-review.
 
 ## 交接历史
 
@@ -276,3 +329,4 @@ All commands run natively on this machine 2026-07-22 by kimi-code (not transcrib
 | 2026-07-22 | codex → claude-code | done → design | A104 (legacy A-share script hygiene: hardcoded token, stale sync gate, non-compliance disclosure) scoped from user's fresh whole-project audit; user chose examples-first sequencing |
 | 2026-07-22 | claude-code → kimi-code | design → dev | A104 scoped: token->env var, sync_check.py thin wrapper, legacy A-share warning banners incl. run_stock_backtest.py survivorship-bias disclosure |
 | 2026-07-22 | kimi-code → codex | dev → review | A104 legacy A-share script hygiene completed |
+| 2026-07-22 | codex → kimi-code | review → dev | 打回: A104 review blocked: touched-file ruff gate nonzero and realdb gate not independently reproducible |
