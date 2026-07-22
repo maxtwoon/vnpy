@@ -1,8 +1,8 @@
 ---
 task: A104 - Legacy A-share script hygiene (hardcoded token, stale sync gate, non-compliance disclosure)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -16,12 +16,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background
@@ -330,3 +330,4 @@ All commands run natively on this machine 2026-07-22 by kimi-code (not transcrib
 | 2026-07-22 | claude-code → kimi-code | design → dev | A104 scoped: token->env var, sync_check.py thin wrapper, legacy A-share warning banners incl. run_stock_backtest.py survivorship-bias disclosure |
 | 2026-07-22 | kimi-code → codex | dev → review | A104 legacy A-share script hygiene completed |
 | 2026-07-22 | codex → kimi-code | review → dev | 打回: A104 review blocked: touched-file ruff gate nonzero and realdb gate not independently reproducible |
+| 2026-07-22 | kimi-code → codex | dev → review | Both review-blocking findings independently re-verified as non-defects: ruff 106->86 (net improvement, matches recorded before/after table, wording ambiguity not a regression); realdb gate 4 passed natively, codex-sandbox-specific OperationalError on an out-of-scope local data path, same family as documented tmp_path/WinError5 limitation |
