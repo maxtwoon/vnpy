@@ -1,8 +1,8 @@
 ---
 task: A104 - Legacy A-share script hygiene (hardcoded token, stale sync gate, non-compliance disclosure)
 version: 4.4.0
-stage: design
-owner: claude-code
+stage: dev
+owner: kimi-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -16,6 +16,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
+last_transition_kind: next
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -218,3 +224,4 @@ touched.
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-22 | codex → claude-code | done → design | A104 (legacy A-share script hygiene: hardcoded token, stale sync gate, non-compliance disclosure) scoped from user's fresh whole-project audit; user chose examples-first sequencing |
+| 2026-07-22 | claude-code → kimi-code | design → dev | A104 scoped: token->env var, sync_check.py thin wrapper, legacy A-share warning banners incl. run_stock_backtest.py survivorship-bias disclosure |
