@@ -49,8 +49,14 @@ def test_data_adapter_default_paths_and_errors(tmp_path):
         assert adapter.get_sample_data(None).shape[0] == 0 or isinstance(adapter.get_sample_data(None), pd.DataFrame)
         with pytest.raises(ValueError, match="关键列"):
             adapter.load_kline_data("T", table_name="no_symbol")
-        with pytest.raises(ValueError, match="没有找到"):
-            SqliteDataAdapter(str(db)).load_kline_data("T", table_name=None) if False else (_ for _ in ()).throw(ValueError("数据库中没有找到数据表"))
+        empty_db = tmp_path / "empty_for_l9.db"
+        sqlite3.connect(empty_db).close()
+        empty_adapter = SqliteDataAdapter(str(empty_db))
+        try:
+            with pytest.raises(ValueError, match="没有找到"):
+                empty_adapter.load_kline_data("T", table_name=None)
+        finally:
+            empty_adapter.close()
         bars = adapter.load_raw_bars("T", freq="daily", table_name="dates")
         assert len(bars) == 3
         info = adapter.inspect_database()

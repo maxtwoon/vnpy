@@ -2,6 +2,31 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.41（2026-07-22）- A103 修复同义反复测试断言 + 删除死代码 utils.py
+  （第四次全面 re-audit L-NEW-9、L-NEW-10，两处小而独立的修复）：
+  - **L-NEW-9（测试断言修复）**：`tests/unit/test_more_coverage.py`
+    `test_data_adapter_default_paths_and_errors` 中的
+    `X if False else (_ for _ in ()).throw(ValueError(...))` 构造是同义反复断言——
+    `if False` 前的 `load_kline_data` 调用永不执行，异常由自身合成抛出，测试恒过、
+    从未真实触发「无数据表」错误路径。现已替换为：在同一测试内新建真正零表的
+    空数据库（`empty_for_l9.db`，仅 `sqlite3.connect(path).close()`，无任何建表），
+    对其真实调用 `SqliteDataAdapter(...).load_kline_data("T", table_name=None)`，
+    仍在 `pytest.raises(ValueError, match="没有找到")` 内——断言特异性不变，但现在真实
+    触发了 `data_adapter.py` 的「数据库中没有找到数据表」raise；新 adapter 按本文件既有
+    `try/finally: adapter.close()` 模式关闭。
+  - **L-NEW-10（死代码删除）**：`chan_strategy/utils.py` 整文件删除。其三个函数
+    `parse_signal`/`signal_key`/`signal_value` 在删除前经全仓库 grep 复核确认零引用——
+    其余同名命中均为 czsc 自有 `Signal.signal_value` 属性、diagnostics 脚本局部变量、
+    或测试内独立定义的同名辅助函数（如 `test_exit_model.py` 的 `_signal_key`/`_signal_value`），
+    无一 import 自 `chan_strategy.utils`；真实信号解析走 czsc 的 `Signal` 类（`.key`/
+    `.signal_value` 属性）。
+  - 其余一律未动：未触碰两文件中任何其他测试、未触碰 `test_branch_completion.py`、
+    未触碰 `backtest_engine.py`/`positions.py`/`signals.py` 等生产代码。
+  - 单测通过：779 → 779（not-realdb，**数量不变**——本系列罕见的「同数量」验收情形，
+    只是把一条既有测试的断言变真，未增删测试）；`-m realdb` 等价门禁不变通过；
+    双侧 sync_check、Preflight、ruff 均通过（见根 HANDOFF.md Manual Verification）。
+    RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.40（2026-07-22）- A102 新增两份 20 日 SimNow 晋升准备度实现的平价回归测试
   （第三次全面 re-audit M-NEW-3；**纯测试新增，明确不是对底层重复实现的修复**）：
   - 背景：`diagnostics/simnow_daily_monitor.py::build_20d_report` 与
