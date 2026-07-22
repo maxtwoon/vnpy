@@ -1,8 +1,8 @@
 ---
 task: A103 - Fix tautological test assertion and remove dead utils.py (4th re-audit L-NEW-9, L-NEW-10)
 version: 4.4.0
-stage: design
-owner: claude-code
+stage: dev
+owner: kimi-code
 updated: 2026-07-22
 deliverables:
   - HANDOFF.md
@@ -11,12 +11,12 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: fix
+last_transition_kind: next
 last_transition_actor: claude-code
 last_transition_from_stage: design
-last_transition_to_stage: design
+last_transition_to_stage: dev
 last_transition_from_owner: claude-code
-last_transition_to_owner: claude-code
+last_transition_to_owner: kimi-code
 ---
 
 ## Background
@@ -160,3 +160,4 @@ with pytest.raises(ValueError, match="没有找到"):
 | 日期 | 从 → 到 | 阶段变化 | 摘要 |
 |------|---------|----------|------|
 | 2026-07-22 | claude-code → claude-code | design → design | A103 (tautological test fix + dead code removal, 4th re-audit L-NEW-9/L-NEW-10) scoped; drafting design brief |
+| 2026-07-22 | claude-code → kimi-code | design → dev | A103 promoted design->dev |
