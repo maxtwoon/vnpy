@@ -1,16 +1,23 @@
 """
+ONE-SHOT / 开发调试脚本，不在文档化测试或回测入口范围内。
 独立脚本：检查SQLite数据库结构
 运行: python inspect_db.py
 """
+import os
 import sys
 import sqlite3
 import pandas as pd
 from pathlib import Path
 
-DB_PATH = r"D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\kline_data.db"
+# 与 chan_strategy/config.py 的 SQLITE_DB_PATH 保持同一覆盖方式（CHAN_SQLITE_DB_PATH），
+# 2026-07-26 审核后修复：此前硬编码个人网盘路径且不可通过环境变量覆盖。
+DB_PATH = os.getenv(
+    "CHAN_SQLITE_DB_PATH",
+    r"D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\kline_data.db",
+)
 
 # 也尝试不带.db后缀的路径
-DB_PATH_ALT = r"D:\BaiduNetdiskDownload\新数据库\ssquant数据库_20260425\kline_data"
+DB_PATH_ALT = DB_PATH[:-3] if DB_PATH.lower().endswith(".db") else DB_PATH
 
 
 def inspect():

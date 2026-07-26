@@ -8,7 +8,9 @@ Covers:
 """
 from __future__ import annotations
 
+import ast
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 from czsc.objects import Direction
@@ -37,6 +39,45 @@ def restore_config():
 
 def _v(signal_dict: dict) -> str:
     return next(iter(signal_dict.values())).split("_")[0]
+
+
+def test_core_risk_config_keys_do_not_use_literal_get_fallbacks():
+    """Core risk defaults must stay single-sourced in config.py."""
+    project_root = Path(__file__).resolve().parents[2]
+    files = [
+        project_root / "chan_strategy" / "positions.py",
+        project_root / "chan_strategy" / "portfolio_engine.py",
+        project_root / "chan_strategy" / "portfolio_ledger.py",
+    ]
+    keys = {
+        "sizing_model",
+        "risk_per_trade_pct",
+        "max_margin_pct",
+        "limit_halt_model",
+        "portfolio_risk",
+        "weighting",
+        "daily_loss_limit_pct",
+        "max_symbol_margin_pct",
+        "cluster_gross_cap",
+        "daily_agg",
+        "night_session_start_hour",
+    }
+    violations: list[str] = []
+
+    for path in files:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Attribute) or node.func.attr != "get":
+                continue
+            if not node.args or not isinstance(node.args[0], ast.Constant):
+                continue
+            key = node.args[0].value
+            if key in keys and (len(node.args) >= 2 or node.keywords):
+                violations.append(f"{path.relative_to(project_root)}:{node.lineno}:{key}")
+
+    assert violations == []
 
 
 # ---------------------------------------------------------------------------

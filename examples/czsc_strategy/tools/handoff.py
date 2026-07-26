@@ -21,8 +21,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+ROOT = Path(__file__).resolve().parents[3]
+SCRIPT_DIR = ROOT / "tools" / "sync_guardian"
+
+sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(ROOT))
 from sync_check import _load_config, _parse_front_matter, run_checks  # noqa: E402
 
 DEFAULT_STAGES = ["design", "dev", "review", "done"]

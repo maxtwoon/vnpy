@@ -6,7 +6,11 @@
 - k2: 观察对象与参数，如 D1BI、D1ZS、D1BSP
 - k3: 信号名称及版本，如 方向V260615
 - v1/v2/v3: 分类结果；未使用位置填 "任意"
-- score: 0-100打分
+- score: 装饰性数值，不参与任何匹配/仲裁/仓位计算（2026-07-26 审核后澄清）。
+  ``Signal.is_match``（positions.py）只比较 key（k1_k2_k3）与前三个分类段
+  （v1/v2/v3），score 段被完全忽略；``Event`` 模式下 score 甚至被硬编码替换为
+  `_0` 后缀。不要设计任何"按 score 加权"的下游逻辑——它不会生效。契约见
+  ``tests/unit/test_signal_contract.py``。
 
 关键约束:
 - 只使用已确认结构生成交易信号
@@ -280,12 +284,11 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
     背驰状态信号
 
     信号名: {freq}_D1BI_背驰V260615
-    完全分类: 无 / 疑似 / 确认
+    完全分类: 无 / 疑似（当前实现只会输出这两档，见下方"注意"）
 
     判定逻辑:
     - 无中枢或笔不足: "无"
     - 最后一笔离开中枢且力度弱于进入: "疑似"（单级别只能疑似）
-    - 需要次级别确认才能变为"确认"（在多级别协同中处理）
 
     力度计算: 由 ``divergence_model`` 配置决定（amplitude: abs(high-low);
     macd: summed |hist| area on confirmed trade-frequency closes）。
@@ -305,7 +308,12 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
       反向笔对不被过滤、正常返回幅度比较结果。若未来经缠论领域评审确认需要
       强制方向匹配，应作为独立任务单独评估回归影响，而非默认现状是缺陷。
 
-    注意: 单级别信号中不会输出"确认"，确认需要次级别协同
+    注意: 本函数背驰状态只输出"无"/"疑似"，不输出"确认"；曾计划的跨级别协同
+    "确认"（对应已删除的 confirm_freq 死配置）从未实现，本函数的"疑似"是当前
+    最终态，不会被后续逻辑升级为"确认"。与买卖点信号（signal_first_buy 等）
+    输出的"一买确认"等值语义不同——那里的"确认"指同级别反向确认笔
+    （见 `_get_confirming_bi`），与本函数无关。三种"确认"含义的完整区分见
+    README.md「信号语义」一节。
     """
     k1 = freq
     k2 = "D1BI"

@@ -356,14 +356,14 @@ def _research_trailing_params(symbol: str) -> tuple[int, float]:
     item = overrides.get(_research_symbol_key(symbol), None)
     if isinstance(item, dict):
         return (
-            item.get("trailing_start_bp", STRATEGY_CONFIG.get("trailing_start_bp", 300)),
-            item.get("trailing_drawback_pct", STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25)),
+            item.get("trailing_start_bp", STRATEGY_CONFIG["trailing_start_bp"]),
+            item.get("trailing_drawback_pct", STRATEGY_CONFIG["trailing_drawback_pct"]),
         )
     if isinstance(item, (list, tuple)) and len(item) == 2:
         return item[0], item[1]
     return (
-        STRATEGY_CONFIG.get("trailing_start_bp", 300),
-        STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25),
+        STRATEGY_CONFIG["trailing_start_bp"],
+        STRATEGY_CONFIG["trailing_drawback_pct"],
     )
 
 
@@ -610,9 +610,9 @@ class Position:
         self.timeout = timeout    # 超时K线数（交易周期级别，如 600 根 30 分钟 K 线 ≈ 12.5 个交易日）
         self.stop_loss = stop_loss  # 止损BP (1BP=0.01%)
         # 移动止损启动阈值(BP)；None 时回退到 STRATEGY_CONFIG（与 commission_rate/slippage 同一模式）
-        self.trailing_start = trailing_start if trailing_start is not None else STRATEGY_CONFIG.get("trailing_start_bp", 300)
+        self.trailing_start = trailing_start if trailing_start is not None else STRATEGY_CONFIG["trailing_start_bp"]
         # 移动止损回撤容忍比例；None 时回退到 STRATEGY_CONFIG
-        self.trailing_drawback_pct = trailing_drawback_pct if trailing_drawback_pct is not None else STRATEGY_CONFIG.get("trailing_drawback_pct", 0.25)
+        self.trailing_drawback_pct = trailing_drawback_pct if trailing_drawback_pct is not None else STRATEGY_CONFIG["trailing_drawback_pct"]
         self.T0 = T0
         self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
         self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]
@@ -662,7 +662,7 @@ class Position:
         eventual closed pair can carry an audit trail.  ``off`` and ``aware`` never
         block fills through this helper.
         """
-        if STRATEGY_CONFIG.get("limit_halt_model", "off") != "enforce":
+        if STRATEGY_CONFIG["limit_halt_model"] != "enforce":
             return False
         blocked = _resolve_limit_flag(flag, side, is_entry)
         if blocked:
@@ -935,7 +935,7 @@ class Position:
             return
 
         scale_volume = self.volume * partial_tp_frac
-        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+        if STRATEGY_CONFIG["sizing_model"] == "risk":
             scale_volume = int(floor(scale_volume))
             if scale_volume < 1 or scale_volume >= self.volume:
                 # Lot flooring made a real partial scale-out impossible this
@@ -974,7 +974,7 @@ class Position:
             "reason_code": normalize_exit_reason(reason),
             "is_partial_tp": True,
         }
-        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
         if limit_halt_model in ("aware", "enforce"):
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
@@ -990,7 +990,7 @@ class Position:
                    equity_at_entry: float | None = None,
                    total_open_margin: float | None = None,
                    entry_at_limit: bool | None = None):
-        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+        if STRATEGY_CONFIG["sizing_model"] == "risk":
             self.volume, self.contract_multiplier = self._size_open(
                 price, equity_at_entry, total_open_margin
             )
@@ -1037,8 +1037,8 @@ class Position:
             )
 
         equity = equity_at_entry if equity_at_entry is not None else 0.0
-        risk_pct = STRATEGY_CONFIG.get("risk_per_trade_pct", 0.005)
-        max_margin_pct = STRATEGY_CONFIG.get("max_margin_pct", 0.50)
+        risk_pct = STRATEGY_CONFIG["risk_per_trade_pct"]
+        max_margin_pct = STRATEGY_CONFIG["max_margin_pct"]
 
         stop_distance = price * self.stop_loss / 10000
         if stop_distance <= 0 or equity <= 0 or multiplier <= 0:
@@ -1089,7 +1089,7 @@ class Position:
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
         }
-        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
         if limit_halt_model in ("aware", "enforce"):
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
@@ -1117,7 +1117,7 @@ class Position:
                     equity_at_entry: float | None = None,
                     total_open_margin: float | None = None,
                     entry_at_limit: bool | None = None):
-        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+        if STRATEGY_CONFIG["sizing_model"] == "risk":
             self.volume, self.contract_multiplier = self._size_open(
                 price, equity_at_entry, total_open_margin
             )
@@ -1159,7 +1159,7 @@ class Position:
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
         }
-        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
         if limit_halt_model in ("aware", "enforce"):
             pair["is_entry_at_limit"] = self._pending_entry_at_limit
             pair["is_exit_at_limit"] = self._pending_exit_at_limit
@@ -1285,12 +1285,12 @@ def create_first_buy_position(symbol: str, freq: str = "30分钟",
         symbol=symbol,
         opens=opens,
         exits=exits,
-        interval=STRATEGY_CONFIG.get("interval_1buy", 3600 * 24),
-        timeout=STRATEGY_CONFIG.get("timeout_1buy", 600),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_1buy", 200),
+        interval=STRATEGY_CONFIG["interval_1buy"],
+        timeout=STRATEGY_CONFIG["timeout_1buy"],
+        stop_loss=STRATEGY_CONFIG["stop_loss_1buy"],
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
-        T0=STRATEGY_CONFIG.get("T0", False),
+        T0=STRATEGY_CONFIG["T0"],
         commission_rate=commission_rate,
         slippage=slippage,
     )
@@ -1379,12 +1379,12 @@ def create_second_buy_position(symbol: str, freq: str = "30分钟",
         symbol=symbol,
         opens=opens,
         exits=exits,
-        interval=STRATEGY_CONFIG.get("interval_2buy", 3600 * 24),
-        timeout=STRATEGY_CONFIG.get("timeout_2buy", 1000),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_2buy", 300),
+        interval=STRATEGY_CONFIG["interval_2buy"],
+        timeout=STRATEGY_CONFIG["timeout_2buy"],
+        stop_loss=STRATEGY_CONFIG["stop_loss_2buy"],
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
-        T0=STRATEGY_CONFIG.get("T0", False),
+        T0=STRATEGY_CONFIG["T0"],
         commission_rate=commission_rate,
         slippage=slippage,
     )
@@ -1473,12 +1473,12 @@ def create_third_buy_position(symbol: str, freq: str = "30分钟",
         symbol=symbol,
         opens=opens,
         exits=exits,
-        interval=STRATEGY_CONFIG.get("interval_3buy", 3600 * 24),
-        timeout=STRATEGY_CONFIG.get("timeout_3buy", 1500),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_3buy", 350),
+        interval=STRATEGY_CONFIG["interval_3buy"],
+        timeout=STRATEGY_CONFIG["timeout_3buy"],
+        stop_loss=STRATEGY_CONFIG["stop_loss_3buy"],
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
-        T0=STRATEGY_CONFIG.get("T0", False),
+        T0=STRATEGY_CONFIG["T0"],
         commission_rate=commission_rate,
         slippage=slippage,
     )
@@ -1550,12 +1550,12 @@ def create_first_sell_position(symbol: str, freq: str = "30分钟",
         symbol=symbol,
         opens=opens,
         exits=exits,
-        interval=STRATEGY_CONFIG.get("interval_1sell", STRATEGY_CONFIG.get("interval_1buy", 3600 * 24)),
-        timeout=STRATEGY_CONFIG.get("timeout_1sell", STRATEGY_CONFIG.get("timeout_1buy", 600)),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_1sell", STRATEGY_CONFIG.get("stop_loss_1buy", 200)),
+        interval=STRATEGY_CONFIG.get("interval_1sell", STRATEGY_CONFIG["interval_1buy"]),
+        timeout=STRATEGY_CONFIG.get("timeout_1sell", STRATEGY_CONFIG["timeout_1buy"]),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_1sell", STRATEGY_CONFIG["stop_loss_1buy"]),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
-        T0=STRATEGY_CONFIG.get("T0", False),
+        T0=STRATEGY_CONFIG["T0"],
         commission_rate=commission_rate,
         slippage=slippage,
     )
@@ -1627,12 +1627,12 @@ def create_second_sell_position(symbol: str, freq: str = "30分钟",
         symbol=symbol,
         opens=opens,
         exits=exits,
-        interval=STRATEGY_CONFIG.get("interval_2sell", STRATEGY_CONFIG.get("interval_2buy", 3600 * 24)),
-        timeout=STRATEGY_CONFIG.get("timeout_2sell", STRATEGY_CONFIG.get("timeout_2buy", 1000)),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_2sell", STRATEGY_CONFIG.get("stop_loss_2buy", 300)),
+        interval=STRATEGY_CONFIG.get("interval_2sell", STRATEGY_CONFIG["interval_2buy"]),
+        timeout=STRATEGY_CONFIG.get("timeout_2sell", STRATEGY_CONFIG["timeout_2buy"]),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_2sell", STRATEGY_CONFIG["stop_loss_2buy"]),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
-        T0=STRATEGY_CONFIG.get("T0", False),
+        T0=STRATEGY_CONFIG["T0"],
         commission_rate=commission_rate,
         slippage=slippage,
     )
@@ -1706,12 +1706,12 @@ def create_third_sell_position(symbol: str, freq: str = "30分钟",
         symbol=symbol,
         opens=opens,
         exits=exits,
-        interval=STRATEGY_CONFIG.get("interval_3sell", STRATEGY_CONFIG.get("interval_3buy", 3600 * 24)),
-        timeout=STRATEGY_CONFIG.get("timeout_3sell", STRATEGY_CONFIG.get("timeout_3buy", 1500)),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_3sell", STRATEGY_CONFIG.get("stop_loss_3buy", 350)),
+        interval=STRATEGY_CONFIG.get("interval_3sell", STRATEGY_CONFIG["interval_3buy"]),
+        timeout=STRATEGY_CONFIG.get("timeout_3sell", STRATEGY_CONFIG["timeout_3buy"]),
+        stop_loss=STRATEGY_CONFIG.get("stop_loss_3sell", STRATEGY_CONFIG["stop_loss_3buy"]),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
-        T0=STRATEGY_CONFIG.get("T0", False),
+        T0=STRATEGY_CONFIG["T0"],
         commission_rate=commission_rate,
         slippage=slippage,
     )
@@ -1953,7 +1953,7 @@ class ChanTimingStrategy:
         # A51/A67: forward limit flags under "aware" and "enforce"; "off" keeps
         # the legacy Position.update call signature byte-identical.
         limit_kwargs: dict = {}
-        if STRATEGY_CONFIG.get("limit_halt_model", "off") in ("aware", "enforce"):
+        if STRATEGY_CONFIG["limit_halt_model"] in ("aware", "enforce"):
             limit_kwargs["entry_at_limit"] = entry_at_limit
             limit_kwargs["exit_at_limit"] = exit_at_limit
 

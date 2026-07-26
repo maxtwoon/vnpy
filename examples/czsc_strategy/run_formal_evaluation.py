@@ -9,6 +9,12 @@ Usage:
 它不会修改 `chan_strategy/config.py` 中的默认字典值。
 
 数据来源、数据库结构与 `run_chan_backtest.py` 一致。
+
+注（2026-07-26 审核后补充）：本入口是**单品种**评估，不包含任何组合级风控
+（max_margin_pct / daily_loss_limit_pct / max_drawdown_breaker_pct）——这些
+只存在于多品种联合回放路径。如需组合级风控约束下的报告，请改用
+`PortfolioEngine(symbols, ...).run()` 并设置 `portfolio_risk="on"` +
+`sizing_model="risk"`（见 `chan_strategy/portfolio_engine.py`）。
 """
 import argparse
 import sys
@@ -44,6 +50,7 @@ def main():
     print("=" * 60)
     print("缠论择时策略正式评估回测")
     print("模式: sizing_model=risk, limit_halt_model=enforce")
+    print("注意: 单品种评估，不含组合级风控（如需组合级约束请使用 PortfolioEngine）")
     print("=" * 60)
     print(f"数据库: {SQLITE_DB_PATH}")
     print(f"数据库存在: {Path(SQLITE_DB_PATH).exists()}")

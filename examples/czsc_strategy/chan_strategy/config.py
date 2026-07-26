@@ -9,13 +9,15 @@ SQLITE_DB_PATH = os.getenv(
 
 # 策略参数
 STRATEGY_CONFIG = {
-    "base_freq": "5分钟",      # 基础周期
+    # 注：引擎固定从 1 分钟 K 线重采样（backtest_engine.py 硬编码 freq="1"）；
+    # 曾存在的 base_freq/confirm_freq 键从未被任何代码消费（"次级别确认"未实现），
+    # 已于 2026-07-26 审核后删除，避免用户误以为改这两项会生效。
     "trade_freq": "30分钟",    # 交易周期
-    "confirm_freq": "5分钟",   # 次级别确认周期
     "filter_freq": "日线",     # 环境过滤周期
 
     # 仓位管理
-    "total_capital": 1000000,
+    # 注：总资金实际来自 BACKTEST_CONFIG["initial_capital"]（见下）；
+    # 曾存在的 total_capital 键无任何消费方，已于 2026-07-26 审核后删除。
     "pos_1buy": 0.10,          # 一买仓位10%（左侧试仓）
     "pos_2buy": 0.20,          # 二买仓位20%
     "pos_3buy": 0.30,          # 三买仓位30%
@@ -156,7 +158,16 @@ STRATEGY_CONFIG = {
         "industrial_energy": ["RB888", "ZN888", "SC888"],
     },
     "cluster_gross_cap": 1.0,             # max summed gross weight within a cluster
-    "daily_loss_limit_pct": 0.03,         # flatten + block new opens when day PnL <= -limit
+    "daily_loss_limit_pct": 0.03,         # flatten + block new opens when day PnL <= -limit (resets every trading day)
+    # 2026-07-26 审核后新增（研究用，默认禁用/None）：与 daily_loss_limit_pct 不同，
+    # 本项是从组合权益历史峰值起算、跨交易日不重置的持久性回撤熔断——用于防止
+    # daily_loss_limit_pct 挡不住的"每天各亏一点、累计慢性失血"场景。设为 0~1
+    # 之间的小数（如 0.10）以启用：一旦当前权益相对历史峰值回撤达到该比例，
+    # PortfolioLedger 会强平并阻断后续新开仓（同 A90 的 daily_loss_limit 机制），
+    # 且不会随交易日切换自动解除。仅在 sizing_model="risk" 且 portfolio_risk="on"
+    # 的联合回放路径（PortfolioLedger）生效；PortfolioCoordinator 的
+    # weight-based 路径暂未接入。
+    "max_drawdown_breaker_pct": None,
     "risk_parity_lookback": 60,           # trade-period bars used for per-symbol volatility estimate
 
     "contract_specs": {

@@ -271,6 +271,70 @@ def test_ledger_daily_loss_trigger_recorded_once():
     assert trigger["day_pnl_pct"] == pytest.approx(-0.031)
 
 
+# --------------------------------------------- drawdown breaker (2026-07-26)
+
+def test_drawdown_breaker_disabled_by_default():
+    """max_drawdown_breaker_pct is None by default: never arms, no matter the drawdown."""
+    ledger = _make_ledger()
+    assert ledger.max_drawdown_breaker_pct is None
+    ledger.update_equity({"AAA": -900_000.0})  # -90% drawdown
+    ledger.check_drawdown_breaker()
+    assert ledger.drawdown_breaker_active is False
+    assert ledger.drawdown_breaker_triggers == []
+
+
+def test_drawdown_breaker_arms_from_peak_and_persists_across_days():
+    """Breaker measures drawdown from the running peak and does NOT reset on day rollover
+    (unlike daily_loss_limit_active)."""
+    ledger = _make_ledger(cfg={"max_drawdown_breaker_pct": 0.10})
+    ledger.update_trading_day(datetime(2024, 1, 2, 9, 0))
+
+    # Equity rises to a new peak first.
+    ledger.update_equity({"AAA": 100_000.0})
+    ledger.check_drawdown_breaker()
+    assert ledger.peak_equity == pytest.approx(IC + 100_000.0)
+    assert ledger.drawdown_breaker_active is False
+
+    # Then draws down > 10% from that peak (not from initial_capital).
+    # update_equity recomputes from the full contributions dict each call
+    # (see test_ledger_equity_aggregation_no_double_count), so this call's
+    # equity is IC - 20k = 980k, not IC + 100k - 20k.
+    dt = datetime(2024, 1, 2, 14, 0)
+    ledger.update_trading_day(dt)
+    ledger.update_equity({"AAA": -20_000.0})  # equity = IC - 20k = 980k; peak stays IC + 100k
+    ledger.check_drawdown_breaker()
+    assert ledger.drawdown_breaker_active is True
+    assert len(ledger.drawdown_breaker_triggers) == 1
+    trigger = ledger.drawdown_breaker_triggers[0]
+    assert trigger["peak_equity"] == pytest.approx(IC + 100_000.0)
+    new_equity = IC - 20_000.0
+    assert trigger["drawdown_pct"] == pytest.approx((new_equity - (IC + 100_000.0)) / (IC + 100_000.0))
+
+    # A new trading day does NOT clear it (unlike daily_loss_limit_active).
+    ledger.update_trading_day(datetime(2024, 1, 3, 9, 0))
+    assert ledger.drawdown_breaker_active is True
+
+    # Equity recovering back above the trigger threshold does not clear it either
+    # (circuit breaker semantics, not a daily limit) and no duplicate trigger is recorded.
+    ledger.update_equity({"AAA": 100_000.0})
+    ledger.check_drawdown_breaker()
+    assert ledger.drawdown_breaker_active is True
+    assert len(ledger.drawdown_breaker_triggers) == 1
+
+
+def test_drawdown_breaker_reason_takes_priority_over_daily_loss_and_caps():
+    """drawdown_breaker beats daily_loss_limit, which beats symbol/cluster caps."""
+    ledger = _make_ledger(cfg={"max_drawdown_breaker_pct": 0.10, "max_symbol_margin_pct": 0.01})
+    ledger.update_symbol_margin("AAA", 12_500.0)  # breaches symbol cap too
+    ledger.daily_loss_limit_active = True
+    assert ledger.pre_open_injection_for("AAA")[2] == "daily_loss_limit"
+
+    ledger.drawdown_breaker_active = True
+    equity, margin, reason = ledger.pre_open_injection_for("AAA")
+    assert reason == "drawdown_breaker"
+    assert margin == pytest.approx(equity * ledger.max_margin_pct)
+
+
 def test_pre_open_injection_real_numbers_when_nothing_breached():
     """Unbreached state feeds the true shared equity / margin_total."""
     ledger = _make_ledger()

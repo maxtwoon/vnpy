@@ -74,14 +74,24 @@ class PortfolioLedger:
     ):
         self.symbols = list(dict.fromkeys(symbols))  # preserve order, dedupe
         self.initial_capital = float(initial_capital)
-        self.cfg = config if config is not None else STRATEGY_CONFIG
+        self.cfg = dict(STRATEGY_CONFIG)
+        if config is not None:
+            self.cfg.update(config)
 
-        self.max_margin_pct = float(self.cfg.get("max_margin_pct", 0.50))
-        self.max_symbol_margin_pct = float(self.cfg.get("max_symbol_margin_pct", 1.0))
-        self.cluster_gross_cap = float(self.cfg.get("cluster_gross_cap", 1.0))
-        self.daily_loss_limit_pct = float(self.cfg.get("daily_loss_limit_pct", 0.03))
-        self.daily_agg = self.cfg.get("daily_agg", "natural")
-        self.night_session_start_hour = int(self.cfg.get("night_session_start_hour", 20))
+        self.max_margin_pct = float(self.cfg["max_margin_pct"])
+        self.max_symbol_margin_pct = float(self.cfg["max_symbol_margin_pct"])
+        self.cluster_gross_cap = float(self.cfg["cluster_gross_cap"])
+        self.daily_loss_limit_pct = float(self.cfg["daily_loss_limit_pct"])
+        # None (default) disables the breaker entirely — opt-in, research-only.
+        # Unlike daily_loss_limit_pct this measures drawdown from the running
+        # equity peak and does NOT reset on a trading-day rollover (see A87+
+        # docstring above and config.py for the "chronic bleed" rationale).
+        raw_breaker_pct = self.cfg.get("max_drawdown_breaker_pct")
+        self.max_drawdown_breaker_pct = (
+            float(raw_breaker_pct) if raw_breaker_pct is not None else None
+        )
+        self.daily_agg = self.cfg["daily_agg"]
+        self.night_session_start_hour = int(self.cfg["night_session_start_hour"])
 
         self.corr_clusters = dict(corr_clusters or {})
         # Local import: diagnostics.portfolio_ledger_report imports
@@ -102,6 +112,14 @@ class PortfolioLedger:
         self.daily_loss_limit_active: bool = False
         self.loss_limit_triggers: list[dict[str, Any]] = []
         self._last_dt: datetime | None = None
+
+        # Persistent (non-daily-reset) drawdown breaker state — see
+        # max_drawdown_breaker_pct above.  peak_equity only ever increases;
+        # once drawdown_breaker_active flips True it stays True for the rest
+        # of the replay (a circuit breaker, not a daily-reset limit).
+        self.peak_equity: float = self.initial_capital
+        self.drawdown_breaker_active: bool = False
+        self.drawdown_breaker_triggers: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ helpers
     def _trading_day(self, dt: datetime) -> date:
@@ -126,6 +144,8 @@ class PortfolioLedger:
     def update_equity(self, pnl_contributions: dict[str, float]) -> None:
         """Recompute shared equity from every symbol's latest PnL contribution."""
         self.equity = self.initial_capital + sum(pnl_contributions.values())
+        if self.equity > self.peak_equity:
+            self.peak_equity = self.equity
 
     def update_symbol_margin(self, symbol: str, margin: float) -> None:
         """Record one symbol's margin and recompute total / per-cluster sums."""
@@ -161,23 +181,55 @@ class PortfolioLedger:
                 "day_pnl_pct": day_pnl_pct,
             })
 
+    def check_drawdown_breaker(self) -> None:
+        """Arm the persistent drawdown breaker once equity draws down from its
+        running peak by ``max_drawdown_breaker_pct`` or more.
+
+        No-op when ``max_drawdown_breaker_pct`` is ``None`` (disabled, the
+        default).  Call after :meth:`update_equity`.  Unlike
+        :meth:`check_daily_loss_limit`, once armed this **never auto-resets**
+        (no trading-day rollover clears it) — it is a circuit breaker for
+        chronic multi-day bleed, not a daily limit.  Does not flatten
+        anything itself; the driver (``PortfolioEngine._build_joint_report``)
+        performs forced liquidation on the False->True transition, mirroring
+        the A90 daily-loss-limit wiring.
+        """
+        if self.max_drawdown_breaker_pct is None:
+            return
+        if self.drawdown_breaker_active or self.peak_equity <= 0:
+            return
+        drawdown_pct = (self.equity - self.peak_equity) / self.peak_equity
+        if drawdown_pct <= -self.max_drawdown_breaker_pct:
+            self.drawdown_breaker_active = True
+            self.drawdown_breaker_triggers.append({
+                "dt": self._last_dt.isoformat(sep=" ") if self._last_dt else None,
+                "trading_day": str(self.trading_day) if self.trading_day else None,
+                "equity": self.equity,
+                "peak_equity": self.peak_equity,
+                "drawdown_pct": drawdown_pct,
+            })
+
     # ------------------------------------------------------------------ gating
     def pre_open_injection_for(self, symbol: str) -> tuple[float, float, str | None]:
         """Return ``(equity, total_open_margin, blocked_reason)`` for one ``"pre_open"`` yield.
 
         When nothing is breached this returns the true shared
-        ``(self.equity, self.margin_total)`` and ``None``.  When the daily
-        loss limit is active, or the symbol's own margin share exceeds
-        ``equity * max_symbol_margin_pct``, or any cluster containing the
-        symbol exceeds ``equity * cluster_gross_cap``, it returns the
-        saturated ``(self.equity, self.equity * max_margin_pct, reason)`` so
-        the existing ``Position._size_open()`` formula rejects the open.
-        Reasons are checked daily-loss first, then per-symbol, then cluster
-        (first true wins) so the reason string is deterministic when several
-        constraints are breached simultaneously.
+        ``(self.equity, self.margin_total)`` and ``None``.  When the
+        persistent drawdown breaker or the daily loss limit is active, or the
+        symbol's own margin share exceeds ``equity * max_symbol_margin_pct``,
+        or any cluster containing the symbol exceeds
+        ``equity * cluster_gross_cap``, it returns the saturated
+        ``(self.equity, self.equity * max_margin_pct, reason)`` so the
+        existing ``Position._size_open()`` formula rejects the open.
+        Reasons are checked drawdown-breaker first (most severe/persistent),
+        then daily-loss, then per-symbol, then cluster (first true wins) so
+        the reason string is deterministic when several constraints are
+        breached simultaneously.
         """
         reason: str | None = None
-        if self.daily_loss_limit_active:
+        if self.drawdown_breaker_active:
+            reason = "drawdown_breaker"
+        elif self.daily_loss_limit_active:
             reason = "daily_loss_limit"
         elif self.margin_by_symbol.get(symbol, 0.0) > self.equity * self.max_symbol_margin_pct:
             reason = "symbol_margin_cap"

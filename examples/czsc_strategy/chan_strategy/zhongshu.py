@@ -2,6 +2,31 @@
 
 All strategy signals and analysis tools should use this module so the displayed
 current center and the center used by buy/sell point signals stay aligned.
+
+Deviation from textbook Chan-theory zhongshu (non-authoritative implementation
+note, added 2026-07-26 audit; not a claim about what "correct" Chan theory
+requires): standard Chan-theory zhongshu construction lets a center extend
+indefinitely until broken by a qualifying three-type buy/sell point structure.
+This module instead caps every center at ``max_bis`` (default 9) BIs and, in
+``mode="recent"``, only scans the most recent ``lookback`` (default 30) BIs.
+Both are deliberate engineering bounds (see ``max_bis`` docstring above) to
+keep centers from silently swallowing later structure and to bound compute —
+they are not sourced from any Chan-theory reference and have not been diffed
+against the third-party ``czsc`` library's own ``ZS`` object. Downstream code
+should not assume this module's centers are interchangeable with either the
+textbook definition or ``czsc.ZS``.
+
+``mode`` split between callers (see ``sell_signals.py``): risk/structural-
+invalidation checks use ``mode="segment"`` (old from-the-beginning, non-
+overlapping segmentation — one canonical center per bi range) while entry
+signals default to ``mode="recent"`` (overlapping local-window centers,
+biased toward the latest structure). This means the center a position was
+opened against and the center later used to judge "structural invalidation"
+for that same position are not guaranteed to be the same object. This is an
+existing, intentional trade-off (recent-mode entries want the freshest local
+center; segment-mode risk checks want a stable, non-overlapping reference)
+rather than an oversight, but it is not documented anywhere else — see
+AUDIT_REPORT_2026-07-03.md for the original finding.
 """
 from __future__ import annotations
 

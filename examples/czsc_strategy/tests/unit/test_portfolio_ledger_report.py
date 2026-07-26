@@ -221,7 +221,7 @@ def test_run_per_symbol_engines_sets_risk_sizing(monkeypatch):
         fake_run_per_symbol,
     )
 
-    result = _run_per_symbol_engines(["S1"])
+    result = _run_per_symbol_engines(["S1"], db_path="missing_unit_test.db")
 
     assert captured == ["risk"]
     assert "S1" in result

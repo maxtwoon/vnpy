@@ -1,4 +1,6 @@
-"""Test czsc API compatibility"""
+"""ONE-SHOT / 开发期 czsc 库 API 探索脚本，非 pytest 用例，不在 tests/unit 门禁范围内。
+
+Test czsc API compatibility"""
 from czsc import CZSC
 from czsc.objects import RawBar, Mark, Direction
 import datetime

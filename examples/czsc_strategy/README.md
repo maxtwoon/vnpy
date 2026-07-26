@@ -24,12 +24,10 @@
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `base_freq` | `5分钟` | 基础 K 线周期 |
 | `trade_freq` | `30分钟` | 交易决策周期 |
-| `confirm_freq` | `5分钟` | 次级别确认周期 |
 | `filter_freq` | `日线` | 环境过滤周期 |
 
-以上默认值来自 `chan_strategy/config.py` 的 `STRATEGY_CONFIG`，是该策略生产回测路径的真实配置。
+以上默认值来自 `chan_strategy/config.py` 的 `STRATEGY_CONFIG`，是该策略生产回测路径的真实配置。引擎固定从 1 分钟 K 线重采样出 `trade_freq`/`filter_freq`（`backtest_engine.py` 硬编码 `freq="1"` 读取底层数据）；曾经存在的 `base_freq`（基础周期）与 `confirm_freq`（次级别确认周期）两个配置键从未被任何代码消费，"次级别确认"信号语义在当前版本中并未实现（详见下方"信号语义"一节的澄清），已随本次审核一并删除，避免用户误以为修改它们会影响信号行为。
 
 ### 信号体系（生产路径）
 
@@ -50,6 +48,11 @@
 - **一卖 / 二卖 / 三卖**：分别为上述结构的镜像，仅在 `enable_short=True` 时启用；默认配置中空头子策略关闭。
 
 所有信号仅使用 CZSC 的已确认笔（`finished_bis` 并做防御性过滤），不允许使用未确认末笔，以避免未来函数。
+
+> **"确认"一词的三种含义（术语澄清，2026-07-26 审核后补充）**：本项目中"确认"在三处场景下语义不同，务必区分：
+> 1. **买卖点确认笔**（如上文"一买确认"）：指候选条件满足后，紧跟出现的同级别反向笔（`signals.py` 内 `_get_confirming_bi`），与"次级别"无关。
+> 2. **中枢结构状态"已确认"**：指中枢已由 ≥3 笔重叠构成（`signal_zs_confirmation`），与买卖点确认是两回事。
+> 3. **"次级别确认"**：曾在 `confirm_freq` 配置项与部分函数 docstring 中提及，但从未被任何代码实际消费——不存在跨级别协同确认的实现。相关死配置已删除（见上文"周期映射"）。
 
 ### 仓位管理
 
@@ -76,6 +79,8 @@
 | `trailing_start_bp` | 300 BP | 盈利超过 3% 后启动移动止损 |
 | `trailing_drawback_pct` | 0.25 | 从最高盈利回撤 25% 时平仓 |
 | `structural_invalidation_pct` | 0.05 | 价格突破中枢边缘 5% 视为结构失效 |
+
+> **参数沿革（2026-07-26 审核后补充）**：上表止损/超时/移动止损数值源自项目早期 A 股波段战法原型（`README.legacy.md`）的经验设定，迁移到期货 CTA 场景时未针对期货合约的波动率/保证金特性重新优化或做参数敏感性扫描；`diagnostics/` 下的稳健性扫描（成本敏感性、品种邻域扫描）验证的是这组既定数值的稳健性，不等于验证了数值本身的最优性。修改前建议先看 `diagnostics/platform_optimization_round*.md` 系列既有扫描结果。
 
 ### 默认交易标的
 
@@ -164,10 +169,22 @@ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
 - `second_buy_mode`: `"baseline" | "gated" | "off"`
 - `portfolio_risk`: `"off" | "on"`
 - `weighting`: `"fixed" | "risk_parity"`
+- `regime_model`: `"independent"（默认）| "router"`（"router" 时由日线市况路由器统一选择当日允许开仓的多空方向；默认 `"independent"` 为多空各自独立按自身信号门控，不做市况路由）
+- `atr_chop_filter`: `"off"（默认，legacy 行为）| "on"`（基于 ATR 的震荡市过滤器；开启后在低波动/无趋势环境下会 gate 掉新开仓；实现见 `positions.py`）
+- `max_drawdown_breaker_pct`: `None`（默认，禁用）| `0~1` 之间的小数（2026-07-26 审核后新增）——组合权益相对历史峰值的持久性回撤熔断，跨交易日不重置（区别于每日重置的 `daily_loss_limit_pct`）；仅在 `sizing_model="risk"` 且 `portfolio_risk="on"` 的联合回放路径（`PortfolioLedger`）生效，触发后强平并阻断新开仓，直到该次回放结束
 
 完整列表与默认值请以 `chan_strategy/config.py` 为准，README 不再逐一复制，以避免再次出现文档漂移。
 
-如需运行默认配置以上的正式评估路径（`sizing_model="risk"`、`limit_halt_model="enforce"`、换月窗口开仓门控等），请使用独立入口 `run_formal_evaluation.py`，而不是默认的 `run_chan_backtest.py`。
+如需运行默认配置以上的正式评估路径（`sizing_model="risk"`、`limit_halt_model="enforce"`、换月窗口开仓门控等），请使用独立入口 `run_formal_evaluation.py`，而不是默认的 `run_chan_backtest.py`。**该入口是单品种评估，不包含任何组合级风控**（`max_margin_pct` / `daily_loss_limit_pct` / `max_drawdown_breaker_pct` 均只存在于多品种联合回放路径）；如需组合级风控约束下的报告，请改用 `PortfolioEngine(symbols, ...).run()` 并设置 `portfolio_risk="on"` + `sizing_model="risk"`（见 `chan_strategy/portfolio_engine.py` / `portfolio_ledger.py`）。
+
+### 适用前提与失效环境（2026-07-26 审核后补充）
+
+本策略是"一买（左侧抄底）+ 三买（突破跟随）"的混合体系，对趋势/波动环境存在结构性依赖，但当前 README 与代码内**没有任何正式声明**指明策略的有效前提或已知失效环境。以下为已知情况，供使用者参考，**不构成有效性证明**：
+
+- **一买（左侧抄底）**在持续单边下跌（无有效底背驰反转）的环境中天然容易受损——这正是结构失效退出（`structural_invalidation_pct`）存在的原因，但该退出是止损性质的被动保护，不是主动的环境识别。
+- `diagnostics/first_buy_environment_candidates_*` 系列报告探索过针对一买信号叠加"日线趋势向下时屏蔽"（`block_daily_down`）等环境过滤候选，results 显示可降低弱势窗口下的一买损伤，但**这些报告使用的窗口 `2022-01-01~2026-04-24` 属于反复用于参数选择的受污染证据**，报告自身已标注为负面/受污染证据，不能作为"该过滤器有效"的证明，仅供了解研究方向。
+- 三买（突破跟随）在无趋势/震荡行情中容易被反复打止损；`atr_chop_filter`（震荡市过滤，默认关闭）与 `regime_model="router"`（市况路由，默认关闭）是项目中现有的、未默认启用的缓解机制（见上文"查看研究-only 开关"）。
+- 在干净样本外证据出现之前（见"重要说明"第 3 条与 `diagnostics/simnow_20d_promotion_decision.md`），本策略不应被视为对任何特定市场环境已验证有效或无效。
 
 ## 重要说明
 

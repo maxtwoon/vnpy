@@ -2,6 +2,68 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.44（2026-07-26）- Codex 独立复核 follow-up（关键风控单一真值与 handoff wrapper）
+
+- **关键风控参数单一真值补漏**：Codex review 复核 0.2.43 后发现
+  `positions.py` / `portfolio_engine.py` / `portfolio_ledger.py` 仍有部分核心风控键使用
+  `STRATEGY_CONFIG.get(key, 字面量默认值)`，与 0.2.43 "fallback 字面量硬化"声明不完全一致。
+  现已将 `sizing_model` / `risk_per_trade_pct` / `max_margin_pct` / `limit_halt_model` /
+  `portfolio_risk` / `weighting` / `daily_loss_limit_pct` / `max_symbol_margin_pct` /
+  `cluster_gross_cap` / `daily_agg` / `night_session_start_hour` 等关键键改为单一真值读取；
+  `PortfolioCoordinator` / `PortfolioLedger` 的局部测试配置先叠加到 `STRATEGY_CONFIG` 基线，
+  再硬索引，避免测试夹具必须复制全量配置。
+- **新增配置漂移回归测试**：`tests/unit/test_a53_config_signal_cleanup.py` 新增 AST 级检查，
+  锁定上述核心风控键不得重新引入带字面量默认值的 `.get()`。
+- **handoff wrapper 修复**：A104 将 `tools/sync_check.py` 改为根级 sync_guardian 的 thin wrapper 后，
+  `tools/handoff.py status` 仍从本地 wrapper 导入 `_load_config` 等内部函数，导致 ImportError。
+  现已改为直接导入根级 `tools/sync_guardian/sync_check.py` 权威引擎，并新增
+  `tests/unit/test_handoff_tool.py` 子进程回归。
+- **xfail 披露修正**：`tests/unit/test_second_buy_real_path.py` 与本条 changelog 明确区分：
+  前 3 个 xfail 是已废弃 `get_legacy_signals` 路径；第 4 个验证器用例走生产
+  `sell_signals.get_all_signals()`，但当前失败原因是历史夹具未覆盖出二买状态，不是生产路径在
+  已覆盖结构下输出错误二买信号。
+- **测试环境耦合修正**：`test_run_per_symbol_engines_sets_risk_sizing` 显式传入不存在的
+  unit-test DB 路径，避免测试 sizing override 时误探测本机默认 SQLite 路径并因权限/缺库失败。
+
+## 0.2.43（2026-07-26）- AI_REVIEW_REPORT_2026-07-26 中高问题修复（术语、死配置、凭据卫生、组合回撤熔断）
+
+针对 `AI_REVIEW_REPORT_2026-07-26.md` 列出的 14 条 🟠 中危问题逐项核实并修复：
+
+- **凭据卫生**：`diagnostics/simnow_connection_config.example.json` 用户名/密码改占位符；
+  `skill_build/llm_eval_config.json` 清空硬编码 DeepSeek key，改走 `DEEPSEEK_API_KEY` 环境变量
+  （两文件均未被 git 跟踪，非公开泄露，属本地卫生修复）。
+- **死配置清理**：`STRATEGY_CONFIG` 删除从未被消费的 `base_freq`/`confirm_freq`/`total_capital`
+  三个键（引擎固定从 1 分钟重采样，"次级别确认"从未实现）；README 周期映射表同步更新。
+- **术语澄清（"确认"三义）**：README 新增专节区分买卖点确认笔/中枢结构确认/已删除的次级别确认；
+  `signals.py` 相关 docstring 同步修正不实表述（`signal_divergence_status` 不再声称支持"确认"档位）。
+- **score 死字段**：`signals.py` 模块 docstring 明确 score 段为装饰性字段，不参与
+  `Signal.is_match` 匹配/仲裁/仓位计算（契约见 `test_signal_contract.py`，行为未变）。
+- **zhongshu.py 标准差异声明**：模块 docstring 补充与缠论标准/czsc 库 ZS 对象的已知偏离
+  （`max_bis` 封顶、`lookback` 截断、入场 `mode="recent"` 与风控 `mode="segment"` 的口径差异）。
+- **参数沿革 + 适用前提**：README 新增风控参数沿革说明（源自 A 股原型经验值，未按期货重新优化）
+  与"适用前提与失效环境"节；`regime_model`/`atr_chop_filter` 补入开关清单。
+- **根目录残留治理**：`test_second_buy_bug.py`/`test_second_buy_real_path.py` 两个真实回归测试
+  迁入 `tests/unit/`（迁移后发现 4 个用例失败：前 3 个位于已废弃 `get_legacy_signals`
+  路径，第 4 个验证器用例走生产 `sell_signals.get_all_signals()` 聚合入口但失败原因为历史夹具
+  在真实 CZSC 笔识别下未覆盖出二买状态；均已标注 `xfail` 并分别记录原因，不掩盖、不误使门禁变红，
+  留作独立任务）；`_debug_zs.py`/`test_czsc_api.py`/
+  `test_czsc_api2.py` 补 ONE-SHOT/LEGACY 横幅；`inspect_db.py` 硬编码路径改为
+  `CHAN_SQLITE_DB_PATH` 环境变量覆盖（与 `config.py` 同一模式）；`backtesting_demo.ipynb` 补
+  LEGACY/DEMO 说明单元格。
+- **positions.py fallback 字面量硬化**：≥10 处 `STRATEGY_CONFIG.get(key, 字面量默认)` 改为
+  `STRATEGY_CONFIG[key]` 硬索引（键均已在 `config.py` 中定义，字面量默认为纯重复、无实际防御
+  作用）；`_sell` 键回退 `_buy` 键的设计保留，但回退目标同样改为硬索引。
+- **组合回撤熔断（新能力，默认禁用）**：`PortfolioLedger` 新增 `max_drawdown_breaker_pct`
+  （默认 `None`）——从组合权益历史峰值起算、跨交易日不重置的持久性回撤熔断，区别于每日重置的
+  `daily_loss_limit_pct`；触发后走 A90 同款强平+阻断新开仓路径（`portfolio_engine.py`
+  `_build_joint_report`）。仅在 `sizing_model="risk"` + `portfolio_risk="on"` 的联合回放路径生效，
+  默认关闭不影响任何现有行为（868 条既有单测全量通过）；新增 3 条专项单测。
+  `run_formal_evaluation.py`（单品种）补充明确的组合级风控范围外声明，并指向
+  `PortfolioEngine(portfolio_risk="on")` 作为组合级风控约束下的评估路径。
+
+不涉及信号生成/买卖点判定/回测撮合等核心逻辑变更（`_get_confirming_bi`/`build_zhongshu_from_bis`/
+`signal_first_buy` 等函数体本身未改，仅 docstring 与死配置/死字段被处理）。
+
 ## 0.2.42（2026-07-22）- A104 遗留 A 股脚本卫生治理（硬编码 token、过期 sync 门禁、合规披露缺失、选股前视披露）
   （用户新一轮全项目 4-subagent 只读审计的 4 个 examples 范围发现，纯披露/卫生修复，
   不触碰 chan_strategy/ 与任何生产风控/信号/回测逻辑）：

@@ -1172,6 +1172,16 @@ def run_formal_evaluation(
     for the duration of the run and restores the original values afterward.
     It is the explicit "formal evaluation" path recommended by the third-party
     audit without changing the library defaults in ``config.py``.
+
+    **Scope caveat (2026-07-26 审核后补充，非扣分修复，仅澄清)**: this is a
+    *single-symbol* evaluation. It does NOT apply any portfolio-level risk
+    control (``max_margin_pct`` / ``daily_loss_limit_pct`` /
+    ``max_drawdown_breaker_pct``) because those only exist in the multi-symbol
+    joint replay (``PortfolioEngine`` with ``portfolio_risk="on"`` +
+    ``sizing_model="risk"``, see ``portfolio_engine.py`` /
+    ``portfolio_ledger.py``). For a report that reflects portfolio-level risk
+    constraints, run ``PortfolioEngine(symbols, ...).run()`` with those two
+    config keys set, not this single-symbol entry point.
     """
     with formal_evaluation_config():
         return run_single_backtest(

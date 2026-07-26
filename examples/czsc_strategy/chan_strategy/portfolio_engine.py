@@ -130,12 +130,14 @@ class PortfolioCoordinator:
     ):
         self.symbols = list(dict.fromkeys(symbols))  # preserve order, dedupe
         self.initial_capital = float(initial_capital)
-        self.cfg = config if config is not None else STRATEGY_CONFIG
+        self.cfg = dict(STRATEGY_CONFIG)
+        if config is not None:
+            self.cfg.update(config)
 
-        self.daily_agg = self.cfg.get("daily_agg", "natural")
-        self.night_session_start_hour = int(self.cfg.get("night_session_start_hour", 20))
-        self.cluster_gross_cap = float(self.cfg.get("cluster_gross_cap", 1.0))
-        self.daily_loss_limit_pct = float(self.cfg.get("daily_loss_limit_pct", 0.03))
+        self.daily_agg = self.cfg["daily_agg"]
+        self.night_session_start_hour = int(self.cfg["night_session_start_hour"])
+        self.cluster_gross_cap = float(self.cfg["cluster_gross_cap"])
+        self.daily_loss_limit_pct = float(self.cfg["daily_loss_limit_pct"])
         self.lookback = int(self.cfg.get("risk_parity_lookback", 60))
         self.corr_clusters = dict(self.cfg.get("corr_clusters") or {})
 
@@ -456,7 +458,7 @@ class PortfolioEngine:
 
         return {
             "portfolio_risk": "off",
-            "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
+            "weighting": STRATEGY_CONFIG["weighting"],
             "initial_capital": self.initial_capital,
             "period": f"{self.start_date} ~ {self.end_date}",
             "symbols": list(symbol_results.keys()),
@@ -632,7 +634,7 @@ class PortfolioEngine:
 
         return {
             "portfolio_risk": "on",
-            "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
+            "weighting": STRATEGY_CONFIG["weighting"],
             "initial_capital": self.initial_capital,
             "period": f"{self.start_date} ~ {self.end_date}",
             "symbols": successful_symbols,
@@ -728,17 +730,19 @@ class PortfolioEngine:
         joint_equity_curve: list[dict[str, Any]] = []
 
         # A90 forced-liquidation driver state.  ``flatten_pending`` holds the
-        # symbols still owed a flatten after a daily-loss-limit trigger; each
-        # is flattened at its own next "pre_open" yield (driver-loop state,
-        # deliberately not on PortfolioLedger).  ``flat_events`` mirrors the
-        # shape of PortfolioCoordinator.flat_events minus the weight field.
-        flatten_pending: set[str] = set()
+        # symbols still owed a flatten after a daily-loss-limit or (2026-07-26)
+        # drawdown-breaker trigger, mapped to the reason so the deferred
+        # flatten records the right ``flat_events`` reason; each is flattened
+        # at its own next "pre_open" yield (driver-loop state, deliberately
+        # not on PortfolioLedger).  ``flat_events`` mirrors the shape of
+        # PortfolioCoordinator.flat_events minus the weight field.
+        flatten_pending: dict[str, str] = {}
         flat_events: list[dict[str, Any]] = []
         trade_bar_dts: dict[str, list[Any]] = {
             s: [b.dt for b in engines[s].trade_bars] for s in successful_symbols
         }
 
-        def _flatten_symbol(symbol: str, price: float, dt: datetime) -> None:
+        def _flatten_symbol(symbol: str, price: float, dt: datetime, reason: str) -> None:
             """Flatten one symbol via the pre-existing A48-era primitive and
             record a flat_events entry per position actually closed."""
             strategy = engines[symbol].strategy
@@ -749,7 +753,7 @@ class PortfolioEngine:
             ]
             if not open_before:
                 return
-            strategy.flatten_all_positions(price, dt, "daily_loss_limit_flatten")
+            strategy.flatten_all_positions(price, dt, reason)
             for name, open_dt, open_price in open_before:
                 flat_events.append({
                     "dt": dt.isoformat(sep=" "),
@@ -758,7 +762,7 @@ class PortfolioEngine:
                     "open_dt": open_dt.isoformat(sep=" ") if open_dt else None,
                     "open_price": open_price,
                     "flat_price": price,
-                    "reason": "daily_loss_limit_flatten",
+                    "reason": reason,
                 })
 
         while any(item is not None for item in pending.values()):
@@ -785,14 +789,14 @@ class PortfolioEngine:
                     # A90 deferred flatten: use this symbol's OWN current-tick
                     # bar.close (the pre_open yield carries bar.open, so look
                     # the close up from the engine's trade bars).
-                    flatten_pending.discard(symbol)
+                    pending_reason = flatten_pending.pop(symbol)
                     dts = trade_bar_dts[symbol]
                     idx = bisect_left(dts, current_dt)
                     if idx < len(dts) and dts[idx] == current_dt:
                         flat_price = float(engines[symbol].trade_bars[idx].close)
                     else:  # defensive: a pre_open yield always maps to a trade bar
                         flat_price = float(item[2])
-                    _flatten_symbol(symbol, flat_price, current_dt)
+                    _flatten_symbol(symbol, flat_price, current_dt, pending_reason)
                 equity, margin, reason = ledger.pre_open_injection_for(symbol)
                 if reason is not None:
                     # Speculative record of gating pressure: an open attempted
@@ -827,8 +831,21 @@ class PortfolioEngine:
                     # triggering symbol immediately at this tick (post_item[2]
                     # is its own bar.close) and defer every other symbol to
                     # its own next "pre_open" yield.
-                    _flatten_symbol(symbol, float(post_item[2]), current_dt)
-                    flatten_pending.update(s for s in successful_symbols if s != symbol)
+                    _flatten_symbol(symbol, float(post_item[2]), current_dt, "daily_loss_limit_flatten")
+                    flatten_pending.update(
+                        {s: "daily_loss_limit_flatten" for s in successful_symbols if s != symbol}
+                    )
+                # 2026-07-26: persistent drawdown-breaker trigger, wired the
+                # same way as A90's daily-loss-limit above but never
+                # auto-clears on a trading-day rollover (see
+                # PortfolioLedger.check_drawdown_breaker docstring).
+                was_dd_active = ledger.drawdown_breaker_active
+                ledger.check_drawdown_breaker()
+                if ledger.drawdown_breaker_active and not was_dd_active:
+                    _flatten_symbol(symbol, float(post_item[2]), current_dt, "drawdown_breaker_flatten")
+                    flatten_pending.update(
+                        {s: "drawdown_breaker_flatten" for s in successful_symbols if s != symbol}
+                    )
 
             # One entry per unique tick: ledger state has converged by the end
             # of the tick's symbol loop, so this is well-defined.
@@ -860,7 +877,7 @@ class PortfolioEngine:
         return {
             "portfolio_risk": "on",
             "sizing_model": "risk",
-            "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
+            "weighting": STRATEGY_CONFIG["weighting"],
             "initial_capital": self.initial_capital,
             "period": f"{self.start_date} ~ {self.end_date}",
             "symbols": successful_symbols,
@@ -870,6 +887,11 @@ class PortfolioEngine:
             "pairs": all_pairs,
             "blocked_opens": blocked_opens,
             "loss_limit_triggers": ledger.loss_limit_triggers,
+            # 2026-07-26: persistent drawdown breaker (max_drawdown_breaker_pct,
+            # default None/disabled) — see PortfolioLedger.check_drawdown_breaker.
+            # Distinct from loss_limit_triggers: this measures drawdown from the
+            # running equity peak and does not reset on a trading-day rollover.
+            "drawdown_breaker_triggers": ledger.drawdown_breaker_triggers,
             # A90: forced liquidation on a daily-loss-limit breach is now
             # wired up in this driver (see
             # docs/design/a89-forced-liquidation-design.md).
@@ -885,8 +907,8 @@ class PortfolioEngine:
 
     def run(self) -> dict[str, Any]:
         """Run the portfolio backtest and return the report."""
-        sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
-        portfolio_risk = STRATEGY_CONFIG.get("portfolio_risk", "off")
+        sizing_model = STRATEGY_CONFIG["sizing_model"]
+        portfolio_risk = STRATEGY_CONFIG["portfolio_risk"]
         if sizing_model == "risk" and portfolio_risk == "on":
             return self._build_joint_report()
         symbol_results = self._run_per_symbol()
