@@ -36,7 +36,9 @@ python examples\czsc_strategy\skill_build\reports\check_a1_eval_gate.py `
 
 ## 重新生成正式评估
 
-需要 DeepSeek API key 已写入 `examples/czsc_strategy/skill_build/llm_eval_config.json`。
+需要设置 `DEEPSEEK_API_KEY` 环境变量（推荐；`llm_skill_eval.py` 会自动读取）；也可将 key 写入
+`examples/czsc_strategy/skill_build/llm_eval_config.json` 的 `api_key` 字段（该文件已被 `.gitignore`
+排除，但不建议明文长期存放，环境变量优先级更高、用完即焚更安全）。
 
 ```powershell
 python examples\czsc_strategy\skill_build\reports\llm_skill_eval.py `
