@@ -1,5 +1,6 @@
 import sqlite3
 import sys
+import json
 from pathlib import Path
 
 
@@ -7,7 +8,7 @@ DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
 if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
-from simnow_replay_readiness import build_readiness  # noqa: E402
+from simnow_replay_readiness import build_readiness, load_enabled_symbols  # noqa: E402
 
 
 def _make_db(path: Path, max_dt: str) -> None:
@@ -39,3 +40,17 @@ def test_replay_readiness_detects_lagged_database(tmp_path):
     assert payload["ready"] is False
     assert payload["latest_db_date"] == "2026-04-25"
     assert payload["missing_or_lagged_symbols"] == ["AP888", "RB888"]
+
+
+def test_load_enabled_symbols_excludes_disabled_contracts(tmp_path):
+    contract_map = {
+        "AP888": {"enabled": False},
+        "RB888": {"enabled": True},
+        "A888": {"enabled": True},
+    }
+    path = tmp_path / "simnow_contract_map.json"
+    path.write_text(json.dumps(contract_map), encoding="utf-8")
+
+    symbols = load_enabled_symbols(path)
+
+    assert symbols == ["A888", "RB888"]

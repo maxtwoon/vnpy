@@ -8,7 +8,13 @@ DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
 if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
-from simnow_backfill_pending_replays import build_backfill_plan, pending_replay_dates  # noqa: E402
+from simnow_backfill_pending_replays import (  # noqa: E402
+    _run_checked,
+    build_backfill_plan,
+    execute_backfill,
+    pending_replay_dates,
+    resolve_symbols,
+)
 
 
 def _write_ledger(path: Path, rows: list[dict]) -> None:
@@ -75,6 +81,8 @@ def test_backfill_plan_marks_ready_when_db_and_capture_exist(tmp_path):
 
     plan = build_backfill_plan(ledger, db_path, out_dir, ["AP888", "RB888"])
 
+    assert plan["contract_map_provenance"]["enabled_symbols"] == ["AP888", "RB888"]
+    assert plan["contract_map_provenance"]["enabled_count"] == 2
     row = plan["rows"][0]
     assert row["action"] == "ready_to_backfill"
     assert row["ready"] is True
@@ -97,3 +105,65 @@ def test_backfill_plan_requires_capture_export(tmp_path):
     assert row["action"] == "missing_simnow_export"
     assert row["ready"] is True
     assert row["simnow_json_exists"] is False
+
+
+def test_resolve_symbols_defaults_to_enabled_contract_map(tmp_path):
+    contract_map = {
+        "_meta": {"version": "V1", "effective_date": "2026-07-22"},
+        "AP888": {"enabled": False},
+        "RB888": {"enabled": True},
+        "A888": {"enabled": True},
+    }
+    path = tmp_path / "simnow_contract_map.json"
+    path.write_text(json.dumps(contract_map), encoding="utf-8")
+
+    assert resolve_symbols(None, path) == ["A888", "RB888"]
+    assert resolve_symbols(["SC888"], path) == ["SC888"]
+
+
+def test_run_checked_accepts_monitor_halt_exit_code(monkeypatch):
+    class _Result:
+        returncode = 2
+
+    def _fake_run(args, cwd, check):  # type: ignore[no-untyped-def]
+        return _Result()
+
+    monkeypatch.setattr("simnow_backfill_pending_replays.subprocess.run", _fake_run)
+
+    _run_checked(["python", "simnow_daily_monitor.py"], accepted_exit_codes={0, 2})
+
+
+def test_execute_backfill_refreshes_summary_artifacts(monkeypatch, tmp_path):
+    commands: list[list[str]] = []
+
+    def _fake_run_checked(args, accepted_exit_codes=None):  # type: ignore[no-untyped-def]
+        commands.append(list(args))
+
+    monkeypatch.setattr("simnow_backfill_pending_replays._run_checked", _fake_run_checked)
+    plan = {
+        "rows": [
+            {
+                "date": "2026-07-15",
+                "action": "ready_to_backfill",
+                "simnow_json": str(tmp_path / "simnow_export_2026-07-15.json"),
+                "replay_json": str(tmp_path / "simnow_replay_2026-07-15.json"),
+                "record_json": str(tmp_path / "simnow_record_2026-07-15.json"),
+                "report_md": str(tmp_path / "simnow_report_2026-07-15.md"),
+            }
+        ]
+    }
+    ledger = tmp_path / "ledger.jsonl"
+    thresholds = tmp_path / "thresholds.json"
+    promotion = tmp_path / "promotion.md"
+
+    result = execute_backfill(plan, ledger, thresholds, promotion)
+
+    assert result["rows"][0]["action"] == "backfilled"
+    joined = [" ".join(cmd) for cmd in commands]
+    assert any("export_simnow_replay_snapshot.py" in cmd for cmd in joined)
+    assert any("simnow_daily_monitor.py" in cmd for cmd in joined)
+    assert any("simnow_ledger_summary.py" in cmd for cmd in joined)
+    assert any("simnow_promotion_decision.py" in cmd for cmd in joined)
+    assert any("simnow_run_summary.py" in cmd for cmd in joined)
+    assert any("simnow_daily_brief.py" in cmd for cmd in joined)
+    assert any("simnow_summary_consistency.py" in cmd for cmd in joined)

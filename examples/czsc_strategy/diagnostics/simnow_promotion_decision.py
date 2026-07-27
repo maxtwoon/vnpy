@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from simnow_20d_aggregate import build_20d_aggregate
 from declassify_historical_reports import build_banner
 from simnow_action_summary import build_action_summary
-from simnow_observation_rules import is_valid_observation
-from simnow_observation_window import filter_records_by_start, load_observation_start_date
+from simnow_observation_window import load_observation_start_date
 
 
 HERE = Path(__file__).resolve().parent
@@ -24,85 +23,18 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def _count_by(values: list[str]) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for value in values:
-        key = value or "unknown"
-        counts[key] = counts.get(key, 0) + 1
-    return dict(sorted(counts.items()))
-
-
 def decide_promotion(
     records: list[dict[str, Any]],
     min_days: int = DEFAULT_MIN_DAYS,
     observation_start_date: str | None = None,
 ) -> dict[str, Any]:
-    all_records = sorted(records, key=lambda row: str(row.get("date", "")))
-    ordered = sorted(filter_records_by_start(all_records, observation_start_date), key=lambda row: str(row.get("date", "")))
-    excluded_before_start_count = len(all_records) - len(ordered)
-    recent = ordered[-min_days:]
-    observed_days = len(recent)
-    pass_days = sum(1 for row in recent if row.get("status") == "pass")
-    valid_days = sum(1 for row in recent if is_valid_observation(row))
-    pending_days = sum(1 for row in recent if row.get("status") == "pending")
-    skipped_days = sum(1 for row in recent if row.get("status") == "skipped")
-    matched_days = sum(1 for row in recent if row.get("consistency", {}).get("matched"))
-    halt_days = sum(1 for row in recent if row.get("thresholds", {}).get("status") == "halt")
-    warning_days = sum(1 for row in recent if row.get("thresholds", {}).get("status") == "warning")
-    blockers: list[str] = []
-    if valid_days < min_days:
-        blockers.append(f"need_{min_days - valid_days}_more_valid_observation_days")
-    if pending_days:
-        blockers.append("pending_days_present")
-    if skipped_days:
-        blockers.append("skipped_days_present")
-    if pass_days != observed_days:
-        blockers.append("non_pass_days_present")
-    if matched_days != observed_days:
-        blockers.append("consistency_not_fully_matched")
-    if halt_days:
-        blockers.append("halt_threshold_breached")
-    ready = not blockers
-    status_counts = _count_by([str(row.get("status") or "unknown") for row in recent])
-    reason_counts = _count_by([
-        str(row.get("consistency", {}).get("reason") or row.get("skip_reason") or "")
-        for row in recent
-        if row.get("status") in {"pending", "skipped"} or row.get("consistency", {}).get("reason") or row.get("skip_reason")
-    ])
-    last_valid = next((row for row in reversed(ordered) if is_valid_observation(row)), None)
-    action_summary = build_action_summary(recent)
-    blocking_reasons = [
-        str(row["reason"])
-        for row in action_summary
-        if not row["counts_for_20d"] and row.get("reason")
-    ]
-    reason_counts_counter = Counter(blocking_reasons)
-    top_blocking_actions = [
-        {"reason": reason, "count": count}
-        for reason, count in reason_counts_counter.most_common(3)
-    ]
-    return {
-        "required_days": min_days,
-        "observation_start_date": observation_start_date or "",
-        "excluded_before_start_count": excluded_before_start_count,
-        "observed_days": observed_days,
-        "valid_observation_days": valid_days,
-        "pass_days": pass_days,
-        "pending_days": pending_days,
-        "skipped_days": skipped_days,
-        "consistency_matched_days": matched_days,
-        "warning_days": warning_days,
-        "halt_days": halt_days,
-        "status_counts": status_counts,
-        "reason_counts": reason_counts,
-        "last_valid_observation_date": str(last_valid.get("date")) if last_valid else "",
-        "ready_to_expand": ready,
-        "promotion_blockers": blockers,
-        "action_summary": action_summary,
-        "action_summary_count": len(action_summary),
-        "top_blocking_actions": top_blocking_actions,
-        "records": recent,
-    }
+    return build_20d_aggregate(
+        records,
+        min_days=min_days,
+        observation_start_date=observation_start_date,
+        matched_day_predicate=lambda row: bool(row.get("consistency", {}).get("matched")),
+        halt_day_predicate=lambda row: row.get("thresholds", {}).get("status") == "halt",
+    )
 
 
 def write_report(summary: dict[str, Any], out: Path) -> None:
@@ -138,14 +70,51 @@ def write_report(summary: dict[str, Any], out: Path) -> None:
             lines.append(f"| {reason} | {count} |")
     else:
         lines.append("| none | 0 |")
+    lines.extend(["", "## Blocking Action Counts", "", "| action_class | days |", "|---|---:|"])
+    if summary["blocking_action_counts"]:
+        for action_class, count in summary["blocking_action_counts"].items():
+            lines.append(f"| {action_class} | {count} |")
+    else:
+        lines.append("| none | 0 |")
+    lines.extend([
+        "",
+        "## Top Blocking Actions",
+        "",
+        "| reason | days | action_class | blocker_class | governance_class | reasonableness |",
+        "|---|---:|---|---|---|---|",
+    ])
+    if summary["top_blocking_actions"]:
+        for row in summary["top_blocking_actions"]:
+            lines.append(
+                f"| {row['reason']} | {row['count']} | {row['action_class']} | {row['blocker_class']} | {row.get('governance_class', '')} | {row.get('reasonableness', '')} |"
+            )
+    else:
+        lines.append("| none | 0 | none | none | none | none |")
+    lines.extend([
+        "",
+        "## Reason Governance",
+        "",
+        f"- reason_rationality_verdict: `{summary.get('reason_rationality_verdict', '')}`",
+        f"- reason_rationality_cn: `{summary.get('reason_rationality_cn', '')}`",
+        f"- pareto_summary.top3_share_pct: `{summary.get('pareto_summary', {}).get('top3_share_pct', 0.0)}`",
+        f"- pareto_summary.summary_cn: `{summary.get('pareto_summary', {}).get('summary_cn', '')}`",
+        "",
+        "| governance_class | days |",
+        "|---|---:|",
+    ])
+    if summary.get("reason_governance_counts"):
+        for governance_class, count in summary["reason_governance_counts"].items():
+            lines.append(f"| {governance_class} | {count} |")
+    else:
+        lines.append("| none | 0 |")
     lines.append("")
     lines.append("## Action Summary")
     lines.append("")
-    lines.append("| date | status | reason | severity | action | counts_for_20d |")
-    lines.append("|---|---|---|---|---|---|")
+    lines.append("| date | status | reason | severity | action_class | blocker_class | action | counts_for_20d |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for rec in summary["action_summary"]:
         lines.append(
-            f"| {rec['date']} | {rec['status']} | {rec['reason']} | {rec['severity']} | {rec['action']} | {rec['counts_for_20d']} |"
+            f"| {rec['date']} | {rec['status']} | {rec['reason']} | {rec['severity']} | {rec['action_class']} | {rec['blocker_class']} | {rec['action']} | {rec['counts_for_20d']} |"
         )
     lines.append("")
     lines.append("## Decision")
@@ -190,7 +159,13 @@ def main() -> None:
         "last_valid_observation_date": summary["last_valid_observation_date"],
         "promotion_blockers": summary["promotion_blockers"],
         "action_summary_count": summary["action_summary_count"],
+        "blocking_action_counts": summary["blocking_action_counts"],
         "top_blocking_actions": summary["top_blocking_actions"],
+        "reason_governance_counts": summary["reason_governance_counts"],
+        "reasonableness_counts": summary["reasonableness_counts"],
+        "reason_rationality_verdict": summary["reason_rationality_verdict"],
+        "reason_rationality_cn": summary["reason_rationality_cn"],
+        "pareto_summary": summary["pareto_summary"],
         "report": str(args.report_md),
     }, ensure_ascii=False, indent=2))
 

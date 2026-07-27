@@ -38,6 +38,11 @@ from simnow_connection_probe import (  # noqa: E402
     mask_setting,
     validate_config,
 )
+from simnow_contract_map_meta import (  # noqa: E402
+    contract_map_provenance,
+    enabled_contract_map_entries,
+    load_contract_map_payload,
+)
 
 
 DEFAULT_CONFIG = HERE / "simnow_connection_config.json"
@@ -91,14 +96,7 @@ def _object_dict(obj: Any) -> dict[str, Any]:
 
 
 def load_contract_map(path: Path) -> dict[str, dict[str, Any]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("contract map must be a JSON object")
-    enabled = {
-        str(research_symbol): item
-        for research_symbol, item in payload.items()
-        if isinstance(item, dict) and item.get("enabled", True)
-    }
+    enabled = enabled_contract_map_entries(load_contract_map_payload(path))
     for research_symbol, item in enabled.items():
         if not item.get("symbol"):
             raise ValueError(f"{research_symbol} missing symbol")
@@ -264,6 +262,7 @@ def build_export(
     config_path: Path,
     contract_map_path: Path,
     contract_map: dict[str, dict[str, Any]],
+    contract_map_provenance: dict[str, Any],
     started_at: str,
     ended_at: str,
     duration_seconds: int,
@@ -283,6 +282,7 @@ def build_export(
             "config_path": str(config_path),
             "contract_map_path": str(contract_map_path),
             "setting_masked": setting_masked,
+            "contract_map_provenance": contract_map_provenance,
             "contract_map": contract_map,
         },
         "signals": [],
@@ -362,6 +362,7 @@ def run_capture(
         config_path=config_path,
         contract_map_path=contract_map_path,
         contract_map=contract_map,
+        contract_map_provenance=contract_map_provenance(contract_map_path),
         started_at=started_at,
         ended_at=ended_at,
         duration_seconds=duration_seconds,

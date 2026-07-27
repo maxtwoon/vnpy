@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from simnow_action_summary import build_action_summary, _record_reason
+from simnow_artifact_loader import load_jsonl_records
+from simnow_halt_metadata import halt_family
 from simnow_observation_rules import is_valid_observation
 from simnow_observation_window import filter_records_by_start, load_observation_start_date
+from simnow_reason_governance import build_reason_governance
 
 
 HERE = Path(__file__).resolve().parent
@@ -23,9 +26,7 @@ SENSITIVE_VALUE_FRAGMENTS = {"setting_masked"}
 
 def load_ledger(path: Path) -> list[dict[str, Any]]:
     """Load the observation ledger JSONL if it exists; otherwise return an empty list."""
-    if not path or not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
+    return load_jsonl_records(path)
 
 
 def _automation_status(record: dict[str, Any]) -> str:
@@ -89,6 +90,16 @@ def _record_safe_latest(record: dict[str, Any]) -> dict[str, Any]:
     if kline_safe:
         safe["kline_coverage"] = kline_safe
 
+    halt = record.get("halt") or {}
+    if halt:
+        safe["halt"] = {
+            "rule_id": str(halt.get("rule_id") or ""),
+            "family": str(halt.get("family") or ""),
+            "severity": str(halt.get("severity") or ""),
+            "trigger_metrics": list(halt.get("trigger_metrics") or []),
+            "explained_cn": str(halt.get("explained_cn") or ""),
+        }
+
     return safe
 
 
@@ -108,6 +119,41 @@ def _count_consecutive_valid_days(ordered: list[dict[str, Any]]) -> int:
         else:
             break
     return count
+
+
+def _operational_bucket(record: dict[str, Any]) -> str:
+    """Classify a ledger record into an operational analysis bucket."""
+    status = _automation_status(record)
+    reason = _record_reason(record)
+
+    if status == "pending":
+        if reason in {
+            "historical_db_lag",
+            "simnow_or_replay_export_missing",
+            "kline_coverage_incomplete",
+            "kline_coverage_too_short",
+        }:
+            return "data_pending_days"
+        if reason in {
+            "subscription_incomplete",
+            "event_surface_mismatch",
+            "no_captured_session_data_only_replay_derived",
+        }:
+            return "infra_pending_days"
+    elif status == "skipped":
+        if reason in {
+            "simnow_no_ticks",
+            "simnow_no_snapshot",
+            "ctp_disconnect_097_no_snapshot",
+        }:
+            return "trading_session_skipped_days"
+    elif status == "halt":
+        family = halt_family(record)
+        if family == "order_safety" or reason == "workflow_order_safety_breach":
+            return "safety_halt_days"
+        return "strategy_risk_halt_days"
+
+    return ""
 
 
 def build_ledger_summary(
@@ -139,6 +185,21 @@ def build_ledger_summary(
     reason_counts = dict(sorted(Counter(
         _record_reason(row) for row in ordered if _record_reason(row)
     ).items()))
+    reason_governance = build_reason_governance(reason_counts)
+    operational_bucket_counts = dict(sorted(Counter(
+        bucket for row in ordered
+        if (bucket := _operational_bucket(row))
+    ).items()))
+    halt_family_counts = dict(sorted(Counter(
+        family for row in ordered
+        if (family := halt_family(row))
+    ).items()))
+    action_summary = build_action_summary([_record_safe_latest(row) for row in ordered])
+    blocking_action_counts = dict(sorted(Counter(
+        str(row.get("action_class") or "")
+        for row in action_summary
+        if not row.get("counts_for_20d") and row.get("action_class")
+    ).items()))
 
     blockers: list[str] = []
     if valid_days < min_days:
@@ -160,23 +221,27 @@ def build_ledger_summary(
         and failed_days == 0
     )
 
-    latest_action: dict[str, Any] = {}
-    if latest_record:
-        latest_action = build_action_summary([_record_safe_latest(latest_record)])[0]
+    latest_action: dict[str, Any] = action_summary[-1] if action_summary else {}
 
     latest_status = _automation_status(latest_record)
     if not latest_record:
         next_action = "continue daily observation"
+        next_action_class = "continue_observation"
     elif ready_to_expand:
         next_action = "review promotion readiness"
+        next_action_class = "review_promotion_readiness"
     elif latest_status == "pending":
         next_action = "resolve latest pending reason"
+        next_action_class = str(latest_action.get("action_class") or "resolve_observation_gaps")
     elif latest_status == "skipped":
         next_action = "wait for next valid session"
+        next_action_class = str(latest_action.get("action_class") or "rerun_next_session")
     elif latest_status in {"halt", "failed"}:
         next_action = "manual review required"
+        next_action_class = "manual_review_required"
     else:
         next_action = "continue daily observation"
+        next_action_class = "continue_observation"
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -195,10 +260,19 @@ def build_ledger_summary(
         "ready_to_expand": ready_to_expand,
         "promotion_blockers": blockers,
         "reason_counts": reason_counts,
+        "reason_governance_counts": reason_governance["reason_governance_counts"],
+        "reasonableness_counts": reason_governance["reasonableness_counts"],
+        "reason_rationality_verdict": reason_governance["reason_rationality_verdict"],
+        "reason_rationality_cn": reason_governance["reason_rationality_cn"],
+        "pareto_summary": reason_governance["pareto_summary"],
+        "operational_bucket_counts": operational_bucket_counts,
+        "halt_family_counts": halt_family_counts,
+        "blocking_action_counts": blocking_action_counts,
         "automation_status_counts": status_counts,
         "latest_record": _record_safe_latest(latest_record) if latest_record else {},
         "latest_action": latest_action,
         "next_action": next_action,
+        "next_action_class": next_action_class,
     }
 
 

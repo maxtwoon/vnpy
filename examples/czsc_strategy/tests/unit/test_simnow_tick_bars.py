@@ -12,6 +12,7 @@ if str(DIAG) not in sys.path:
 
 from simnow_tick_bars import (  # noqa: E402
     aggregate_ticks_to_1m,
+    apply_contract_map_override,
     promote_staged_bars,
     summarize_bars,
     upsert_bars_to_sqlite,
@@ -83,6 +84,23 @@ def test_aggregate_ticks_to_1m_uses_contract_map_and_volume_deltas():
     second_minute = bars[2]
     assert second_minute["datetime"] == "2026-07-01 09:01:00"
     assert second_minute["volume"] == 5.0
+
+
+def test_contract_map_override_can_disable_expected_symbol_for_recompute():
+    payload = _export_payload()
+    override = {
+        "AP888": {"symbol": "ap610", "exchange": "CZCE", "enabled": False},
+        "SC888": {"symbol": "sc2608", "exchange": "INE", "enabled": True},
+    }
+
+    effective = apply_contract_map_override(payload, override)
+    bars = aggregate_ticks_to_1m(effective)
+    summary = summarize_bars(Path("bars.db"), bars, effective, min_bars_per_symbol=1)
+
+    assert [bar["symbol"] for bar in bars] == ["SC888"]
+    assert summary["expected_symbols"] == ["SC888"]
+    assert summary["symbols"] == ["SC888"]
+    assert summary["missing_symbols"] == []
 
 
 def test_upsert_bars_to_sqlite_staging_default_never_touches_raw(tmp_path):

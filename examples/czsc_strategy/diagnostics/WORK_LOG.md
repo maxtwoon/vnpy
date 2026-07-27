@@ -4818,3 +4818,4317 @@ Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_historical_db_updat
 ### Next Action
 
 Keep today's result as `halt/consecutive_loss_abs_pct`, review the threshold breach and the remaining `AP888` coverage gap manually, and only schedule another formal observation after that review.
+
+## 2026-07-21 Same-Day Formal Overwrite
+
+### Goal
+
+At user request, re-run the documented formal read-only SimNow observation flow on the same trading date and intentionally overwrite the existing `2026-07-21` ledger row/artifacts with a newer same-day result.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `200 passed`.
+- Pending replay backfill plan still shows `2026-07-15` as `ready_to_backfill`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+### Outcomes
+
+- This run intentionally overwrote the same-date formal artifacts/ledger row for `2026-07-21`.
+- Refreshed same-day artifacts:
+  - `simnow_export_2026-07-21.json`
+  - `simnow_kline_update_2026-07-21.json`
+  - `simnow_replay_2026-07-21.json`
+  - `simnow_record_2026-07-21.json`
+  - `simnow_report_2026-07-21.md`
+  - `simnow_run_summary_2026-07-21.json`
+  - `simnow_daily_brief_2026-07-21.md`
+  - `simnow_historical_db_update_2026-07-21.json`
+  - `simnow_ledger_summary.json`
+- Historical DB auto update succeeded:
+  - `historical_db_update.status=passed`
+  - `historical_db_update.exit_code=0`
+  - `started_at=2026-07-21T22:43:32.8853811+08:00`
+  - `ended_at=2026-07-21T22:43:52.4692820+08:00`
+- SimNow connection/login succeeded.
+- Contract query succeeded with `contracts_count=17812`.
+- Enabled subscriptions were complete for the current formal contract set: `4/4`, `missing_symbols=[]`.
+- Read-only workflow safety passed:
+  - `read_only=true`
+  - `orders_sent_by_workflow=0`
+  - `workflow_order_actions=[]`
+  - `orders=0`
+  - `trades=0`
+- Environment capture counts from the new same-date run:
+  - `ticks=5819`
+  - `accounts=1`
+  - `positions=1`
+  - `subscribed_count=4`
+- Delayed replay was available, but the formal observation still failed to count:
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=halt`
+  - `delayed_replay.reason=kline_coverage_too_short`
+- Kline coverage improved versus the earlier same-day run:
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[A888,RB888]`
+  - `min_bars_per_symbol=30`
+- Final authoritative machine-readable conclusion from the overwritten `simnow_run_summary_2026-07-21.json`:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- The overwritten daily record remains non-counting:
+  - `record.status=halt`
+  - `record.reason=consecutive_loss_abs_pct`
+  - `record.threshold_status=halt`
+  - `record.valid_observation=false`
+- 20-day ledger progress after the overwrite remains:
+  - `observed_days=5`
+  - `valid_observation_days=0`
+  - `pending_days=3`
+  - `halt_days=2`
+
+### Notes
+
+- This entry supersedes the earlier `2026-07-21` conclusion details where the same-date run had `ticks=10955`, `contracts_count=17742`, `subscribed_count=5`, and `kline.missing_symbols=[AP888]`; the new formal overwrite reflects the current four-symbol formal set with no missing kline symbols but short coverage on `A888` and `RB888`.
+- The final stop condition did not change: the authoritative run summary still halts the day for `consecutive_loss_abs_pct`.
+- Python UTF-8 JSON parsing validated both `simnow_ledger_summary.json` and `simnow_run_summary_2026-07-21.json`; a follow-up PowerShell `ConvertFrom-Json` parse failure was a console/encoding issue, not a broken artifact.
+- No workflow orders were sent.
+
+### Next Action
+
+Keep today's overwritten result as `halt/consecutive_loss_abs_pct`, review the threshold breach plus the short `A888`/`RB888` kline coverage, and only schedule another formal observation after that manual review.
+
+## 2026-07-21 21:05 Formal Automation Follow-Up
+
+### Goal
+
+Execute the required daily preflight for the `2026-07-21` formal slot, attempt the documented read-only formal command, and record the outcome when the local launcher has already crossed into the next calendar date.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `205 passed`.
+- Pending replay backfill plan still shows `2026-07-15` as `ready_to_backfill`.
+
+Rejected by the wrapper because the formal start window had already elapsed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+### Outcomes
+
+- The formal live command did run, but it did not start a new capture because `run_next_work.ps1` rejected the request at local time `2026-07-22 00:01:35 +08:00`.
+- The rejection reason was the built-in formal window guard: automatic formal runs must start within the `09:05`, `13:35`, or `21:05` five-minute grace windows.
+- Because no new same-date capture started after the window rejection, the existing `2026-07-21` formal artifacts remained the authoritative source of truth:
+  - `simnow_export_2026-07-21.json`
+  - `simnow_record_2026-07-21.json`
+  - `simnow_report_2026-07-21.md`
+  - `simnow_run_summary_2026-07-21.json`
+- The authoritative machine-readable conclusion therefore remains unchanged:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- The accepted same-day read-only metrics from the authoritative run summary remain:
+  - `ticks=5819`
+  - `contracts_count=17812`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=4`
+- Read-only safety remains satisfied in the authoritative same-day artifacts:
+  - `read_only=true`
+  - `orders_sent_by_workflow=0`
+  - `workflow_order_actions=[]`
+- Formal observation-side checks from the authoritative run summary remain:
+  - `historical_db_update.status=passed`
+  - `historical_db_update.exit_code=0`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=halt`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[A888,RB888]`
+  - `record.valid_observation=false`
+- Current 20-day progress from the authoritative run summary remains:
+  - `valid_observation_days=0`
+  - `consecutive_valid_days=0`
+  - `ready_to_expand=false`
+  - `promotion_blockers=[need_20_more_valid_observation_days, pending_days_present, halt_days_present]`
+
+### Notes
+
+- This follow-up did not create a new `simnow_run_summary_2026-07-22.json`; it only confirmed that the delayed automation launch missed the `2026-07-21 21:05` formal start window.
+- The wrapper rejection is not treated as a code regression in the SimNow workflow itself; it is a scheduling/window issue after the formal slot had already passed.
+- No workflow orders were sent.
+
+### Next Action
+
+Keep `simnow_run_summary_2026-07-21.json` as the final source of truth for the `2026-07-21` formal slot, and manually review the `consecutive_loss_abs_pct` halt plus short `A888`/`RB888` kline coverage before scheduling the next formal observation inside an allowed start window.
+
+## 2026-07-22 09:05 Formal Observation
+
+### Goal
+
+Execute the documented `09:05` formal read-only SimNow observation flow, keep the workflow read-only, and use `simnow_run_summary_2026-07-22.json` as the final authoritative result.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `205 passed`.
+- Pending replay backfill plan still shows `2026-07-15` as `ready_to_backfill`.
+
+Started inside the formal day-session window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+The local client timed out while the wrapper was still running, so the same run's read-only post-processing was resumed from the generated artifacts:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py --capture-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-22.json --date 2026-07-22
+python .\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py --date 2026-07-22 > .\examples\czsc_strategy\diagnostics\simnow_replay_readiness_2026-07-22.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_monitor.py --date 2026-07-22 --simnow-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-22.json --replay-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-07-22.json --kline-json .\examples\czsc_strategy\diagnostics\simnow_kline_update_2026-07-22.json --thresholds .\examples\czsc_strategy\diagnostics\simnow_risk_thresholds.json --record-json .\examples\czsc_strategy\diagnostics\simnow_record_2026-07-22.json --report-md .\examples\czsc_strategy\diagnostics\simnow_report_2026-07-22.md
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+python .\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --report-md .\examples\czsc_strategy\diagnostics\simnow_20d_promotion_decision.md
+python .\examples\czsc_strategy\diagnostics\simnow_run_summary.py --date 2026-07-22 --out-dir .\examples\czsc_strategy\diagnostics --out-json .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-22.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --ledger-summary .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json --historical-db-update .\examples\czsc_strategy\diagnostics\simnow_historical_db_update_2026-07-22.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07-22 --run-summary .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-22.json --out-md .\examples\czsc_strategy\diagnostics\simnow_daily_brief_2026-07-22.md
+```
+
+### Outcomes
+
+- The formal run started inside the allowed `09:05` window at local time `2026-07-22T09:06:22+08:00`.
+- Historical DB auto update succeeded before capture:
+  - `historical_db_update.status=passed`
+  - `historical_db_update.exit_code=0`
+  - `started_at=2026-07-22T09:07:55.6700495+08:00`
+  - `ended_at=2026-07-22T09:09:41.9221253+08:00`
+- The wrapper computed a formal capture duration of `8565` seconds and completed the read-only day-session capture:
+  - `simnow_export_2026-07-22.json`
+  - `simnow_kline_update_2026-07-22.json`
+- Same-day post-processing artifacts were completed from that capture without re-running live collection:
+  - `simnow_replay_readiness_2026-07-22.json`
+  - `simnow_replay_2026-07-22.json`
+  - `simnow_record_2026-07-22.json`
+  - `simnow_report_2026-07-22.md`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_ledger_summary.json`
+  - `simnow_run_summary_2026-07-22.json`
+  - `simnow_daily_brief_2026-07-22.md`
+- Read-only environment capture from the authoritative run summary:
+  - `ticks=39481`
+  - `contracts_count=17812`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=4`
+- Read-only safety passed:
+  - `read_only=true`
+  - `orders_sent_by_workflow=0`
+  - `workflow_order_actions=[]`
+  - `order_safety.status=pass`
+- Contract query and subscriptions succeeded for the enabled formal set:
+  - `contracts_count=17812`
+  - `subscribed_count=4`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+- Account contamination remained audit-only:
+  - `account_contamination.detected=true`
+  - `external_orders=0`
+  - `external_trades=0`
+  - `external_active_positions=1`
+  - `external_position_symbols=[sc2609]`
+- Delayed replay did not become available for a valid observation day:
+  - `delayed_replay.available=false`
+  - `delayed_replay.status=pending`
+  - `delayed_replay.reason=historical_db_lag`
+  - `latest_db_date=2026-07-22`
+  - `missing_or_lagged_symbols=[AP888]`
+- Final authoritative machine-readable conclusion from `simnow_run_summary_2026-07-22.json`:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=historical_db_lag`
+  - `automation_action=resolve pending gate before counting`
+- The daily record does not count toward the 20-day gate:
+  - `record.status=pending`
+  - `record.valid_observation=false`
+  - `record.threshold_status=unproven`
+- Current 20-day progress after the upsert:
+  - `observed_days=6`
+  - `valid_observation_days=0`
+  - `pending_days=4`
+  - `halt_days=2`
+
+### Notes
+
+- This is not a code failure. The formal run captured valid read-only data, but the day remains `pending` because the delayed replay DB still lacks same-day `AP888` coverage.
+- The client-side timeout interrupted the wrapper's later post-processing output, not the underlying capture. The final conclusion must therefore come from the completed `simnow_run_summary_2026-07-22.json`.
+- No workflow orders were sent.
+
+### Next Action
+
+Keep today's result as `pending/historical_db_lag`, wait for the historical DB to cover `AP888` on `2026-07-22` or run the documented backfill flow, and do not count the day toward the 20-day gate until delayed replay becomes available.
+
+## 2026-07-22 AP888 Replay Readiness Fix
+
+### Goal
+
+Correct the formal replay-readiness symbol set so disabled formal symbols do not block delayed replay, then regenerate the authoritative `2026-07-22` artifacts.
+
+### Root Cause
+
+- `simnow_contract_map.json` already had `AP888.enabled=false` for formal daily observation.
+- `simnow_replay_readiness.py` still defaulted to `backtest_matrix_report.DEFAULT_SYMBOLS`, so it kept checking the legacy five-symbol set and incorrectly treated disabled `AP888` as a replay blocker.
+- `run_next_work.ps1` called `simnow_replay_readiness.py` without `--symbols`, so the stale default leaked into the formal daily workflow and polluted `simnow_run_summary_2026-07-22.json`.
+
+### Changes
+
+- Updated `simnow_replay_readiness.py`.
+  - Added `load_enabled_symbols()` to read `simnow_contract_map.json`.
+  - Default CLI behavior now uses the enabled formal symbol set instead of the legacy five-symbol default.
+- Updated `test_simnow_replay_readiness.py`.
+  - Added a regression test proving disabled symbols are excluded from the default readiness symbol set.
+- Regenerated the `2026-07-22` daily replay/summary artifacts after the fix:
+  - `simnow_replay_readiness_2026-07-22.json`
+  - `simnow_replay_2026-07-22.json`
+  - `simnow_record_2026-07-22.json`
+  - `simnow_report_2026-07-22.md`
+  - `simnow_ledger_summary.json`
+  - `simnow_20d_promotion_decision.md`
+  - `simnow_run_summary_2026-07-22.json`
+  - `simnow_daily_brief_2026-07-22.md`
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_replay_readiness.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_replay_readiness.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py -q
+python .\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py --date 2026-07-22
+python .\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py --end 2026-07-22 --date 2026-07-22 --out-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-07-22.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_monitor.py --date 2026-07-22 --simnow-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-22.json --replay-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-07-22.json --kline-json .\examples\czsc_strategy\diagnostics\simnow_kline_update_2026-07-22.json --thresholds .\examples\czsc_strategy\diagnostics\simnow_risk_thresholds.json --record-json .\examples\czsc_strategy\diagnostics\simnow_record_2026-07-22.json --report-md .\examples\czsc_strategy\diagnostics\simnow_report_2026-07-22.md
+python .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --out-json .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json
+python .\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --report-md .\examples\czsc_strategy\diagnostics\simnow_20d_promotion_decision.md
+python .\examples\czsc_strategy\diagnostics\simnow_run_summary.py --date 2026-07-22 --out-dir .\examples\czsc_strategy\diagnostics --out-json .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-07-22.json --ledger .\examples\czsc_strategy\diagnostics\simnow_observation_ledger.jsonl --ledger-summary .\examples\czsc_strategy\diagnostics\simnow_ledger_summary.json --historical-db-update .\examples\czsc_strategy\diagnostics\simnow_historical_db_update_2026-07-22.json
+python .\examples\czsc_strategy\diagnostics\simnow_daily_brief.py --date 2026-07-22 --run-summary .\simnow_run_summary_2026-07-22.json --out-md .\simnow_daily_brief_2026-07-22.md
+```
+
+Results:
+
+- Replay readiness now uses only the enabled formal symbols and reports `ready=true` for `2026-07-22`.
+- `AP888` no longer appears in `missing_or_lagged_symbols`.
+- The corrected authoritative daily conclusion changed from the polluted `pending/historical_db_lag` result to:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- Delayed replay is now available:
+  - `delayed_replay.available=true`
+  - `delayed_replay.reason=no_actionable_events_on_either_side`
+  - `consistency_matched=true`
+- The day still does not count toward the 20-day gate because the replay-computed risk thresholds halt the run.
+
+### Next Action
+
+Keep `simnow_run_summary_2026-07-22.json` as the corrected source of truth for `2026-07-22`; stop automation for this candidate and review the `consecutive_loss_abs_pct` halt instead of chasing a non-existent `AP888` replay lag.
+
+## 2026-07-22 13:35 Formal Automation Follow-Up
+
+### Goal
+
+Execute the documented `13:35` formal read-only SimNow observation flow, keep the workflow read-only, and record the outcome for the afternoon formal slot.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Workflow preflight passed.
+- SimNow workflow unit tests passed: `206 passed`.
+- Pending replay backfill plan still shows `2026-07-15` as `ready_to_backfill`.
+
+Rejected by the wrapper because the formal start window had already elapsed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+### Outcomes
+
+- The formal live command did not start a new capture because `run_next_work.ps1` rejected the request at local time `2026-07-22 14:59:15 +08:00`.
+- The rejection reason was the built-in formal window guard: automatic formal runs must start within the `09:05`, `13:35`, or `21:05` five-minute grace windows.
+- Because no new same-date capture started after the window rejection, no new afternoon-slot artifacts were produced or refreshed.
+- The existing same-day artifacts therefore remain the only machine-readable source of truth for `2026-07-22`:
+  - `simnow_export_2026-07-22.json`
+  - `simnow_record_2026-07-22.json`
+  - `simnow_report_2026-07-22.md`
+  - `simnow_run_summary_2026-07-22.json`
+- The authoritative machine-readable conclusion from the existing run summary remains unchanged:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+- The accepted same-day read-only metrics from the authoritative run summary remain:
+  - `ticks=39481`
+  - `contracts_count=17812`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=4`
+- Read-only safety remains satisfied in the authoritative same-day artifacts:
+  - `read_only=true`
+  - `orders_sent_by_workflow=0`
+  - `workflow_order_actions=[]`
+- Formal observation-side checks from the authoritative run summary remain:
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `record.threshold_status=halt`
+  - `record.valid_observation=false`
+
+### Notes
+
+- This follow-up did not create a new `simnow_run_summary_2026-07-22.json`; it confirmed that the afternoon automation launch missed the `2026-07-22 13:35` formal start window.
+- The wrapper rejection is treated as a scheduling/window issue, not as a code regression in the SimNow workflow itself.
+- No workflow orders were sent.
+
+### Next Action
+
+Keep `simnow_run_summary_2026-07-22.json` as the only available same-day machine-readable source of truth, and schedule the next formal observation inside an allowed start window after manually reviewing the `consecutive_loss_abs_pct` halt.
+
+## 2026-07-22 Formal Session-Aware Guard
+
+### Goal
+
+Prevent formally allowed SimNow start windows from launching when an enabled symbol's own session cutoff leaves too little tradable time to accumulate the required `MinKlineBarsPerSymbol`.
+
+### Root Cause
+
+- `run_next_work.ps1` computed formal `duration_seconds` from a single window-level close (`11:30`, `15:00`, `23:00`).
+- The wrapper did not consider enabled symbols whose effective tradable session ends earlier than the generic window close.
+- That meant a formally valid start could still produce unavoidable `kline_coverage_too_short` or `kline_coverage_incomplete` outcomes for some enabled symbols.
+
+### Changes
+
+- Updated `run_next_work.ps1`.
+  - `Get-FormalCapturePlan` now accepts `-ContractMap`.
+  - Formal duration planning now honors optional per-symbol `formal_session_capture_end` cutoffs.
+  - When an enabled symbol's earlier cutoff leaves fewer than `MinKlineBarsPerSymbol * 60` seconds, the wrapper rejects the formal start before capture begins.
+- Updated `simnow_contract_map.json`.
+  - Added explicit night-session capture cutoffs for the current enabled formal symbols:
+    - `SC888=02:30:00`
+    - `A888=23:00:00`
+    - `ZN888=01:00:00`
+    - `RB888=23:00:00`
+- Updated `test_run_next_work_wrapper.py`.
+  - Added a regression test proving a formally valid `21:05` slot is rejected when an enabled symbol's own cutoff leaves fewer than `30` required minutes.
+  - Added a config test requiring enabled night-session symbols to define `formal_session_capture_end.night`.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Wrapper regression tests passed: `53 passed`.
+- Full SimNow workflow preflight passed: `214 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the second repair item: add a machine-checkable summary consistency gate so `record/report/run_summary/ledger_summary` cannot silently drift after backfill or rerun flows.
+
+## 2026-07-22 Summary Consistency Gate
+
+### Goal
+
+Prevent stale or partially refreshed SimNow summary artifacts from being treated as successful after backfill, rerun, or formal live workflow completion.
+
+### Root Cause
+
+- The workflow already regenerated `simnow_ledger_summary.json`, `simnow_run_summary_YYYY-MM-DD.json`, and `simnow_daily_brief_YYYY-MM-DD.md`.
+- But no machine gate verified that those refreshed artifacts still matched:
+  - `simnow_record_YYYY-MM-DD.json`
+  - `simnow_ledger_summary.json`
+  - `simnow_report_YYYY-MM-DD.md`
+  - `simnow_daily_brief_YYYY-MM-DD.md`
+- As a result, stale run summaries could survive after a backfill unless a human noticed the mismatch.
+
+### Changes
+
+- Added `simnow_summary_consistency.py`.
+  - Validates that `run_summary.record.*` matches the current record JSON.
+  - Re-derives `automation_status`, `automation_exit_code`, `automation_reason`, and `automation_action` from the embedded record and rejects drift.
+  - Verifies that `run_summary.ledger_summary` matches the current safe aggregate from `simnow_ledger_summary.json`.
+  - Verifies that the daily brief contains the same `automation_status`, `automation_reason`, `automation_action`, and `record.status`.
+  - Verifies that the 20-day report contains the current date/status/reason row for the daily record.
+- Updated `simnow_backfill_pending_replays.py`.
+  - After refreshing ledger summary, promotion decision, run summary, and daily brief, it now runs `simnow_summary_consistency.py`.
+- Updated `simnow_backfill_pending_kline.py`.
+  - Added the same post-refresh consistency validation, including `--kline-json` for record-summary comparison.
+- Updated `run_next_work.ps1`.
+  - Preflight now compiles `simnow_summary_consistency.py`.
+  - Preflight now runs `test_simnow_summary_consistency.py`.
+  - Formal `-LiveCapture` now runs a `Validate summary consistency` step after daily brief generation and before the final completion/exit handling.
+- Added/updated tests:
+  - New `test_simnow_summary_consistency.py` for consistent artifacts and stale run-summary / stale daily-brief rejection.
+  - Updated backfill tests to require the consistency script in the refresh chain.
+  - Updated wrapper tests to require the new script in preflight and live workflow ordering.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py .\examples\czsc_strategy\tests\unit\test_simnow_backfill_pending_replays.py .\examples\czsc_strategy\tests\unit\test_simnow_backfill_pending_kline.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted consistency/backfill/wrapper regressions passed: `71 passed`.
+- Full SimNow workflow preflight passed: `219 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: tighten contract-map and artifact provenance so each run summary records exactly which formal symbol set/version produced the observation and backfill decisions.
+
+## 2026-07-22 Contract Map Provenance
+
+### Goal
+
+Make every formal observation and backfill decision explicitly record which contract-map metadata and enabled symbol snapshot produced the result.
+
+### Root Cause
+
+- Formal capture artifacts already stored `contract_map_path` and the expanded `contract_map`, but they did not expose a stable provenance object with:
+  - version
+  - effective date
+  - note
+  - enabled formal symbol snapshot
+- `simnow_run_summary.py` therefore could not surface a compact machine-readable provenance record.
+- `simnow_backfill_pending_replays.py` and `simnow_backfill_pending_kline.py` also lacked an explicit provenance block, so later audits had to infer the active symbol set indirectly.
+- After adding top-level `_meta` to the contract map, `simnow_tick_bars.py` initially treated `_meta` as if it were a research symbol, which polluted kline missing-symbol checks.
+
+### Changes
+
+- Added `simnow_contract_map_meta.py`.
+  - Centralizes loading raw contract-map payloads.
+  - Ignores top-level metadata keys such as `_meta`.
+  - Exposes helpers for enabled entries, enabled symbols, and compact provenance extraction.
+- Updated `simnow_contract_map.json`.
+  - Added `_meta.version=V20260722`.
+  - Added `_meta.effective_date=2026-07-22`.
+  - Added `_meta.note` describing the post-AP888-disablement formal four-symbol set.
+- Updated `simnow_daily_capture.py`.
+  - `load_contract_map()` now ignores `_meta`.
+  - `build_export()` now embeds `meta.contract_map_provenance`.
+  - Live capture now records the provenance derived from the actual contract-map file used for the run.
+- Updated `simnow_run_summary.py`.
+  - Added top-level `contract_map_provenance` extracted from capture metadata, with a safe fallback for older captures.
+- Updated `simnow_backfill_pending_replays.py`.
+  - `build_backfill_plan()` now emits top-level `contract_map_provenance`.
+  - When explicit `symbols` are passed, the provenance snapshot reflects the symbol set actually used for readiness evaluation.
+- Updated `simnow_backfill_pending_kline.py`.
+  - `build_backfill_plan()` now emits top-level `contract_map_provenance`.
+  - Recompute now loads contract-map payloads through the shared metadata-aware loader.
+- Updated `simnow_tick_bars.py`.
+  - `_contract_lookup()` and `_expected_symbols()` now ignore `_meta`, so provenance metadata cannot be mistaken for a research symbol.
+- Updated `run_next_work.ps1`.
+  - Preflight now compiles `simnow_contract_map_meta.py`.
+- Added/updated tests:
+  - `test_simnow_daily_capture.py` now covers `_meta`-aware loading and export provenance embedding.
+  - `test_simnow_run_summary.py` now requires top-level `contract_map_provenance`.
+  - `test_simnow_backfill_pending_replays.py` and `test_simnow_backfill_pending_kline.py` now require top-level plan provenance.
+  - `test_run_next_work_wrapper.py` now requires `simnow_contract_map_meta.py` in preflight compile coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_backfill_pending_replays.py .\examples\czsc_strategy\tests\unit\test_simnow_backfill_pending_kline.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted provenance regressions passed: `96 passed`.
+- Full SimNow workflow preflight passed: `220 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: split halt/pending statistics into clearer operational buckets so environment issues, data lag, and strategy-risk halts stop being mixed together in 20-day summary analysis.
+
+## 2026-07-22 Operational Buckets
+
+### Goal
+
+Split 20-day halt/pending/skipped statistics into clearer operational buckets so environment issues, data-lag/data-coverage issues, and strategy-risk halts are no longer mixed together in one flat reason list.
+
+### Root Cause
+
+- `simnow_ledger_summary.py` previously exposed:
+  - `pending_days`
+  - `skipped_days`
+  - `halt_days`
+  - `reason_counts`
+- But it did not normalize those outcomes into higher-level operational categories.
+- That made the 20-day ledger hard to interpret operationally: a strategy-risk halt and a historical-DB lag both blocked promotion, but they are very different remediation classes.
+
+### Changes
+
+- Updated `simnow_ledger_summary.py`.
+  - Added `_operational_bucket(record)` to classify records into:
+    - `data_pending_days`
+    - `infra_pending_days`
+    - `trading_session_skipped_days`
+    - `strategy_risk_halt_days`
+    - `safety_halt_days`
+  - `build_ledger_summary()` now emits `operational_bucket_counts`.
+- Updated `simnow_run_summary.py`.
+  - Added `operational_bucket_counts` to the safe embedded `ledger_summary` allowlist so the daily machine-readable source of truth carries the same operational split.
+- Updated `simnow_daily_brief.py`.
+  - The `## 20 日进度` section now renders each `operational_bucket_counts.*` field when available.
+- Added/updated tests:
+  - `test_simnow_ledger_summary.py` now verifies:
+    - mixed-record summaries emit operational buckets;
+    - data-vs-infra pending causes split correctly;
+    - strategy-risk halts and order-safety halts split correctly.
+  - `test_simnow_run_summary.py` now requires embedded ledger summaries to preserve `operational_bucket_counts`.
+  - `test_simnow_daily_brief.py` now requires the brief to render the operational-bucket fields.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted ledger/run-summary/daily-brief regressions passed: `53 passed`.
+- Full SimNow workflow preflight passed: `222 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: refine blocker/action semantics so 20-day summaries distinguish “wait for data/session” blockers from “manual review now” blockers in a more machine-actionable way.
+## 2026-07-22 Action / Blocker Classes
+
+### Goal
+
+Make daily action recommendations and 20-day blocker summaries machine-readable, so we can distinguish "wait for data/session" cases from "review now" cases without scraping free-form Chinese text.
+
+### Root Cause
+
+- `simnow_action_summary.py` previously only returned:
+  - `date`
+  - `status`
+  - `reason`
+  - `severity`
+  - `action`
+  - `counts_for_20d`
+- That was enough for markdown reports, but not enough for stable aggregation:
+  - `promotion.top_blocking_actions` only counted `reason`;
+  - `ledger_summary.latest_action` carried text but no stable action category;
+  - `ledger_summary.next_action` was only coarse English prose.
+- Result: "wait for DB/kline/session" blockers and "manual review now" blockers were mixed together operationally.
+
+### Changes
+
+- Updated `simnow_action_summary.py`.
+  - Added machine-readable fields to every action row:
+    - `action_class`
+    - `blocker_class`
+  - Current stable categories:
+    - `counts_for_20d`
+    - `rerun_next_session`
+    - `wait_for_data`
+    - `investigate_infra`
+    - `resolve_observation_gaps`
+    - `manual_review_required`
+    - `unknown`
+  - `blocker_class` now normalizes rows into:
+    - `none`
+    - `wait`
+    - `review_now`
+- Updated `simnow_promotion_decision.py`.
+  - `decide_promotion()` now emits:
+    - `blocking_action_counts`
+    - richer `top_blocking_actions` entries with:
+      - `reason`
+      - `count`
+      - `action_class`
+      - `blocker_class`
+  - CLI JSON stdout now includes `blocking_action_counts`.
+- Updated `simnow_ledger_summary.py`.
+  - Aggregates non-counted action rows into `blocking_action_counts`.
+  - `latest_action` now keeps `action_class` and `blocker_class`.
+  - Added `next_action_class` so the ledger has a stable machine recommendation alongside the existing human-readable `next_action`.
+- Updated `simnow_run_summary.py`.
+  - Added `blocking_action_counts` and `next_action_class` to the safe embedded `ledger_summary` allowlist.
+  - Embedded `promotion` now preserves `blocking_action_counts`.
+- Updated tests:
+  - `test_simnow_daily_monitor.py` now verifies:
+    - `action_recommendation()` emits `action_class` / `blocker_class`;
+    - `build_action_summary()` carries the new fields;
+    - promotion summaries expose richer blocking-action structures.
+  - `test_simnow_ledger_summary.py` now verifies:
+    - `latest_action.action_class`
+    - `latest_action.blocker_class`
+    - `blocking_action_counts`
+    - `next_action_class`
+  - `test_simnow_run_summary.py` now requires:
+    - promotion `blocking_action_counts`
+    - embedded ledger `blocking_action_counts`
+    - embedded `latest_action.action_class`
+    - embedded `latest_action.blocker_class`
+    - embedded `next_action_class`
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py -q
+```
+
+Results:
+
+- Targeted action/blocker regression suite passed: `92 passed`.
+
+### Next Action
+
+Continue the next repair item: propagate the new machine-readable action/blocker classes into the daily brief and downstream consistency checks where that improves operator triage without duplicating logic.
+
+## 2026-07-22 Daily Brief Action Classes
+
+### Goal
+
+Propagate the new machine-readable action/blocker classes into the daily brief and summary-consistency gate, so operator-facing markdown stays aligned with the JSON single source of truth.
+
+### Root Cause
+
+- After adding `action_class` / `blocker_class` to action summaries, the downstream daily brief still only showed:
+  - `automation_status`
+  - `automation_reason`
+  - `automation_action`
+- `needs_user_action()` still depended mainly on legacy reason strings.
+- `simnow_summary_consistency.py` checked daily-brief status/action text, but not the new structured action-class fields.
+
+### Changes
+
+- Rewrote `simnow_daily_brief.py` in clean UTF-8 text.
+  - Preserved the existing brief structure and sections.
+  - Added top-level fields:
+    - `automation_action_class`
+    - `automation_blocker_class`
+  - Added derived record-level fields:
+    - `record.action_class`
+    - `record.blocker_class`
+  - `## 20 日进度` now also renders:
+    - `next_action_class`
+    - each `blocking_action_counts.*`
+  - `needs_user_action()` now uses the structured blocker classification first:
+    - `review_now` => user action required
+    - `wait` / `none` => no user action
+    - `halt` / `failed` still always require user action
+- Updated `simnow_run_summary.py`.
+  - `classify_automation_status()` now emits:
+    - `automation_action_class`
+    - `automation_blocker_class`
+  - These are derived from the same shared `action_recommendation()` logic as the reports.
+- Updated `simnow_summary_consistency.py`.
+  - Daily brief validation now checks:
+    - `automation_action_class`
+    - `automation_blocker_class`
+    - `next_action_class` when ledger summary is available
+- Updated tests:
+  - `test_simnow_daily_brief.py` now verifies:
+    - brief output contains the new action/blocker-class fields;
+    - `needs_user_action()` honors structured blocker classes;
+    - ledger `next_action_class` and `blocking_action_counts.*` are rendered.
+  - `test_simnow_run_summary.py` now requires automation summaries to emit action/blocker classes.
+  - `test_simnow_summary_consistency.py` continues to guard brief-vs-summary alignment with the new structured fields present in the generated brief.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief/run-summary/consistency regressions passed: `100 passed`.
+- Full SimNow workflow preflight passed: `225 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: surface the same machine-readable blocker/action categories in the 20-day promotion report markdown itself, so human review of promotion readiness uses the same structured buckets already present in JSON outputs.
+
+## 2026-07-22 Promotion Markdown Structured Blocking
+
+### Goal
+
+Expose the same machine-readable blocker/action categories in the 20-day markdown reports that already exist in JSON outputs, so human review of promotion readiness and 20-day observation progress uses the same structured buckets as automation.
+
+### Root Cause
+
+- `decide_promotion()` already emitted:
+  - `blocking_action_counts`
+  - structured `top_blocking_actions`
+  - `action_summary` rows with `action_class` / `blocker_class`
+- But `simnow_20d_promotion_decision.md` still rendered:
+  - only the old Action Summary columns;
+  - no dedicated `blocking_action_counts` section;
+  - no dedicated `top_blocking_actions` section.
+- `simnow_20d_observation_report.md` also still used the old Action Summary columns, which left the two markdown reports visually out of sync with the shared action-summary schema.
+
+### Changes
+
+- Updated `simnow_promotion_decision.py`.
+  - `## Action Summary` now renders:
+    - `date`
+    - `status`
+    - `reason`
+    - `severity`
+    - `action_class`
+    - `blocker_class`
+    - `action`
+    - `counts_for_20d`
+  - Added `## Blocking Action Counts` markdown section.
+    - Renders grouped counts by `action_class`.
+  - Added `## Top Blocking Actions` markdown section.
+    - Renders `reason`, `days`, `action_class`, `blocker_class`.
+- Updated `simnow_daily_monitor.py`.
+  - `simnow_20d_observation_report.md` now uses the same expanded Action Summary columns as the promotion report, keeping the two markdown reports aligned with `simnow_action_summary.py`.
+- Updated tests:
+  - `test_simnow_daily_monitor.py` now requires:
+    - expanded Action Summary columns in promotion markdown;
+    - explicit `Blocking Action Counts` and `Top Blocking Actions` sections;
+    - shared structured columns in the 20-day observation report markdown.
+- Updated `ACCEPTANCE.md`.
+  - Documented `action_class` / `blocker_class` in Action Summary requirements.
+  - Documented that the promotion decision report must surface `blocking_action_counts` and structured `top_blocking_actions`.
+  - Expanded run-summary / ledger-summary requirements to mention the new machine-readable class fields where the lines were stable to update.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_simnow_promotion_parity.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted promotion/report/run-summary/daily-brief regressions passed: `160 passed`.
+- Full SimNow workflow preflight passed: `226 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: reduce the remaining duplication between `build_20d_report()` and `decide_promotion()` so the same 20-day aggregate logic is computed once and rendered into both markdown/JSON outputs.
+
+## 2026-07-22 Shared 20-Day Aggregate Helper
+
+### Goal
+
+Remove the remaining duplicated 20-day aggregation logic between `build_20d_report()` and `decide_promotion()` without changing the intentionally different `matched_days` and `halt_days` semantics already pinned by regression tests.
+
+### Root Cause
+
+- `simnow_daily_monitor.py::build_20d_report()` and `simnow_promotion_decision.py::decide_promotion()` both independently computed:
+  - observation window filtering
+  - `observed_days` / `valid_observation_days`
+  - `status_counts` / `reason_counts`
+  - `promotion_blockers`
+  - `last_valid_observation_date`
+  - `action_summary`
+  - `blocking_action_counts`
+  - `top_blocking_actions`
+- This duplication meant any future change to shared fields could drift between markdown, JSON, and promotion gating logic.
+- At the same time, `test_simnow_promotion_parity.py` explicitly documents two real differences that must stay intact:
+  - monitor counts `order_safety.status == "halt"` in `halt_days`
+  - promotion only counts threshold halts
+  - monitor requires `matched and verified`
+  - promotion accepts truthy `matched`
+
+### Changes
+
+- Added `simnow_20d_aggregate.py`.
+  - Centralizes shared 20-day aggregation for:
+    - observation-window filtering
+    - common counts
+    - blockers
+    - latest valid date
+    - action summary
+    - blocking action counts
+    - top blocking actions
+  - Keeps divergence injectable through:
+    - `matched_day_predicate`
+    - `halt_day_predicate`
+- Refactored `simnow_daily_monitor.py`.
+  - `build_20d_report()` now delegates to `build_20d_aggregate(...)`.
+  - Preserves existing stricter monitor semantics:
+    - `matched is True and verified is True`
+    - threshold halt or order-safety halt
+- Refactored `simnow_promotion_decision.py`.
+  - `decide_promotion()` now delegates to `build_20d_aggregate(...)`.
+  - Preserves existing promotion semantics:
+    - truthy `matched`
+    - threshold halt only
+- Added `test_simnow_20d_aggregate.py`.
+  - Verifies shared helper output fields.
+  - Verifies configurable predicates preserve the known monitor/promotion sub-count divergence.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_20d_aggregate.py`.
+  - Preflight pytest list now includes `test_simnow_20d_aggregate.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to ensure the new helper script and test file stay in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_20d_aggregate.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_simnow_promotion_parity.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted aggregate/monitor/promotion/wrapper regressions passed: `120 passed`.
+- Full SimNow workflow preflight passed: `230 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: normalize the remaining duplicated report-shape assumptions across `simnow_daily_monitor.py`, `simnow_promotion_decision.py`, and downstream summary consumers, while keeping the current status semantics stable.
+
+## 2026-07-22 Ledger Summary Schema Helper
+
+### Goal
+
+Reduce the remaining report-shape drift risk across downstream consumers by centralizing the safe `ledger_summary` schema and the daily-brief 20-day progress rendering in one helper, instead of having `simnow_run_summary.py` and `simnow_daily_brief.py` each remember the same field list separately.
+
+### Root Cause
+
+- `simnow_run_summary.py` maintained its own `SAFE_LEDGER_SUMMARY_FIELDS` whitelist to embed a sanitized `ledger_summary` into the machine-readable run summary.
+- `simnow_daily_brief.py` separately hard-coded the exact same 20-day progress field names when rendering:
+  - `valid_observation_days`
+  - `consecutive_valid_days`
+  - `ready_to_expand`
+  - `observation_start_date`
+  - `excluded_before_start_count`
+  - `next_action`
+  - `next_action_class`
+  - `promotion_blockers`
+  - `blocking_action_counts.*`
+  - `operational_bucket_counts.*`
+- This meant any schema change to ledger summary could drift in at least two places.
+- During refactor, preflight exposed one more hidden dependency:
+  - `simnow_summary_consistency.py` still imported the old private `_safe_ledger_summary` helper from `simnow_run_summary.py`.
+  - Once that private helper moved, preflight failed immediately, proving the dependency chain was real and had to be updated, not papered over.
+
+### Changes
+
+- Added `simnow_ledger_summary_schema.py`.
+  - Defines the shared `SAFE_LEDGER_SUMMARY_FIELDS`.
+  - Provides `filter_safe_ledger_summary(...)`.
+  - Provides `build_daily_brief_20d_lines(...)`.
+- Updated `simnow_run_summary.py`.
+  - Removed the local `SAFE_LEDGER_SUMMARY_FIELDS`.
+  - Removed the local `_safe_ledger_summary(...)`.
+  - Now uses `filter_safe_ledger_summary(...)` from the shared helper.
+- Updated `simnow_daily_brief.py`.
+  - Replaced the hand-written 20-day ledger-summary block with `build_daily_brief_20d_lines(...)`.
+  - This keeps the daily brief aligned with the same schema used by the run summary.
+- Updated `simnow_summary_consistency.py`.
+  - Switched from the removed private `_safe_ledger_summary` import to the new shared `filter_safe_ledger_summary(...)`.
+- Added `test_simnow_ledger_summary_schema.py`.
+  - Verifies safe-field filtering.
+  - Verifies daily-brief 20-day progress lines are rendered from the shared schema helper.
+  - Verifies the missing-ledger path is stable.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_ledger_summary_schema.py`.
+  - Preflight pytest list now includes `test_simnow_ledger_summary_schema.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to ensure the new helper script and test file remain covered by preflight.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted schema/run-summary/daily-brief/consistency/wrapper regressions passed: `107 passed`.
+- Full SimNow workflow preflight passed: `235 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether `simnow_run_summary.py` and `simnow_daily_brief.py` still duplicate automation-status-to-user-text mapping, and if so, extract the stable policy layer without changing current status semantics.
+
+## 2026-07-22 Automation Policy Helper
+
+### Goal
+
+Extract the stable automation-status policy layer shared by `simnow_run_summary.py` and `simnow_daily_brief.py`, so the machine-readable automation verdict and the human-facing brief no longer maintain the same status/action semantics in parallel.
+
+### Root Cause
+
+- `simnow_run_summary.py` owned the machine-readable automation mapping in `classify_automation_status()`:
+  - `valid` / `skipped` / `pending` / `halt` / `failed`
+  - `automation_exit_code`
+  - `automation_action`
+  - `automation_action_class`
+  - `automation_blocker_class`
+- `simnow_daily_brief.py` then reimplemented the same policy layer in a different form:
+  - rebuilding a monitor-shaped record for `action_recommendation()`
+  - resolving action metadata
+  - computing `needs_user_action`
+  - generating the conclusion paragraph
+- This duplication created schema drift risk between:
+  - the JSON single source of truth used by automation
+  - the markdown brief shown to humans
+- The key requirement for this step was to reduce duplication without changing current semantics:
+  - `subscription_incomplete` and `workflow_order_safety_breach` still require user action
+  - `skipped + simnow_no_ticks` still does not
+  - the same `automation_action_class` / `automation_blocker_class` values must still flow through unchanged
+
+### Changes
+
+- Added `simnow_automation_policy.py`.
+  - Provides shared helpers for:
+    - `classify_automation_status(...)`
+    - `resolve_action_meta(...)`
+    - `automation_action_text(...)`
+    - `needs_user_action(...)`
+    - `conclusion_text(...)`
+    - `build_record_for_action(...)`
+- Updated `simnow_run_summary.py`.
+  - Removed the local `classify_automation_status(...)` implementation.
+  - Now imports the shared `classify_automation_status(...)` from `simnow_automation_policy.py`.
+- Updated `simnow_daily_brief.py`.
+  - Now imports shared automation-policy helpers.
+  - Uses shared `resolve_action_meta(...)`, `automation_action_text(...)`, `needs_user_action(...)`, and `conclusion_text(...)`.
+  - Keeps the public `needs_user_action` symbol stable by binding it to the shared helper, so downstream callers and tests still use the same public API.
+- Added `test_simnow_automation_policy.py`.
+  - Verifies `simnow_run_summary.classify_automation_status` and `simnow_daily_brief.needs_user_action` are the shared helper functions.
+  - Verifies pending classification still yields:
+    - `automation_status=pending`
+    - `automation_exit_code=20`
+    - `automation_action=resolve pending gate before counting`
+    - `automation_action_class=wait_for_data`
+    - `automation_blocker_class=wait`
+  - Verifies `needs_user_action(...)` still honors:
+    - structured blocker class first
+    - legacy `subscription_incomplete` fallback
+  - Verifies the shared conclusion text matches existing status policy.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_automation_policy.py`.
+  - Preflight pytest list now includes `test_simnow_automation_policy.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to keep the new helper and test file in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_automation_policy.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted automation-policy/run-summary/daily-brief/wrapper regressions passed: `106 passed`.
+- Full SimNow workflow preflight passed: `241 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining daily brief markdown assembly can be reduced further without destabilizing the current fixed-format output contract.
+
+## 2026-07-22 Daily Brief Policy De-dup Cleanup
+
+### Goal
+
+Finish the daily-brief side of the automation-policy refactor by removing the remaining local policy-copy functions from `simnow_daily_brief.py`, so the file no longer contains dead duplicated implementations hidden behind alias rebinding.
+
+### Root Cause
+
+- After introducing `simnow_automation_policy.py`, `simnow_daily_brief.py` still contained:
+  - a local `_build_record_for_action(...)`
+  - a local `_resolve_action_meta(...)`
+  - a local `needs_user_action(...)`
+  - a local `_conclusion_text(...)`
+- The module then rebound some names to shared helpers afterwards.
+- That meant runtime behavior was already mostly shared, but the source still carried a misleading local copy of the old policy layer.
+- This is a maintenance trap:
+  - future readers can edit the dead local functions by mistake;
+  - source grep still reports multiple policy implementations;
+  - sharing guarantees are weaker unless a test explicitly pins them.
+
+### Changes
+
+- Cleaned `simnow_daily_brief.py`.
+  - Removed the local `_build_record_for_action(...)` copy.
+  - Removed the local `_resolve_action_meta(...)` copy.
+  - Removed the local `needs_user_action(...)` copy.
+  - Removed the local `action_recommendation` import that was only needed by the deleted duplicates.
+  - Renamed the leftover legacy conclusion implementation away from the active entry point, while the public `_conclusion_text` name continues to point at the shared helper.
+  - The active code path now uses the shared automation-policy helper directly for:
+    - action text
+    - action meta
+    - user-action requirement
+    - conclusion text
+- Added `test_simnow_daily_brief_policy_sharing.py`.
+  - Verifies `simnow_daily_brief.py` imports the shared automation-policy helper.
+  - Verifies the file no longer defines local copies of:
+    - `_build_record_for_action`
+    - `_resolve_action_meta`
+    - `needs_user_action`
+    - `_conclusion_text`
+- Updated `run_next_work.ps1`.
+  - Preflight pytest list now includes `test_simnow_daily_brief_policy_sharing.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added a guard to ensure the new daily-brief policy-sharing regression test stays in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief sharing/behavior/wrapper regressions passed: `82 passed`.
+- Full SimNow workflow preflight passed: `243 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining fixed-format daily-brief section rendering can be normalized into smaller reusable helpers without changing the current markdown output contract.
+
+## 2026-07-22 Daily Brief Section Helper Extraction
+
+### Goal
+
+Reduce the remaining repeated fixed-format section rendering in `simnow_daily_brief.py` without changing the current markdown contract, so future daily-brief changes can update section logic in one place.
+
+### Root Cause
+
+- `simnow_daily_brief.py` still inlined four repetitive section blocks:
+  - environment capture
+  - historical DB update
+  - account contamination
+  - delayed replay
+- Those blocks all followed the same pattern:
+  - fixed heading
+  - fixed ordered bullet list
+  - local fallback formatting
+- Keeping them inline makes the file harder to read and increases drift risk if one section is updated in one path but not another.
+
+### Changes
+
+- Added `simnow_daily_brief_sections.py`.
+  - Provides shared section renderers for:
+    - `build_environment_capture_section_lines(...)`
+    - `build_historical_db_update_section_lines(...)`
+    - `build_account_contamination_section_lines(...)`
+    - `build_delayed_replay_section_lines(...)`
+  - Keeps section-local formatting helpers close to the shared rendering layer.
+- Rewrote `simnow_daily_brief.py` as an equivalent fixed-format renderer.
+  - Preserved the existing public entry points:
+    - `load_run_summary(...)`
+    - `build_daily_brief(...)`
+    - `render_daily_brief`
+    - `needs_user_action`
+  - Replaced the four inline markdown blocks with calls into the new shared section helper.
+  - Left the summary header, 20-day section, conclusion, and next-step structure unchanged.
+- Added `test_simnow_daily_brief_sections.py`.
+  - Verifies the environment-capture section lines exactly.
+  - Verifies the delayed-replay section lines exactly.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_daily_brief_sections.py`.
+  - Preflight pytest list now includes `test_simnow_daily_brief_sections.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to keep the new section helper and regression test in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief section/behavior/wrapper regressions passed: `86 passed`.
+- Full SimNow workflow preflight passed: `247 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining daily-brief summary/header assembly should also be extracted into a small schema helper, or whether the current level of consolidation is already the right stopping point.
+
+## 2026-07-22 Daily Brief Schema Helper Extraction
+
+### Goal
+
+Consolidate the remaining fixed-format daily-brief overview and closing assembly into a shared schema helper, so `simnow_daily_brief.py` and `simnow_daily_brief_sections.py` stop carrying duplicate formatting utilities and the markdown contract becomes easier to maintain.
+
+### Root Cause
+
+- After the section-helper refactor, the daily-brief stack still had duplicated formatting logic across files:
+  - nested-dict safe access
+  - symbol-list formatting
+  - boolean formatting
+- `simnow_daily_brief.py` still directly assembled:
+  - the top overview bullet block
+  - the closing conclusion / next-step block
+- That left the rendering layer split across two modules with repeated low-level formatting rules, which increases drift risk when the brief contract changes.
+
+### Changes
+
+- Added `simnow_daily_brief_schema.py`.
+  - Provides shared helpers for:
+    - `safe_get(...)`
+    - `format_symbols(...)`
+    - `format_bool(...)`
+    - `build_daily_brief_overview_lines(...)`
+    - `build_daily_brief_closing_lines(...)`
+- Rewrote `simnow_daily_brief_sections.py`.
+  - Removed local copies of the formatting helpers.
+  - Now imports formatting behavior from `simnow_daily_brief_schema.py`.
+  - Keeps the four section renderers unchanged at the output-contract level.
+- Rewrote `simnow_daily_brief.py`.
+  - Removed local copies of nested access / symbol formatting helpers.
+  - Now imports shared schema helpers for:
+    - overview-line rendering
+    - closing-line rendering
+    - shared fallback formatting
+  - Preserved the public API:
+    - `load_run_summary(...)`
+    - `build_daily_brief(...)`
+    - `render_daily_brief`
+    - `needs_user_action`
+- Added `test_simnow_daily_brief_schema.py`.
+  - Verifies the overview bullet block exactly.
+  - Verifies the closing conclusion / next-step block exactly.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_daily_brief_schema.py`.
+  - Preflight pytest list now includes `test_simnow_daily_brief_schema.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to keep the new schema helper and regression test in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief schema/sections/behavior/wrapper regressions passed: `90 passed`.
+- Full SimNow workflow preflight passed: `251 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining `_legacy_conclusion_text(...)` compatibility stub and other residual fallback shims can be safely removed or pinned by tests without weakening the current output contract.
+
+## 2026-07-22 Daily Brief Legacy Stub Cleanup
+
+### Goal
+
+Remove the remaining dead compatibility stub from `simnow_daily_brief.py`, so the daily-brief renderer no longer carries an unused legacy conclusion implementation after the shared automation-policy migration.
+
+### Root Cause
+
+- `simnow_daily_brief.py` still contained `_legacy_conclusion_text(...)`.
+- The active render path already used the shared automation-policy helper through:
+  - `_conclusion_text = _policy_conclusion_text`
+- That meant `_legacy_conclusion_text(...)` was dead code:
+  - it was not part of the public API;
+  - it was not called by `build_daily_brief(...)`;
+  - it duplicated logic already centralized elsewhere.
+- The file also still carried now-unused imports that only existed because the legacy stub used to need them.
+
+### Changes
+
+- Updated `simnow_daily_brief.py`.
+  - Removed the unused `_legacy_conclusion_text(...)` stub.
+  - Removed the unused `Any` import.
+  - Removed the unused `format_symbols` import.
+  - Left the active rendering path unchanged:
+    - `_resolve_action_meta`
+    - `_conclusion_text`
+    - `needs_user_action`
+    - `build_daily_brief(...)`
+- Updated `test_simnow_daily_brief_policy_sharing.py`.
+  - Added a guard asserting the file no longer defines `_legacy_conclusion_text(...)`.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief sharing/schema/sections/wrapper regressions passed: `90 passed`.
+- Full SimNow workflow preflight passed: `251 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining failed-summary fallback defaults in `simnow_daily_brief.py` should also move into a shared helper, or whether the current boundary is already the cleanest stable cut.
+
+## 2026-07-22 Daily Brief Missing-Run-Summary Helper
+
+### Goal
+
+Move the missing-run-summary fallback payload out of `simnow_daily_brief.py` into a shared helper, so the failed-summary default contract is explicit, testable, and no longer embedded as an inline dict literal.
+
+### Root Cause
+
+- `simnow_daily_brief.py` still carried an inline fallback payload for the case where the run-summary JSON is missing.
+- That payload defines a real contract:
+  - failed automation status
+  - exit code `40`
+  - canonical reason/action strings
+  - default action/blocker classes
+- Keeping it inline made it harder to:
+  - test directly;
+  - reuse consistently;
+  - notice contract changes independently of renderer refactors.
+
+### Changes
+
+- Added `simnow_daily_brief_default_summary.py`.
+  - Provides `build_missing_run_summary_payload()`.
+  - Centralizes the canonical fallback payload used when the run summary JSON is absent.
+- Updated `simnow_daily_brief.py`.
+  - Removed the inline fallback dict literal.
+  - Now uses `build_missing_run_summary_payload()` when `summary` is empty.
+- Added `test_simnow_daily_brief_default_summary.py`.
+  - Verifies the fallback payload exactly:
+    - `automation_status=failed`
+    - `automation_exit_code=40`
+    - `automation_reason=missing run summary JSON`
+    - `automation_action=check wrapper output and artifact completeness`
+    - default action/blocker classes and empty nested objects
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_daily_brief_default_summary.py`.
+  - Preflight pytest list now includes `test_simnow_daily_brief_default_summary.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to keep the new helper and regression test in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_default_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief default-summary/schema/sections/behavior/wrapper regressions passed: `93 passed`.
+- Full SimNow workflow preflight passed: `254 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining local `automation_exit_code` defaulting in `simnow_daily_brief.py` should also move into the shared daily-brief helper layer, or whether it is better kept inline as renderer-local normalization.
+
+## 2026-07-22 Daily Brief Exit-Code Normalization Helper
+
+### Goal
+
+Move the remaining `automation_exit_code` defaulting out of `simnow_daily_brief.py` into the shared daily-brief default-summary helper, so missing-summary fallback and missing-exit-code normalization live in one place.
+
+### Root Cause
+
+- After introducing `simnow_daily_brief_default_summary.py`, `simnow_daily_brief.py` still performed local normalization for missing `automation_exit_code`.
+- That left the default-summary contract split across two locations:
+  - helper for the empty-summary payload
+  - renderer-local logic for missing exit code
+- Both behaviors are part of the same normalization layer and should move together to reduce drift.
+
+### Changes
+
+- Updated `simnow_daily_brief_default_summary.py`.
+  - Added `normalize_daily_brief_summary(...)`.
+  - Behavior:
+    - empty summary -> canonical missing-run-summary payload
+    - explicit `automation_exit_code` -> preserved unchanged
+    - missing `automation_exit_code` + `automation_status=failed` -> default to `40`
+    - missing `automation_exit_code` + non-failed status -> default to `0`
+- Updated `simnow_daily_brief.py`.
+  - Removed local `default_exit` calculation and inline missing-exit-code normalization.
+  - Now calls `normalize_daily_brief_summary(...)` up front.
+- Updated `test_simnow_daily_brief_default_summary.py`.
+  - Added coverage for:
+    - empty summary normalization
+    - failed default exit code
+    - non-failed default exit code
+    - explicit exit code preservation
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_default_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief normalization/schema/sections/behavior/wrapper regressions passed: `97 passed`.
+- Full SimNow workflow preflight passed: `258 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining failed-state action-text fallback in `simnow_daily_brief.py` should also move into the shared helper layer, or whether that fallback belongs in the renderer because it is specifically tied to markdown conclusion wording.
+
+## 2026-07-22 Daily Brief Failed-Action Fallback Helper
+
+### Goal
+
+Move the failed-state `action_text` fallback out of `simnow_daily_brief.py` into the shared daily-brief default-summary helper, so the renderer no longer owns any of the canonical failed-summary fallback wording.
+
+### Root Cause
+
+- `simnow_daily_brief.py` still contained a local failed-state fallback:
+  - if `automation_status=failed` and `automation_action` was empty, it injected the canonical wrapper/artifact inspection text inline.
+- That made the failed-summary normalization layer incomplete:
+  - missing summary payload was shared
+  - missing exit code normalization was shared
+  - but missing failed action text was still renderer-local
+- This is the same family of fallback behavior and should live with the other default-summary helpers.
+
+### Changes
+
+- Updated `simnow_daily_brief_default_summary.py`.
+  - Added `resolve_failed_action_text(...)`.
+  - Behavior:
+    - explicit failed `automation_action` -> preserved
+    - missing/empty failed `automation_action` -> returns `请检查 wrapper 输出和 artifact 完整性。`
+- Updated `simnow_daily_brief.py`.
+  - Removed the local failed-state `action_text` fallback branch.
+  - Now calls `resolve_failed_action_text(...)` for `automation_status=failed`.
+- Updated `test_simnow_daily_brief_default_summary.py`.
+  - Added coverage for:
+    - explicit failed action preservation
+    - canonical failed fallback action text when the action is missing
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_default_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief fallback/schema/sections/behavior/wrapper regressions passed: `99 passed`.
+- Full SimNow workflow preflight passed: `260 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining `record_action` failed-branch shaping in `simnow_daily_brief.py` should also move into shared helper logic, or whether that branch is the cleanest stable renderer boundary.
+
+## 2026-07-22 Daily Brief Record-Action Branch Cleanup
+
+### Goal
+
+Remove the redundant failed-only `record_action` branch from `simnow_daily_brief.py`, so the renderer stops restating the exact same two-field action metadata already returned by the shared policy helper.
+
+### Root Cause
+
+- `simnow_daily_brief.py` previously used:
+  - `record_action = action_meta` for non-failed states
+  - a second failed-only branch that rebuilt `{action_class, blocker_class}` from `action_meta`
+- But `resolve_action_meta(...)` already returns only:
+  - `action_class`
+  - `blocker_class`
+- That meant the failed branch had no extra policy meaning; it only duplicated the same two-field dict shape.
+
+### Changes
+
+- Updated `simnow_daily_brief.py`.
+  - Removed the redundant failed-only `record_action` branch.
+  - `record_action` now simply reuses `action_meta` for every status.
+  - This is an equivalent cleanup only; no markdown contract or behavior changed.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_default_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_simnow_automation_policy.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted daily-brief/policy/schema/sections/wrapper regressions passed: `103 passed`.
+- Full SimNow workflow preflight passed: `260 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether the remaining local `load_run_summary(...)`/default-output wiring in `simnow_daily_brief.py` is already the right stable boundary, or whether any further extraction would just create churn without reducing real duplication.
+
+## 2026-07-22 Shared Artifact JSON Loader
+
+### Goal
+
+Consolidate the repeated JSON-object file loading logic used by diagnostics scripts into a shared helper, so `daily_brief.py` and `run_summary.py` stop maintaining identical `utf-8-sig` JSON loaders independently.
+
+### Root Cause
+
+- Multiple diagnostics modules were each implementing the same pattern:
+  - if file missing -> return `{}`
+  - else read JSON with `utf-8-sig`
+- The repeated loaders existed under different names:
+  - `load_run_summary(...)` in `simnow_daily_brief.py`
+  - `load_json(...)` in `simnow_run_summary.py`
+  - `load_ledger_summary(...)` in `simnow_run_summary.py`
+- This is true duplication at the I/O layer, and changing encoding or missing-file behavior would otherwise require parallel edits.
+
+### Changes
+
+- Added `simnow_artifact_loader.py`.
+  - Provides `load_json_dict(...)`.
+  - Defines the shared behavior for JSON object artifacts:
+    - missing path -> `{}`
+    - existing file -> load with `utf-8-sig`
+- Updated `simnow_daily_brief.py`.
+  - `load_run_summary(...)` now delegates to `load_json_dict(...)`.
+  - Public `load_run_summary(...)` entry point stays intact.
+- Updated `simnow_run_summary.py`.
+  - `load_json(...)` now delegates to `load_json_dict(...)`.
+  - `load_ledger_summary(...)` now delegates to `load_json_dict(...)`.
+  - Public function names stay intact for downstream imports such as `simnow_summary_consistency.py`.
+- Added `test_simnow_artifact_loader.py`.
+  - Verifies missing-file behavior.
+  - Verifies `utf-8-sig` JSON loading behavior.
+- Updated `test_simnow_daily_brief_policy_sharing.py`.
+  - Adds a guard asserting `simnow_daily_brief.py` imports the shared artifact loader.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_artifact_loader.py`.
+  - Preflight pytest list now includes `test_simnow_artifact_loader.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to keep the new loader and test in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_artifact_loader.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted artifact-loader/daily-brief/run-summary/wrapper regressions passed: `114 passed`.
+- Full SimNow workflow preflight passed: `264 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item: inspect whether any remaining loader duplication is materially worth sharing, or whether the current JSON/JSONL split is now the cleanest stable boundary.
+
+## 2026-07-22 Shared Artifact JSONL Loader
+
+### Goal
+
+Consolidate the remaining JSONL artifact loading logic used by diagnostics scripts into the shared artifact-loader layer, so `simnow_run_summary.py` and `simnow_ledger_summary.py` stop maintaining equivalent line-by-line JSONL readers independently.
+
+### Root Cause
+
+- After introducing the shared JSON object loader, diagnostics still had two separate JSONL readers:
+  - `load_jsonl(...)` in `simnow_run_summary.py`
+  - `load_ledger(...)` in `simnow_ledger_summary.py`
+- Both implement the same contract:
+  - missing file -> empty list
+  - existing file -> parse non-empty JSONL rows
+- The only practical compatibility concern was ensuring both UTF-8 and UTF-8-SIG encoded JSONL files continued to load.
+
+### Changes
+
+- Updated `simnow_artifact_loader.py`.
+  - Added `load_jsonl_records(...)`.
+  - Shared behavior:
+    - missing path -> `[]`
+    - existing file -> parse JSONL rows with `utf-8-sig`
+    - plain UTF-8 input still works because `utf-8-sig` is backward-compatible for files without BOM
+- Updated `simnow_run_summary.py`.
+  - `load_jsonl(...)` now delegates to `load_jsonl_records(...)`.
+- Updated `simnow_ledger_summary.py`.
+  - `load_ledger(...)` now delegates to `load_jsonl_records(...)`.
+  - Restored the module-level `json` import after regression testing caught that the CLI serializer still needs it.
+- Updated `test_simnow_artifact_loader.py`.
+  - Added coverage for:
+    - missing JSONL file
+    - UTF-8-SIG JSONL input
+    - plain UTF-8 JSONL input
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_artifact_loader.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted artifact-loader/run-summary/ledger-summary/wrapper regressions passed: `112 passed`.
+- Full SimNow workflow preflight passed: `267 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Continue the next repair item only if a remaining duplication has comparable payoff; otherwise treat the current JSON/JSONL loader split and the existing CLI wiring as the clean stable boundary.
+
+## 2026-07-22 Shared Structured Access Helper
+
+### Goal
+
+Consolidate the repeated nested-dict access helper used across diagnostics helper modules, so `simnow_automation_policy.py` and `simnow_daily_brief_schema.py` stop maintaining parallel `safe_get` implementations.
+
+### Root Cause
+
+- After the loader cleanup, one true duplication still remained:
+  - `_safe_get(...)` in `simnow_automation_policy.py`
+  - `safe_get(...)` in `simnow_daily_brief_schema.py`
+- Both implemented the same nested traversal contract:
+  - walk dict keys in order
+  - return `default` when a key is missing
+  - return `default` when a non-dict is encountered before the path ends
+- This helper is shared infrastructure, not renderer-specific or policy-specific behavior.
+
+### Changes
+
+- Added `simnow_structured_access.py`.
+  - Provides shared `safe_get(...)`.
+- Rewrote `simnow_automation_policy.py`.
+  - Removed the local `_safe_get(...)`.
+  - Now imports `safe_get(...)` from `simnow_structured_access.py`.
+  - Preserved all existing public policy helpers and status/action behavior.
+- Rewrote `simnow_daily_brief_schema.py`.
+  - Removed the local `safe_get(...)`.
+  - Now imports `safe_get(...)` from `simnow_structured_access.py`.
+  - Left formatting and markdown-assembly behavior unchanged.
+- Added `test_simnow_structured_access.py`.
+  - Verifies nested traversal, missing-key fallback, and non-dict fallback.
+- Updated `test_simnow_daily_brief_policy_sharing.py`.
+  - Adds guards asserting both:
+    - `simnow_automation_policy.py`
+    - `simnow_daily_brief_schema.py`
+    import the shared `safe_get(...)`.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` now includes `simnow_structured_access.py`.
+  - Preflight pytest list now includes `test_simnow_structured_access.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added guards to keep the new helper and regression test in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_structured_access.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_automation_policy.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted structured-access/policy/daily-brief/wrapper regressions passed: `102 passed`.
+- Full SimNow workflow preflight passed: `273 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Treat the current helper boundaries as the clean stable cut unless a newly discovered duplication has similarly clear payoff; the remaining CLI wiring and module-local orchestration are now mostly legitimate boundaries rather than repeated policy or I/O logic.
+
+## 2026-07-22 Diagnostics Boundary Audit
+
+### Goal
+
+Audit the remaining diagnostics code after the helper/loader consolidation work, and decide whether further extraction would still reduce real duplication or would mostly create churn.
+
+### Audit Result
+
+No remaining duplication was found at the same payoff level as the items already extracted.
+
+The remaining repeated-looking code now falls into stable boundaries rather than shared helper candidates:
+
+- CLI wiring
+  - `argparse` setup
+  - output-path argument handling
+  - per-script `main()` orchestration
+- artifact-specific orchestration
+  - `simnow_daily_brief.py` assembles one markdown document from already-shared helpers
+  - `simnow_run_summary.py` assembles one machine-readable summary with artifact-specific extraction logic
+  - `simnow_summary_consistency.py` validates cross-artifact invariants rather than formatting data
+- domain-specific transforms
+  - capture summary extraction
+  - ledger summary reduction
+  - consistency validation rules
+
+These areas may look structurally similar, but they are no longer maintaining identical business rules, formatting rules, or I/O helpers. Further extraction here would mostly:
+
+- introduce indirection without deleting much code
+- widen helper APIs around single-call-site orchestration
+- make the system harder to trace during future incident/debug work
+
+### Stable Boundary Decision
+
+The current helper split is treated as the clean stable cut:
+
+- shared structured access:
+  - `simnow_structured_access.py`
+- shared artifact loaders:
+  - `simnow_artifact_loader.py`
+- shared automation policy:
+  - `simnow_automation_policy.py`
+- shared daily-brief defaults/schema/sections:
+  - `simnow_daily_brief_default_summary.py`
+  - `simnow_daily_brief_schema.py`
+  - `simnow_daily_brief_sections.py`
+- shared ledger-summary schema helpers:
+  - `simnow_ledger_summary_schema.py`
+- shared 20-day aggregation:
+  - `simnow_20d_aggregate.py`
+
+### Verification
+
+This audit was performed against the current workspace state after the latest passing preflight:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Latest verified result:
+
+- Full SimNow workflow preflight passed: `273 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Shift from helper extraction to higher-level maintenance only when a new concrete root-cause or duplicated rule is discovered; otherwise keep the current boundaries stable and avoid churn.
+
+## 2026-07-22 Diagnostics Helper Boundary Guards
+
+### Goal
+
+Turn the boundary-audit conclusion into executable regression guards, so the current shared-helper split is enforced by tests instead of relying only on documentation and reviewer memory.
+
+### Root Cause
+
+- The boundary audit established that the current helper layout is the intended stable cut.
+- Without executable guards, future edits could gradually reintroduce:
+  - duplicate loader helpers
+  - duplicate `safe_get(...)` implementations
+  - silent drift away from shared helper imports
+- That would recreate the same maintenance problem we just spent several rounds removing.
+
+### Changes
+
+- Added `test_simnow_helper_boundaries.py`.
+  - Verifies shared loader boundaries remain centralized:
+    - `simnow_daily_brief.py` imports `load_json_dict(...)`
+    - `simnow_run_summary.py` imports `load_json_dict(...)` and `load_jsonl_records(...)`
+    - `simnow_ledger_summary.py` imports `load_jsonl_records(...)`
+    - `simnow_artifact_loader.py` remains the sole definition site for:
+      - `load_json_dict(...)`
+      - `load_jsonl_records(...)`
+  - Verifies shared structured-access boundaries remain centralized:
+    - `simnow_automation_policy.py` imports `safe_get(...)`
+    - `simnow_daily_brief_schema.py` imports `safe_get(...)`
+    - `simnow_structured_access.py` remains the sole definition site for `safe_get(...)`
+- Updated `run_next_work.ps1`.
+  - Preflight pytest list now includes `test_simnow_helper_boundaries.py`.
+- Updated `test_run_next_work_wrapper.py`.
+  - Added a guard to ensure the new helper-boundary regression test stays in preflight coverage.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_helper_boundaries.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py .\examples\czsc_strategy\tests\unit\test_simnow_artifact_loader.py .\examples\czsc_strategy\tests\unit\test_simnow_structured_access.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted helper-boundary/wrapper/shared-helper regressions passed: `86 passed`.
+- Full SimNow workflow preflight passed: `276 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Keep the current helper boundaries stable; only resume extraction work if a new concrete duplicated rule or incident root cause appears.
+
+## 2026-07-22 Post-Consolidation Re-Scan
+
+### Goal
+
+Re-scan the diagnostics workspace after the helper-boundary guards landed, and verify that no additional same-payoff duplication remains before stopping the consolidation stream.
+
+### Audit Scope
+
+Checked for the specific duplication families already targeted in this repair cycle:
+
+- structured nested-dict access helpers
+- JSON object artifact loaders
+- JSONL artifact loaders
+- daily-brief formatting helpers
+- boundary regressions in the shared-helper stack
+
+### Audit Result
+
+No new duplication of the same class was found in `examples/czsc_strategy/diagnostics/`.
+
+The remaining code that still looks superficially similar is now concentrated in:
+
+- per-script CLI entrypoints
+- artifact-specific orchestration
+- domain-specific transformation logic
+
+Those areas are not currently maintaining duplicate shared rules. Further extraction would mostly trade away traceability for little code reduction.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_artifact_loader.py .\examples\czsc_strategy\tests\unit\test_simnow_structured_access.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py -q
+```
+
+Results:
+
+- Targeted post-consolidation verification passed: `68 passed`.
+
+### Next Action
+
+Treat the helper/loader consolidation stream as complete for now. Only reopen it if a new duplicated rule, regression, or incident root cause is found.
+
+## 2026-07-22 Unified Halt Metadata
+
+### Goal
+
+Start the business-facing optimization stream by turning `halt` into a single, machine-readable source of truth instead of letting daily monitor, run summary, and ledger aggregation infer it independently.
+
+### Changes
+
+- Added `simnow_halt_metadata.py`.
+  - Centralizes unified `halt` metadata generation:
+    - `rule_id`
+    - `family`
+    - `severity`
+    - `trigger_metrics`
+    - `explained_cn`
+  - Covers the two currently meaningful halt families:
+    - `order_safety`
+    - `strategy_risk`
+- Updated `simnow_daily_monitor.py`.
+  - `make_record(...)` now writes a normalized `halt` block onto halted daily records.
+- Updated `simnow_run_summary.py`.
+  - Daily record summary now surfaces:
+    - `halt_rule_id`
+    - `halt_family`
+    - `halt_severity`
+    - `halt_trigger_metrics`
+    - `halt_explained_cn`
+- Updated `simnow_ledger_summary.py`.
+  - Operational halt bucketing now prefers unified `halt.family`.
+  - Added `halt_family_counts` for machine-readable 20-day/ledger governance stats.
+  - Safe latest-record projection now preserves the normalized `halt` block.
+- Updated `simnow_20d_aggregate.py`.
+  - Added `halt_family_counts` so recent-window statistics no longer need to guess halt family from raw reason strings.
+- Updated `run_next_work.ps1`.
+  - Preflight `py_compile` list now includes `simnow_halt_metadata.py`.
+- Updated tests:
+  - `test_simnow_daily_monitor.py`
+  - `test_simnow_run_summary.py`
+  - `test_simnow_ledger_summary.py`
+  - `test_simnow_20d_aggregate.py`
+  - `test_run_next_work_wrapper.py`
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_20d_aggregate.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted halt/readout/ledger/wrapper regression suite passed: `170 passed`.
+- Full SimNow workflow preflight passed: `277 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Use the new unified `halt` block as the base layer for the next two optimization items:
+
+- formal-window readiness summary
+- 20-day reason governance / Pareto rationality output
+
+## 2026-07-22 Formal Readiness Summary
+
+### Goal
+
+Turn formal-observation readiness from a set of scattered artifacts into a single machine-readable summary block so operators can immediately see whether the formal window had enough prerequisites to produce a meaningful same-day observation.
+
+### Changes
+
+- Updated `simnow_run_summary.py`.
+  - `default_artifact_paths(...)` now includes `simnow_replay_readiness_YYYY-MM-DD.json`.
+  - Added `formal_readiness` aggregation to the run summary.
+  - The new block consolidates:
+    - capture timing from `capture.meta`
+    - strategy window timing from `capture.meta.strategy_surface`
+    - read-only declaration
+    - historical DB update status / readiness
+    - replay DB readiness / latest DB date / lagged symbols
+    - kline coverage readiness / missing symbols / short symbols
+    - an `overall_ready` verdict
+    - explicit `blocking_reasons`
+- Updated `test_simnow_run_summary.py`.
+  - Added regression coverage for:
+    - normal readiness aggregation from existing artifacts
+    - missing-artifact fallback / blocked readiness output
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted run-summary/consistency/wrapper regression suite passed: `103 passed`.
+- Full SimNow workflow preflight passed: `279 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+Use the new `formal_readiness` block as input for the remaining optimization item:
+
+- 20-day reason governance / Pareto rationality output
+
+## 2026-07-22 Reason Governance And Explanation Layer
+
+### Goal
+
+Finish the remaining operator-facing optimization items by:
+
+- turning 20-day blocking-reason counts into a governance / Pareto panel
+- adding a direct Chinese explanation layer to `simnow_run_summary_YYYY-MM-DD.json`
+
+### Changes
+
+- Added `simnow_reason_governance.py`.
+  - Centralizes blocking-reason governance classification.
+  - Produces:
+    - `reason_governance_counts`
+    - `reasonableness_counts`
+    - `reason_rationality_verdict`
+    - `reason_rationality_cn`
+    - `pareto_summary`
+- Updated `simnow_20d_aggregate.py`.
+  - 20-day aggregate now annotates top blocking reasons with:
+    - `governance_class`
+    - `reasonableness`
+  - 20-day aggregate now emits governance and Pareto fields directly.
+- Updated `simnow_promotion_decision.py`.
+  - Promotion report now includes:
+    - enriched top blocking actions table
+    - reason governance section
+    - Pareto summary lines
+  - CLI JSON output now includes governance / Pareto fields.
+- Updated `simnow_ledger_summary.py`.
+  - Ledger summary now emits governance / reasonableness / Pareto fields for the full observation cycle.
+- Updated `simnow_ledger_summary_schema.py`.
+  - Safe projection and daily-brief 20-day lines now surface:
+    - `reason_governance_counts`
+    - `reason_rationality_verdict`
+    - `pareto_summary.top3_share_pct`
+- Updated `simnow_automation_policy.py`.
+  - Added:
+    - `operator_explanation_cn(...)`
+    - `user_action_needed_reason_cn(...)`
+- Updated `simnow_run_summary.py`.
+  - Run summary now emits:
+    - `operator_explanation_cn`
+    - `user_action_needed`
+    - `user_action_needed_reason_cn`
+- Updated `simnow_daily_brief_schema.py`.
+  - Daily brief overview now exposes the explanation-layer fields directly.
+- Updated `run_next_work.ps1`.
+  - Preflight compile list now includes `simnow_reason_governance.py`.
+- Updated tests:
+  - `test_simnow_20d_aggregate.py`
+  - `test_simnow_daily_monitor.py`
+  - `test_simnow_ledger_summary_schema.py`
+  - `test_simnow_run_summary.py`
+  - `test_simnow_daily_brief.py`
+  - `test_simnow_daily_brief_schema.py`
+  - `test_simnow_automation_policy.py`
+  - `test_run_next_work_wrapper.py`
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_automation_policy.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Results:
+
+- Targeted explanation-layer regressions passed: `48 passed`.
+- Full SimNow workflow preflight passed: `280 passed`.
+- Pending replay backfill plan remained clean: `pending_historical_db_lag_days=0`.
+
+### Next Action
+
+The current optimization set is complete. Future work can focus on new incident classes or new operator/reporting requirements rather than continuing this repair stream.
+
+## 2026-07-23 Formal Daily Observation
+
+### Goal
+
+Run the formal 09:05 SimNow daily observation in read-only mode, recover any automation interruptions without sending orders, and record the authoritative outcome from `simnow_run_summary_2026-07-23.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `281 passed`.
+
+Started formal capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- The parent automation process hit the tool timeout before post-processing completed.
+- The child capture still completed successfully and produced:
+  - `simnow_export_2026-07-23.json`
+  - `simnow_kline_update_2026-07-23.json`
+  - `simnow_historical_db_update_2026-07-23.json`
+
+### Root Cause And Fixes
+
+- Fixed `run_next_work.ps1` so `-LiveCapture -PostProcessOnly` bypasses the formal-start window gates.
+- Fixed `run_next_work.ps1` so replay-readiness JSON is written with explicit UTF-8 instead of PowerShell redirection encoding.
+- Added wrapper regression tests for both fixes in `test_run_next_work_wrapper.py`.
+
+### Recovery Commands
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+python .\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py --capture-json .\examples\czsc_strategy\diagnostics\simnow_export_2026-07-23.json --date 2026-07-23
+python .\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py --end 2026-07-23 --date 2026-07-23 --out-json .\examples\czsc_strategy\diagnostics\simnow_replay_2026-07-23.json
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Results:
+
+- Wrapper regression tests passed: `80 passed`.
+- `simnow_replay_readiness_2026-07-23.json` confirmed `ready=true`, `latest_db_date=2026-07-23`.
+- Post-processing completed and generated:
+  - `simnow_record_2026-07-23.json`
+  - `simnow_report_2026-07-23.md`
+  - `simnow_run_summary_2026-07-23.json`
+  - `simnow_daily_brief_2026-07-23.md`
+  - updated `simnow_ledger_summary.json`
+- The wrapper exited non-zero because the authoritative automation result is `halt`, not because the pipeline crashed.
+
+### Outcomes
+
+- Formal mode: yes (`day_open`, auto duration `8565` seconds).
+- Preflight: passed.
+- Live capture completed in read-only mode.
+- Historical DB update: `passed`.
+- Contract query: succeeded with `contracts_count=17976`.
+- Enabled subscriptions complete: `4/4`.
+- Tick count: `41208`.
+- Accounts: `1`.
+- Positions: `1` external account position (`sc2609`) captured as contamination evidence only.
+- Orders: `0`.
+- Trades: `0`.
+- Workflow order safety: `pass` (`read_only=true`, `orders_sent_by_workflow=0`).
+- Kline coverage: complete, no missing or short symbols.
+- Replay readiness: `ready=true`.
+- Delayed replay: available; `signals=4`, `trades=0`, `positions=11`.
+- Consistency: `matched=true`.
+- Daily record status: `halt`.
+- Threshold status: `halt`.
+- Authoritative automation fields from `simnow_run_summary_2026-07-23.json`:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+
+### Next Action
+
+Stop automation for this observation stream and manually review the risk-threshold halt on `consecutive_loss_abs_pct` before any further formal observation run.
+
+## 2026-07-23 Formal Daily Observation (13:35)
+
+### Goal
+
+Run the formal 13:35 SimNow daily observation in read-only mode, verify the afternoon formal window artifacts, and record the authoritative automation outcome from `simnow_run_summary_2026-07-23.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `284 passed`.
+
+Formal capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- Wrapper entered the formal afternoon window `13:35 -> 15:00` and auto-computed `duration=4943` seconds.
+- The command exited non-zero because the authoritative automation result is `halt`, not because the pipeline crashed.
+
+Verification:
+
+```powershell
+@'
+import json, pathlib
+base = pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics')
+summary = json.loads((base / 'simnow_run_summary_2026-07-23.json').read_text(encoding='utf-8'))
+print(summary['automation_status'], summary['automation_exit_code'], summary['automation_reason'])
+'@ | python -
+```
+
+Result:
+
+- Verified output artifacts exist:
+  - `simnow_export_2026-07-23.json`
+  - `simnow_record_2026-07-23.json`
+  - `simnow_report_2026-07-23.md`
+  - `simnow_run_summary_2026-07-23.json`
+  - `simnow_historical_db_update_2026-07-23.json`
+- Verified authoritative automation fields:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+
+### Outcomes
+
+- Execution date: `2026-07-23`.
+- Preflight: `passed`.
+- Formal observation mode: `yes` (`day_afternoon`).
+- Live capture: completed in read-only mode.
+- Historical DB update: `passed`.
+- Contract query: succeeded with `contracts_count=17976`.
+- Enabled subscriptions complete: `4/4`.
+- Tick count: `25496`.
+- Accounts: `1`.
+- Positions: `1` external account position captured as contamination evidence only.
+- Orders: `0`.
+- Trades: `0`.
+- Workflow order safety: `pass` (`read_only=true`, `orders_sent_by_workflow=0`).
+- Monitor / record status: `halt`.
+- Automation status: `halt`.
+- Risk threshold status: `halt`.
+- Halt trigger metric: `consecutive_loss_abs_pct`.
+- Kline coverage: complete, no missing or short symbols.
+- Formal readiness: `overall_ready=true`.
+- Delayed replay: available.
+- Consistency: `matched=true`.
+- User action needed: `true`.
+
+### Next Action
+
+Keep the observation automation stopped and manually review the repeated risk-threshold halt on `consecutive_loss_abs_pct` before any further formal run.
+
+## 2026-07-26 Issue Analysis - Risk Halt Traceability
+
+### Goal
+
+Analyze why the latest formal SimNow observation did not produce a valid observation day, and make the halt reason easier to audit from machine-readable and human-readable artifacts without changing trading behavior.
+
+### Findings
+
+- The authoritative `simnow_run_summary_2026-07-24.json` result is `automation_status=halt`, `automation_exit_code=30`, `automation_reason=consecutive_loss_abs_pct`, `automation_action=stop automation and review manually`.
+- The 2026-07-24 environment gates were ready: connection/capture artifacts existed, `contracts_count=18052`, enabled subscriptions were complete, `ticks=34781`, `orders=0`, `trades=0`, historical DB update passed, K-line coverage passed, delayed replay was available, and consistency matched.
+- The halt is therefore a risk-threshold halt, not a code failure, subscription failure, replay gap, or order-safety breach.
+- `consecutive_loss_abs_pct` is computed from delayed replay / local strategy daily returns via `_max_consecutive_losses(...)`, then normalized by `simnow_daily_monitor.py` and compared against `simnow_risk_thresholds.json`.
+
+### Changes
+
+- `simnow_run_summary.py` now preserves threshold warning/halt/baseline fields when present and emits `record.threshold_diagnostics` for warning/halt rows, including warning/halt gaps.
+- `simnow_daily_brief.py` / `simnow_daily_brief_sections.py` now render a `## 阈值诊断` section when threshold diagnostics are available.
+- `run_next_work.ps1` now mirrors formal-window-scoped copies for record/report/run-summary/daily-brief outputs, reducing ambiguity when multiple formal windows are run on the same trade date.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py -q
+```
+
+Result:
+
+- `133 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `293 passed`.
+
+### Next Action
+
+Keep automation stopped until the repeated `consecutive_loss_abs_pct` halt is manually reviewed. If continuing tooling work, add a source breakdown for the consecutive-loss streak so the summary identifies the exact replay dates and daily returns that produced the 6-day cumulative loss.
+
+## 2026-07-26 Consecutive Loss Source Breakdown
+
+### Goal
+
+Make `consecutive_loss_abs_pct` halts directly auditable from future machine-readable run summaries and daily briefs.
+
+### Changes
+
+- `export_simnow_replay_snapshot.py` now writes `risk.consecutive_loss.start_date` and `risk.consecutive_loss.rows`, with each row carrying `date`, `daily_return_pct`, and portfolio `equity`.
+- `simnow_run_summary.py` now exposes `risk_source_breakdown.consecutive_loss`, sourced from `delayed_replay.risk.consecutive_loss`.
+- `simnow_daily_brief.py` now renders the same data in a `## 风险来源拆解` section after threshold diagnostics.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_export_simnow_replay_snapshot.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py -q
+```
+
+Result:
+
+- `50 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `295 passed`.
+
+### Next Action
+
+Keep automation stopped for manual review of the repeated risk halt. Existing replay artifacts generated before this change may not contain `consecutive_loss.rows`; rerun post-processing or the next formal observation to populate the new source breakdown.
+
+## 2026-07-26 Legacy Breakdown Compatibility and Preflight Gate
+
+### Goal
+
+Make older replay artifacts explicit when they cannot provide the new consecutive-loss daily streak rows, and ensure the replay snapshot source-breakdown tests are part of the official preflight gate.
+
+### Changes
+
+- `simnow_run_summary.py` now marks `risk_source_breakdown.consecutive_loss` with:
+  - `complete`
+  - `rows_available`
+  - `reason`
+- Legacy replay artifacts with a cumulative consecutive-loss result but no daily streak rows now report `reason=missing_consecutive_loss_rows` instead of silently looking complete.
+- `simnow_daily_brief_sections.py` renders those completeness fields and prints `streak_rows: 无` when row-level evidence is unavailable.
+- `run_next_work.ps1 -Preflight` now compiles `export_simnow_replay_snapshot.py` and runs `test_export_simnow_replay_snapshot.py`.
+
+### Commands
+
+Post-process existing 2026-07-24 artifacts without live capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -Date 2026-07-24 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- The wrapper did not connect to SimNow or capture new data.
+- It rebuilt the daily record, ledger summary, promotion decision, run summary, and daily brief from existing artifacts.
+- The command ended non-zero because the authoritative result remains `automation_status=halt`, not because post-processing failed.
+- Summary consistency reported `ok`.
+- `simnow_run_summary_2026-07-24.json` now contains `risk_source_breakdown.consecutive_loss.reason=missing_consecutive_loss_rows`.
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_export_simnow_replay_snapshot.py .\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py .\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py -q
+```
+
+Result:
+
+- `141 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `301 passed`.
+
+### Next Action
+
+Keep automation stopped for manual review. If continuing implementation work, either regenerate `simnow_replay_2026-07-24.json` from the refreshed DB to populate daily streak rows, or add a dedicated post-process replay refresh command that updates replay JSON without starting a live SimNow session.
+
+## 2026-07-26 Post-Process Replay Refresh
+
+### Goal
+
+Add a safe post-process replay refresh path so existing formal artifacts can refresh `simnow_replay_YYYY-MM-DD.json` and rebuild the run summary / daily brief without starting a live SimNow session.
+
+### Changes
+
+- `run_next_work.ps1` now supports `-RefreshReplay`.
+- The replay readiness / replay export block is centralized in `Invoke-ReplaySnapshotRefresh` and reused by both live capture and post-process refresh paths.
+- `-RefreshReplay` is rejected when combined with `-SkipReplay`.
+- `test_run_next_work_wrapper.py` now covers the new parameter, conflict guard, helper reuse, and the post-process replay refresh branch.
+
+### Commands
+
+Refresh existing 2026-07-24 replay and downstream artifacts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -Date 2026-07-24 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- The wrapper resumed from existing capture/kline artifacts and did not start live SimNow capture.
+- Replay DB readiness passed.
+- `export_simnow_replay_snapshot.py` rewrote `simnow_replay_2026-07-24.json`.
+- The wrapper rebuilt the daily record, ledger summary, promotion decision, run summary, and daily brief.
+- Summary consistency reported `ok`.
+- Final exit was non-zero because the authoritative daily result remains `automation_status=halt`, not because refresh failed.
+
+Verified authoritative fields:
+
+- `automation_status=halt`
+- `automation_exit_code=30`
+- `automation_reason=consecutive_loss_abs_pct`
+- `risk_source_breakdown.consecutive_loss.complete=true`
+- `risk_source_breakdown.consecutive_loss.rows_available=true`
+- `risk_source_breakdown.consecutive_loss.days=6`
+- `risk_source_breakdown.consecutive_loss.start_date=2023-06-19`
+- `risk_source_breakdown.consecutive_loss.end_date=2023-06-28`
+- `risk_source_breakdown.consecutive_loss.rows` contains `6` rows.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `305 passed`.
+
+### Next Action
+
+Keep automation stopped for manual review of `consecutive_loss_abs_pct`. The 2026-07-24 artifacts now identify the exact replay streak dates and daily returns that produced the halt, so the next repair item should focus on manual-review packaging rather than more live capture.
+
+## 2026-07-26 Risk Halt Manual Review Pack
+
+### Goal
+
+Package the repeated `consecutive_loss_abs_pct` halt into a dedicated manual-review artifact so an operator can review the halt without stitching together the run summary, daily brief, and replay JSON by hand.
+
+### Changes
+
+- Added `simnow_risk_halt_review.py`.
+  - Reads only `simnow_run_summary_YYYY-MM-DD.json`.
+  - Writes `simnow_risk_halt_review_YYYY-MM-DD.json` and `.md`.
+  - Includes automation status/action, safety snapshot, environment/replay readiness, halt metadata, threshold diagnostics, consecutive-loss rows, and explicit decision options.
+  - Emits `not_applicable` for non-halt summaries so automation can still find a deterministic artifact.
+- Wired `run_next_work.ps1` to generate the risk-halt review pack after the daily brief and before summary consistency validation.
+- Added the script and tests to the wrapper preflight compile/test list.
+
+### Commands
+
+Post-process existing 2026-07-24 artifacts without live capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -Date 2026-07-24 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- The wrapper resumed from existing artifacts and did not start live SimNow capture.
+- It generated:
+  - `simnow_risk_halt_review_2026-07-24.json`
+  - `simnow_risk_halt_review_2026-07-24.md`
+- Summary consistency reported `ok`.
+- The command ended non-zero because the authoritative daily status remains `halt`.
+
+Verified review pack fields:
+
+- `applicable=true`
+- `review_status=requires_manual_review`
+- `automation_status=halt`
+- `automation_reason=consecutive_loss_abs_pct`
+- `manual_review.decision_options=[keep_halted, adjust_thresholds_with_documented_rationale, retire_candidate, reset_observation_window_after_strategy_change]`
+- `safety_snapshot.read_only=true`
+- `safety_snapshot.orders_sent_by_workflow=0`
+- `safety_snapshot.orders=0`
+- `safety_snapshot.trades=0`
+- `consecutive_loss.complete=true`
+- `consecutive_loss.rows_available=true`
+- `consecutive_loss.days=6`
+- `consecutive_loss.start_date=2023-06-19`
+- `consecutive_loss.end_date=2023-06-28`
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_review.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Result:
+
+- `99 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `311 passed`.
+
+### Next Action
+
+Keep automation stopped. The next repair item should make the manual-review decision itself auditable, for example by adding a small decision-record template that records which option was chosen and whether the 20-day observation window must be reset.
+
+## 2026-07-26 Risk Halt Decision Record Template
+
+### Goal
+
+Make the manual-review decision auditable after a risk halt. The risk-halt review pack explains what happened; this step adds a deterministic decision template that records what the operator decided and whether the observation window must reset.
+
+### Changes
+
+- Added `simnow_risk_halt_decision.py`.
+  - Reads `simnow_risk_halt_review_YYYY-MM-DD.json`.
+  - Writes `simnow_risk_halt_decision_YYYY-MM-DD.json` and `.md`.
+  - Defaults to `decision_status=pending_decision` and `next_formal_observation_allowed=false`.
+  - Carries allowed decisions:
+    - `keep_halted`
+    - `adjust_thresholds_with_documented_rationale`
+    - `retire_candidate`
+    - `reset_observation_window_after_strategy_change`
+  - Requires `operator_name`, `rationale`, `selected_decision`, and `requires_observation_window_reset` before validation can pass.
+  - Provides `--validate` so a filled record can be checked before resuming observation work.
+- Wired `run_next_work.ps1` to generate the decision template after the risk-halt review pack.
+- Added the script and tests to the wrapper preflight compile/test list.
+
+### Commands
+
+Post-process existing 2026-07-24 artifacts without live capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -Date 2026-07-24 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- The wrapper generated:
+  - `simnow_risk_halt_decision_2026-07-24.json`
+  - `simnow_risk_halt_decision_2026-07-24.md`
+- The generated record is intentionally pending:
+  - `decision_status=pending_decision`
+  - `selected_decision=""`
+  - `next_formal_observation_allowed=false`
+- The wrapper final exit remains non-zero because the authoritative daily status is still `halt`.
+
+Validation of the unfilled template:
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py --date 2026-07-24 --validate
+```
+
+Result:
+
+- `valid=false`
+- `errors=[decision_status_not_decided]`
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_decision.py .\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_review.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Result:
+
+- `106 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `318 passed`.
+
+### Next Action
+
+Keep automation stopped until a human fills and validates `simnow_risk_halt_decision_2026-07-24.json`. If the selected decision changes thresholds or strategy behavior, reset the formal 20-day observation window before collecting new valid days.
+
+## 2026-07-26 Pending Decision Live-Capture Gate
+
+### Goal
+
+Enforce the manual-review stop condition in the wrapper itself. A pending or non-resuming risk-halt decision record must block any new live capture before the wrapper can connect to SimNow.
+
+### Changes
+
+- Added `Assert-NoPendingRiskHaltDecision` to `run_next_work.ps1`.
+  - Scans `simnow_risk_halt_decision_*.json` in the output directory.
+  - Blocks live capture when any record is not `decision_status=decided`.
+  - Blocks live capture when `next_formal_observation_allowed` is not `true`.
+  - Does not block `-Preflight` or `-PostProcessOnly`.
+- Added wrapper tests for:
+  - helper presence;
+  - gate execution before live capture;
+  - pending decision rejection;
+  - decided + explicitly allowed decision acceptance.
+
+### Commands
+
+Verified the current pending 2026-07-24 decision blocks a new live run before any SimNow connection:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -SkipKlineUpdate -SkipHistoricalDbUpdate -DurationSeconds 1800 -Date 2026-07-26
+```
+
+Result:
+
+- The wrapper stopped immediately with:
+  - `pending risk halt decision blocks live capture`
+  - `simnow_risk_halt_decision_2026-07-24.json`
+- This is expected safety behavior, not a code failure.
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Result:
+
+- `103 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `322 passed`.
+
+### Next Action
+
+Keep automation stopped. A human must fill and validate `simnow_risk_halt_decision_2026-07-24.json`; only a `decision_status=decided` record with `next_formal_observation_allowed=true` can unblock future live capture.
+
+## 2026-07-26 Decision Gate Validation Hardening
+
+### Goal
+
+Make the live-capture gate enforce the same decision-record completeness rules as `simnow_risk_halt_decision.py --validate`, so an incomplete or invalid signed record cannot accidentally unblock SimNow live capture.
+
+### Changes
+
+- Hardened `Assert-NoPendingRiskHaltDecision` in `run_next_work.ps1`.
+  - Still blocks non-`decided` records.
+  - Still requires `next_formal_observation_allowed=true`.
+  - Now also validates:
+    - `selected_decision` is one of the allowed decisions;
+    - `operator_name` is non-empty;
+    - `rationale` is non-empty;
+    - `requires_observation_window_reset` is present and non-null.
+- Added wrapper tests proving:
+  - invalid decided records are blocked;
+  - all validation error codes are surfaced;
+  - signed and explicitly allowed records pass the gate.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Result:
+
+- `104 passed`.
+
+Verified the real pending 2026-07-24 decision still blocks live capture before any SimNow connection:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -SkipKlineUpdate -SkipHistoricalDbUpdate -DurationSeconds 1800 -Date 2026-07-26
+```
+
+Result:
+
+- `pending risk halt decision blocks live capture`
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `323 passed`.
+
+### Next Action
+
+Keep automation stopped. Before resuming live capture, fill `simnow_risk_halt_decision_2026-07-24.json`, run `simnow_risk_halt_decision.py --date 2026-07-24 --validate`, and ensure the wrapper gate sees a complete decided record with `next_formal_observation_allowed=true`.
+
+## 2026-07-24 Formal Daily Observation (21:05)
+
+### Goal
+
+Run the formal 21:05 SimNow daily observation in read-only mode, verify the night-session formal-window artifacts, and record the authoritative automation outcome from `simnow_run_summary_2026-07-24.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `284 passed`.
+
+Formal capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- Wrapper entered the formal night window `21:05 -> 23:00` and auto-computed `duration=6752` seconds.
+- The command exited non-zero because the authoritative automation result is `halt`, not because the pipeline crashed.
+
+Verification:
+
+```powershell
+@'
+import json, pathlib
+base = pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics')
+summary = json.loads((base / 'simnow_run_summary_2026-07-24.json').read_text(encoding='utf-8'))
+print(summary['automation_status'], summary['automation_exit_code'], summary['automation_reason'], summary['automation_action'])
+'@ | python -
+```
+
+Result:
+
+- Verified output artifacts exist:
+  - `simnow_export_2026-07-24.json`
+  - `simnow_record_2026-07-24.json`
+  - `simnow_report_2026-07-24.md`
+  - `simnow_run_summary_2026-07-24.json`
+  - `simnow_historical_db_update_2026-07-24.json`
+  - `simnow_kline_update_2026-07-24.json`
+  - `simnow_replay_2026-07-24.json`
+  - `simnow_daily_brief_2026-07-24.md`
+- Verified authoritative automation fields:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+
+### Outcomes
+
+- Execution date: `2026-07-24`.
+- Preflight: `passed`.
+- Formal observation mode: `yes` (`night_open`).
+- Live capture: completed in read-only mode.
+- Historical DB update: `passed`.
+- Contract query: succeeded with `contracts_count=18052`.
+- Enabled subscriptions complete: `4/4`.
+- Tick count: `34781`.
+- Accounts: `1`.
+- Positions: `1` external account position (`sc2609`) captured as contamination evidence only.
+- Orders: `0`.
+- Trades: `0`.
+- Workflow order safety: `pass` (`read_only=true`, `orders_sent_by_workflow=0`).
+- Monitor / record status: `halt`.
+- Automation status: `halt`.
+- Risk threshold status: `halt`.
+- Halt trigger metric: `consecutive_loss_abs_pct`.
+- Kline coverage: complete, no missing or short symbols.
+- Formal readiness: `overall_ready=true`.
+- Delayed replay: available; `signals=4`, `trades=0`, `positions=11`.
+- Consistency: `matched=true`.
+- User action needed: `true`.
+
+### Next Action
+
+Keep the observation automation stopped and manually review the repeated risk-threshold halt on `consecutive_loss_abs_pct` before any further formal run.
+
+## 2026-07-26 Risk Halt Governance Documentation Sync
+
+### Goal
+
+Analyze the remaining governance gap after the repeated `consecutive_loss_abs_pct` halt: code now generates review/decision artifacts and blocks live capture, but the acceptance documents and task queue also need to state those rules explicitly.
+
+### Changes
+
+- Updated `ACCEPTANCE.md` with a formal `Risk Halt Review and Decision Gate` section.
+- Documented the required review artifacts:
+  - `simnow_risk_halt_review_YYYY-MM-DD.json`
+  - `simnow_risk_halt_review_YYYY-MM-DD.md`
+- Documented the required decision artifacts:
+  - `simnow_risk_halt_decision_YYYY-MM-DD.json`
+  - `simnow_risk_halt_decision_YYYY-MM-DD.md`
+- Defined the complete valid-decision requirements: `decision_status=decided`, allowed `selected_decision`, non-empty `operator_name`, non-empty `rationale`, explicit `requires_observation_window_reset`, and `next_formal_observation_allowed=true`.
+- Updated `NEXT_WORK.md` with A36/A37/A38 for risk-halt review, decision record validation, and live-capture blocking.
+- Updated formal live-capture documentation and `AUTOMATION_PROMPT.md` to avoid fixed `DurationSeconds` for formal runs. Formal observation now documents the auto-computed wrapper duration from the allowed `09:05`, `13:35`, or `21:05` Asia/Shanghai start windows.
+- Added document tests so the risk-halt governance artifacts and formal auto-window command remain documented.
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_docs.py -q
+```
+
+Result: `16 passed`.
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py .\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_review.py .\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_decision.py -q
+```
+
+Result: `111 passed`.
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result: `325 passed`.
+
+### Next Action
+
+Keep automation stopped. A human must complete and validate `simnow_risk_halt_decision_2026-07-24.json`; only a complete decided record with `next_formal_observation_allowed=true` can unblock future formal live capture.
+
+## 2026-07-24 Formal Daily Observation (09:05)
+
+### Goal
+
+Run the formal 09:05 SimNow daily observation in read-only mode, verify the morning formal-window artifacts, and record the authoritative automation outcome from `simnow_run_summary_2026-07-24.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `284 passed`.
+
+Formal capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- Wrapper entered the formal morning window `09:05 -> 11:30` and auto-computed `duration=8501` seconds.
+- The command exited non-zero because the authoritative automation result is `halt`, not because the pipeline crashed.
+
+Verification:
+
+```powershell
+@'
+import json, pathlib
+base = pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics')
+summary = json.loads((base / 'simnow_run_summary_2026-07-24.json').read_text(encoding='utf-8'))
+print(summary['automation_status'], summary['automation_exit_code'], summary['automation_reason'], summary['automation_action'])
+'@ | python -
+```
+
+Result:
+
+- Verified output artifacts exist:
+  - `simnow_export_2026-07-24.json`
+  - `simnow_record_2026-07-24.json`
+  - `simnow_report_2026-07-24.md`
+  - `simnow_run_summary_2026-07-24.json`
+  - `simnow_historical_db_update_2026-07-24.json`
+  - `simnow_kline_update_2026-07-24.json`
+  - `simnow_replay_2026-07-24.json`
+  - `simnow_daily_brief_2026-07-24.md`
+- Verified authoritative automation fields:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+
+### Outcomes
+
+- Execution date: `2026-07-24`.
+- Preflight: `passed`.
+- Formal observation mode: `yes` (`day_open`).
+- Live capture: completed in read-only mode.
+- Historical DB update: `passed`.
+- Contract query: succeeded with `contracts_count=18000`.
+- Enabled subscriptions complete: `4/4`.
+- Tick count: `38048`.
+- Accounts: `1`.
+- Positions: `1` external account position (`sc2609`) captured as contamination evidence only.
+- Orders: `0`.
+- Trades: `0`.
+- Workflow order safety: `pass` (`read_only=true`, `orders_sent_by_workflow=0`).
+- Monitor / record status: `halt`.
+- Automation status: `halt`.
+- Risk threshold status: `halt`.
+- Halt trigger metric: `consecutive_loss_abs_pct`.
+- Kline coverage: complete, no missing or short symbols.
+- Formal readiness: `overall_ready=true`.
+- Delayed replay: available; `signals=4`, `trades=0`, `positions=11`.
+- Consistency: `matched=true`.
+- User action needed: `true`.
+
+### Next Action
+
+Keep the observation automation stopped and manually review the repeated risk-threshold halt on `consecutive_loss_abs_pct` before any further formal run.
+
+## 2026-07-24 Formal Daily Observation (13:35)
+
+### Goal
+
+Run the formal 13:35 SimNow daily observation in read-only mode, verify the afternoon formal-window artifacts, and record the authoritative automation outcome from `simnow_run_summary_2026-07-24.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `284 passed`.
+
+Formal capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- Wrapper entered the formal afternoon window `13:35 -> 15:00` and auto-computed `duration=4980` seconds.
+- The command exited non-zero because the authoritative automation result is `halt`, not because the pipeline crashed.
+
+Verification:
+
+```powershell
+@'
+import json, pathlib
+base = pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics')
+summary = json.loads((base / 'simnow_run_summary_2026-07-24.json').read_text(encoding='utf-8'))
+print(summary['automation_status'], summary['automation_exit_code'], summary['automation_reason'], summary['automation_action'])
+'@ | python -
+```
+
+Result:
+
+- Verified output artifacts exist:
+  - `simnow_export_2026-07-24.json`
+  - `simnow_record_2026-07-24.json`
+  - `simnow_report_2026-07-24.md`
+  - `simnow_run_summary_2026-07-24.json`
+  - `simnow_historical_db_update_2026-07-24.json`
+  - `simnow_kline_update_2026-07-24.json`
+  - `simnow_replay_2026-07-24.json`
+  - `simnow_daily_brief_2026-07-24.md`
+- Verified authoritative automation fields:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+
+### Outcomes
+
+- Execution date: `2026-07-24`.
+- Preflight: `passed`.
+- Formal observation mode: `yes` (`day_afternoon`).
+- Live capture: completed in read-only mode.
+- Historical DB update: `passed`.
+- Contract query: succeeded with `contracts_count=18000`.
+- Enabled subscriptions complete: `4/4`.
+- Tick count: `25000`.
+- Accounts: `1`.
+- Positions: `1` external account position (`sc2609`) captured as contamination evidence only.
+- Orders: `0`.
+- Trades: `0`.
+- Workflow order safety: `pass` (`read_only=true`, `orders_sent_by_workflow=0`).
+- Monitor / record status: `halt`.
+- Automation status: `halt`.
+- Risk threshold status: `halt`.
+- Halt trigger metric: `consecutive_loss_abs_pct`.
+- Kline coverage: complete, no missing or short symbols.
+- Formal readiness: `overall_ready=true`.
+- Delayed replay: available; `signals=4`, `trades=0`, `positions=11`.
+- Consistency: `matched=true`.
+- User action needed: `true`.
+
+### Next Action
+
+Keep the observation automation stopped and manually review the repeated risk-threshold halt on `consecutive_loss_abs_pct` before any further formal run.
+
+## 2026-07-23 Formal Daily Observation (21:05)
+
+### Goal
+
+Run the formal 21:05 SimNow daily observation in read-only mode, verify the night-session formal window artifacts, and record the authoritative automation outcome from `simnow_run_summary_2026-07-23.json`.
+
+### Commands
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result:
+
+- Full SimNow workflow preflight passed: `284 passed`.
+
+Formal capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Observed:
+
+- Wrapper entered the formal night window `21:05 -> 23:00` and auto-computed `duration=6779` seconds.
+- The command exited non-zero because the authoritative automation result is `halt`, not because the pipeline crashed.
+
+Verification:
+
+```powershell
+@'
+import json, pathlib
+base = pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics')
+summary = json.loads((base / 'simnow_run_summary_2026-07-23.json').read_text(encoding='utf-8'))
+print(summary['automation_status'], summary['automation_exit_code'], summary['automation_reason'])
+'@ | python -
+```
+
+Result:
+
+- Verified output artifacts exist:
+  - `simnow_export_2026-07-23.json`
+  - `simnow_record_2026-07-23.json`
+  - `simnow_report_2026-07-23.md`
+  - `simnow_run_summary_2026-07-23.json`
+  - `simnow_historical_db_update_2026-07-23.json`
+- Verified authoritative automation fields:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=consecutive_loss_abs_pct`
+  - `automation_action=stop automation and review manually`
+
+### Outcomes
+
+- Execution date: `2026-07-23`.
+- Preflight: `passed`.
+- Formal observation mode: `yes` (`night_open`).
+- Live capture: completed in read-only mode.
+- Historical DB update: `passed`.
+- Contract query: succeeded with `contracts_count=18000`.
+- Enabled subscriptions complete: `4/4`.
+- Tick count: `32770`.
+- Accounts: `1`.
+- Positions: `1` external account position captured as contamination evidence only.
+- Orders: `0`.
+- Trades: `0`.
+- Workflow order safety: `pass` (`read_only=true`, `orders_sent_by_workflow=0`).
+- Monitor / record status: `halt`.
+- Automation status: `halt`.
+- Risk threshold status: `halt`.
+- Halt trigger metric: `consecutive_loss_abs_pct`.
+- Kline coverage: complete, no missing or short symbols.
+- Formal readiness: `overall_ready=true`.
+- Delayed replay: available.
+- Consistency: `matched=true`.
+- User action needed: `true`.
+
+### Next Action
+
+Keep the observation automation stopped and manually review the repeated risk-threshold halt on `consecutive_loss_abs_pct` before any further formal run.
+
+## 2026-07-26 D3 Config Fallback Guard Follow-Up
+
+### Goal
+
+Close the remaining D3 review item from `AI_REVIEW_REPORT_2026-07-26_v2.md`: residual position-weight and core-risk `STRATEGY_CONFIG.get(..., literal_default)` fallbacks were still present in `backtest_engine.py` / `portfolio_engine.py` and were not covered by the AST guard.
+
+### Changes
+
+- Extended `test_core_risk_config_keys_do_not_use_literal_get_fallbacks` to scan `backtest_engine.py`.
+- Added `pos_1buy`, `pos_2buy`, `pos_3buy`, `pos_1sell`, `pos_2sell`, and `pos_3sell` to the guarded config-key set.
+- Scoped the AST guard to `STRATEGY_CONFIG.get(...)` so normal report/dict `.get(...)` calls are not false positives.
+- Replaced core-risk and position-weight literal fallbacks in `backtest_engine.py` with hard `STRATEGY_CONFIG[...]` lookups.
+- Replaced `portfolio_engine.py` fixed-weight fallback with hard strategy/key lookup and hard `STRATEGY_CONFIG[...]` lookup.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py::test_core_risk_config_keys_do_not_use_literal_get_fallbacks -q
+```
+
+Result before source fix: failed with 16 fallback violations.
+
+Result after source fix: `1 passed`.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py .\examples\czsc_strategy\tests\unit\test_portfolio_ledger_report.py -q -m "not realdb"
+```
+
+Result: `33 passed`.
+
+Preflight:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result: `327 passed`.
+
+Sync checks:
+
+```powershell
+python tools\sync_check.py
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: both PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable low-risk item; SimNow promotion remains blocked by the unresolved risk halt decision and 0/20 valid observation days.
+
+## 2026-07-26 D8 Repository Hygiene Follow-Up
+
+### Goal
+
+Close the automatically actionable part of the D8 cleanup item from `AI_REVIEW_REPORT_2026-07-26_v2.md`: move the real idempotency regression test under `tests/unit` and label archived one-shot patch scripts so they are not mistaken for maintained workflow code.
+
+### Changes
+
+- Moved `test_backtest_idempotent.py` into `tests/unit/test_backtest_idempotent.py`.
+- Added `test_repo_hygiene.py` to guard that the idempotency regression stays under `tests/unit`.
+- Added `ONE-SHOT / LEGACY` top-level labels to:
+  - `_patch_backtest.py`
+  - `_patch_backtest2.py`
+  - `_patch_backtest3.py`
+  - `_patch_backtest4.py`
+- Added a hygiene guard requiring those patch scripts to keep explicit `ONE-SHOT` and `LEGACY` labels.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py -q
+```
+
+Result before cleanup: failed because `test_backtest_idempotent.py` still lived at project root and `_patch_backtest*.py` lacked `ONE-SHOT` / `LEGACY` labels.
+
+Result after cleanup:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py .\examples\czsc_strategy\tests\unit\test_backtest_idempotent.py -q
+```
+
+Result: `4 passed`.
+
+Full unit gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+```
+
+Result: `920 passed, 4 deselected, 4 xfailed`.
+
+Preflight and sync:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Data Cache Follow-Up
+
+- Added a hygiene guard requiring `examples/czsc_strategy/data_cache/*.csv` to stay out of git tracking.
+- Removed the 9 obsolete `data_cache/` CSV files from the git index with `git rm --cached`, while preserving the local files on disk.
+- Verified local preservation: `Get-ChildItem .\examples\czsc_strategy\data_cache\*.csv` still reports `9` files.
+
+Validation:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: hygiene `3 passed`; unit gate `921 passed, 4 deselected, 4 xfailed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable low-risk item. SimNow promotion remains blocked by the unresolved risk halt decision and 0/20 valid observation days.
+
+## 2026-07-26 D3 Core Config Fail-Fast Guard Follow-Up
+
+### Goal
+
+Close the remaining D3 config-drift risk where required core strategy switches
+could still be read through `STRATEGY_CONFIG.get("key")`, silently returning
+`None` if a required key drifted out of `config.py`.
+
+### Changes
+
+- Strengthened `test_core_risk_config_keys_do_not_use_literal_get_fallbacks`
+  so guarded core keys reject any constant-key `STRATEGY_CONFIG.get(...)`, not
+  only calls with literal fallback defaults.
+- Replaced the remaining required-key `.get(...)` reads with hard
+  `STRATEGY_CONFIG[...]` reads for:
+  - `filter_freq` in `backtest_engine.py` and `positions.py`
+  - `atr_chop_filter` and `second_buy_mode` in `positions.py`
+  - `exit_event_semantics` in `signals.py` and `sell_signals.py`
+- Kept optional override/dictionary reads unchanged.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py::test_core_risk_config_keys_do_not_use_literal_get_fallbacks -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py::test_core_risk_config_keys_do_not_use_literal_get_fallbacks -q -vv
+```
+
+Result before implementation: failed with core `.get(...)` violations for
+`filter_freq`, `atr_chop_filter`, `second_buy_mode`, and
+`exit_event_semantics`.
+
+Result after implementation: `1 passed`.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py .\examples\czsc_strategy\tests\unit\test_daily_filter.py .\examples\czsc_strategy\tests\unit\test_resonance_filter.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_exit_model.py .\examples\czsc_strategy\tests\unit\test_stop_execution_model.py .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py -q
+```
+
+Result: A53/daily/resonance `21 passed`; exit/stop/formal `40 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `954 passed, 4 deselected, 4 xfailed`; SimNow workflow
+preflight `328 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue. The remaining non-code promotion blockers
+are still the pending risk-halt decision and the unmet 20 valid forward SimNow
+observation-day requirement.
+
+## 2026-07-26 D5 Temporary Limit-Widening Verification Disclosure Follow-Up
+
+### Goal
+
+Close the D5 transparency gap that AP888/RB888 `temporary_widening_windows` were present in `limit_config.py` with source strings saying they were not independently verified, but formal reports and README did not machine-readably surface that manual-confirmation status.
+
+### Root Cause
+
+The steady-state limit-band model and temporary-window override logic already existed and was tested. The missing piece was report/document disclosure: users could see `temporary_widening_windows` only by reading `limit_config.py`, while generated formal reports did not disclose that those temporary overrides require confirmation against a primary exchange notice.
+
+### Changes
+
+- Added `limit_halt_temporary_widening_status=manual_confirmation_required` and `limit_halt_rule_caveat` to formal reports when `limit_halt_model` is `aware` or `enforce`.
+- Updated `README.md` and `chan_strategy/limit_config.py` to state that AP888/RB888 temporary widening windows are not independently verified against a primary exchange notice and remain research-only until human confirmation.
+- Added report and docs guards for the temporary-window verification status.
+- No limit-band calculation, temporary-window dates, or order/fill rejection logic was changed.
+
+### Verification
+
+Red evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py::test_formal_report_discloses_limit_halt_temporary_window_verification_status .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_limit_halt_docs_disclose_temporary_widening_manual_verification_status -q
+```
+
+Result before implementation: failed with missing `limit_halt_temporary_widening_status` / README docs anchors.
+
+Target regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py .\examples\czsc_strategy\tests\unit\test_limit_halt_off_equivalence.py -q
+```
+
+Result: `58 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this log update. The unresolved promotion blockers remain the pending manual risk-halt decision and the 20-valid-day forward SimNow gate.
+
+## 2026-07-26 D8 In-Flight Worktree Manifest Follow-Up
+
+### Goal
+
+Close the locally actionable part of the D8 residue that many SimNow/diagnostics/test changes remain in the dirty worktree and were previously governed only by human memory.
+
+### Root Cause
+
+The review item asked for the in-flight SimNow work to be committed or stashed. That final decision is a repository-integration action and should remain under user control, but the current dirty surface still needed an explicit local manifest so future agents do not mistake it for promoted evidence or silently lose the context.
+
+### Changes
+
+- Added `IN_FLIGHT_CHANGES.md` with a RESEARCH-ONLY banner.
+- Documented the in-flight `diagnostics/`, `tests/unit/`, and strategy-disclosure work surfaces.
+- Recorded that promotion remains blocked by the manual `risk-halt decision` and the `20 valid` SimNow observation-day gate.
+- Added a repo hygiene guard requiring the manifest to mention SimNow, diagnostics/tests scope, `commit or stash` handling, and the remaining external blockers.
+- Added a simple sensitive-token guard so the manifest does not contain obvious password/auth/API/account-id phrases.
+
+### Verification
+
+Red evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_in_flight_changes_manifest_documents_uncommitted_simnow_work -q
+```
+
+Result before implementation: failed because `IN_FLIGHT_CHANGES.md` did not exist. The first implementation also failed because the manifest contained a forbidden account-identifier phrase; the wording was corrected.
+
+Target regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py -q
+```
+
+Result: `18 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this log update. Final D8 closure still requires a user-owned integration decision: commit the coherent patch set or stash/archive unrelated local work.
+
+## 2026-07-26 D6 Terminology Source Anchor Follow-Up
+
+### Goal
+
+Close the remaining D6 terminology-traceability residue: the README and one signal function referenced `skill_build/reference/缠论术语表.md`, but the production signal module (`sell_signals.py`) and shared zhongshu construction helper (`zhongshu.py`) did not carry the same non-authoritative workspace glossary anchor.
+
+### Root Cause
+
+The terminology issue was not a runtime defect. It was a traceability gap: production code used terms such as BI, zhongshu, divergence, first/second/third buy/sell, but only part of the documentation chain stated that `缠论术语表.md` is a workspace mapping rather than a canonical Chan-theory source.
+
+### Changes
+
+- Added module-level terminology source notes to `chan_strategy/zhongshu.py` and `chan_strategy/sell_signals.py`.
+- The notes state that `skill_build/reference/缠论术语表.md` is a non-authoritative workspace mapping between Chan-theory terms and code signal fields.
+- Added a repo hygiene guard requiring both production modules to retain that glossary link and caveat.
+- No signal classification, zhongshu construction, or trading behavior was changed.
+
+### Verification
+
+Red evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_production_signal_modules_link_terms_to_non_authoritative_glossary -q
+```
+
+Result before implementation: failed because `zhongshu.py` / `sell_signals.py` did not include `skill_build/reference` glossary anchors.
+
+Target regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py .\examples\czsc_strategy\tests\unit\test_signal_contract.py .\examples\czsc_strategy\tests\unit\test_signals.py .\examples\czsc_strategy\tests\unit\test_zhongshu.py .\examples\czsc_strategy\tests\unit\test_second_buy_real_path.py -q
+```
+
+Result: `31 passed, 4 xfailed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this log update. Remaining hard promotion blockers are still external/manual: pending risk-halt decision and valid forward SimNow observation days.
+
+## 2026-07-26 D4 Slippage Cost Model Disclosure Follow-Up
+
+### Goal
+
+Close the D4 review item that round-trip transaction costs were computed as `2 * commission_rate + slippage` but formal and portfolio reports did not machine-readably disclose that slippage is applied once per round trip.
+
+### Root Cause
+
+The accounting path was internally consistent: `Position` close/scale-out accounting and the weight-based portfolio flatten path all deducted `2 * commission_rate + slippage`. The gap was transparency, not a detected calculation drift: reports and docs described `slippage` as a parameter but did not state the single-side-per-round-trip assumption.
+
+### Changes
+
+- Added `transaction_cost_model=round_trip_commission_plus_single_side_slippage`, `round_trip_cost_formula=2 * commission_rate + slippage`, `slippage_application=single_side_per_round_trip`, and `slippage_model_caveat` to single-symbol formal reports.
+- Added the same disclosure fields to portfolio reports for `portfolio_risk="off"`, weight-based `portfolio_risk="on"`, and risk joint replay.
+- Updated `README.md` and `chan_strategy/config.py` to disclose the single-side round-trip slippage formula.
+- Added regression guards for formal report output, portfolio report output, joint replay output, and docs/config disclosure.
+- No order logic, signal logic, sizing logic, or net-PnL formula was changed.
+
+### Verification
+
+Red evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py::test_formal_report_discloses_single_side_slippage_cost_model .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_slippage_cost_docs_disclose_single_side_round_trip_formula -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py::test_weight_based_portfolio_report_discloses_slippage_cost_model -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py::test_portfolio_risk_off_report_discloses_slippage_cost_model .\examples\czsc_strategy\tests\unit\test_a87_joint_replay.py::test_joint_replay_no_trades_smoke -q
+```
+
+Result before implementation: failed with missing `transaction_cost_model` / `slippage_application` fields.
+
+Target regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py .\examples\czsc_strategy\tests\unit\test_a87_joint_replay.py .\examples\czsc_strategy\tests\unit\test_exit_model.py .\examples\czsc_strategy\tests\unit\test_position_sizing.py -q
+```
+
+Result: `100 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `948 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `328 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the remaining non-behavioral disclosures or wait for valid SimNow forward-observation days and manual risk-halt review. SimNow promotion remains blocked by the external observation requirements, not by this code item.
+
+## 2026-07-26 D1 Long/Short Overlap Disclosure Follow-Up
+
+### Goal
+
+Close the D1 transparency residue that `enable_short=True` with `regime_model="independent"` can allow same-symbol long and short sub-strategies to overlap, while reports only exposed the raw `both_long_short_bars` count without a machine-readable policy/caveat field.
+
+### Root Cause
+
+The engine already computed `both_long_short_bars`, and the independent long/short behavior is an intentional research simplification rather than an execution bug. The missing piece was a stable report/documentation anchor explaining that the metric audits `independent_long_short_substrategies`.
+
+### Changes
+
+- Added `long_short_overlap_policy=independent_long_short_substrategies`, `long_short_overlap_metric=both_long_short_bars`, and `long_short_overlap_caveat` to single-symbol reports.
+- Updated `README.md` and `chan_strategy/config.py` to disclose that `enable_short=True` + `regime_model="independent"` may overlap long/short sub-strategies on the same symbol and is audited through `both_long_short_bars`.
+- Added report and docs guards so the disclosure cannot silently disappear.
+- No signal gating, position management, or short-enable behavior was changed.
+
+### Verification
+
+Red evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py::test_formal_report_discloses_independent_long_short_overlap_policy .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_long_short_overlap_docs_disclose_independent_policy_and_metric -q
+```
+
+Result before implementation: failed with missing `long_short_overlap_policy` and docs anchors.
+
+Target regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py .\examples\czsc_strategy\tests\unit\test_enable_short_false_equivalence.py .\examples\czsc_strategy\tests\unit\test_enable_short_independent_equivalence.py .\examples\czsc_strategy\tests\unit\test_backtest_entrypoints.py -q
+```
+
+Result: `34 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this log update. The remaining non-local blocker remains the clean forward SimNow observation gate plus pending manual risk-halt decision.
+
+## 2026-07-26 D9 Handoff Wrapper Encoding/Drift Follow-Up
+
+### Goal
+
+Close the remaining D9 portability/drift gap from
+`AI_REVIEW_REPORT_2026-07-26_v2.md`: the local
+`examples/czsc_strategy/tools/handoff.py` was a stale vendored copy of the
+handoff driver, which made it vulnerable to console-encoding issues and logic
+drift from the authoritative root `tools/sync_guardian/handoff.py` engine.
+
+### Changes
+
+- Replaced the local vendored handoff driver with a thin UTF-8-safe wrapper.
+- The wrapper now mirrors `examples/czsc_strategy/tools/sync_check.py`: it adds
+  root `tools/sync_guardian` to `sys.path` and runs the authoritative
+  `handoff.py` through `runpy.run_path`.
+- Added a regression guard that the local handoff tool remains a thin wrapper
+  instead of reintroducing a copied driver.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_handoff_tool.py::test_handoff_tool_is_thin_utf8_safe_wrapper -q
+```
+
+Result before implementation: failed because the local handoff tool did not use
+`runpy.run_path` and contained its own copied driver.
+
+Result after implementation: covered by full handoff-tool regression below.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_handoff_tool.py -q
+python -m pytest .\tests\test_sync_guardian.py -q
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: local handoff `2 passed`; root sync_guardian `14 passed`; czsc
+sync_check PASS.
+
+### Next Action
+
+Run the full unit gate and SimNow workflow preflight after this log update. The
+remaining blockers are no longer local test portability issues; they are the
+external/manual risk-halt decision and accumulation of valid forward observation
+days.
+
+## 2026-07-26 D9 PowerShell Test Environment Coupling Follow-Up
+
+### Goal
+
+Close the low-risk D9 portability gap from
+`AI_REVIEW_REPORT_2026-07-26_v2.md`: many `test_run_next_work_wrapper.py`
+tests invoke PowerShell directly, so environments without `powershell`/`pwsh`
+would fail for infrastructure reasons instead of cleanly reporting that the
+PowerShell-dependent wrapper tests are not runnable there.
+
+### Changes
+
+- Added `_powershell_executable()` to resolve `powershell` or `pwsh`.
+- `_run_powershell_script(...)` now skips the wrapper subprocess tests when no
+  PowerShell executable is available, instead of raising `FileNotFoundError`.
+- Added a regression test that monkeypatches `shutil.which` to prove the skip
+  path is explicit and intentional.
+- Kept all existing wrapper assertions unchanged on this Windows environment.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py::test_run_powershell_script_skips_when_powershell_is_unavailable -q
+```
+
+Result before implementation: failed because `_run_powershell_script(...)` did
+not raise a pytest skip.
+
+Result after implementation: `1 passed`.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Result: `105 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this
+log update. The remaining unresolved items are now primarily external/process
+boundaries: manual risk-halt review and valid forward SimNow observation days.
+
+## 2026-07-26 D2 Margin Model Limitation Disclosure Follow-Up
+
+### Goal
+
+Close the automatically actionable D2 transparency gap from
+`AI_REVIEW_REPORT_2026-07-26_v2.md`: risk sizing used exchange-minimum margin
+rates from `contract_specs`, while maintenance margin and broker forced
+liquidation were not modeled but were not exposed in machine-readable reports.
+
+### Changes
+
+- Added risk-mode report fields:
+  - `margin_rate_source=contract_specs.exchange_minimum_research`
+  - `maintenance_margin_model=not_modeled`
+  - `broker_forced_liquidation_model=not_modeled`
+  - `margin_model_caveat`
+- Kept sizing and margin calculations unchanged; this is a disclosure/reporting
+  repair, not a strategy behavior change.
+- Updated README and `config.py` comments to disclose exchange-minimum margin
+  rates, missing maintenance-margin modeling, missing broker add-ons, missing
+  margin-call modeling, and missing broker forced liquidation.
+- Added tests so both the report fields and public documentation stay present.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py::test_formal_report_discloses_margin_model_limitations .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_margin_model_docs_disclose_exchange_minimum_and_no_broker_liquidation -q
+```
+
+Result before implementation: failed with missing `margin_rate_source` and
+missing `margin_model_caveat` documentation.
+
+Result after implementation: `2 passed`.
+
+Related regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_position_sizing.py .\examples\czsc_strategy\tests\unit\test_position_sizing_report.py .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py -q
+```
+
+Result: `51 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this
+log update. Any actual maintenance-margin / broker-liquidation simulator would
+be a behavior-changing model extension and should be handled as a separate
+strategy-design task.
+
+## 2026-07-26 D2 Risk-Parity Turnover and Concentration Disclosure Follow-Up
+
+### Goal
+
+Close the automatically actionable D2 transparency gap from
+`AI_REVIEW_REPORT_2026-07-26_v2.md`: `weighting="risk_parity"` recomputed
+weights every bar, had no turnover/rebalance constraint, and could temporarily
+increase active-symbol concentration when a symbol's bars dropped out, but the
+report did not expose that口径 in machine-readable form.
+
+### Changes
+
+- Added report fields for the weight-based `PortfolioCoordinator` path:
+  - `risk_parity_rebalance_policy`
+  - `risk_parity_turnover_control`
+  - `max_symbol_weight_observed`
+  - `risk_parity_concentration_caveat`
+- Kept the existing risk-parity behavior unchanged: every-bar rolling-volatility
+  weighting remains a research model, not a production rebalance engine.
+- Updated README and `config.py` comments to disclose `every_bar`,
+  no-turnover-control semantics, and missing-bar/dropout concentration risk.
+- Added tests so report fields and public docs cannot silently drift.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py::test_risk_parity_report_discloses_rebalance_turnover_and_concentration -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_risk_parity_docs_disclose_every_bar_no_turnover_and_dropout_concentration -q
+```
+
+Result before implementation: report test failed with missing
+`risk_parity_rebalance_policy`; docs guard failed because README/config did not
+mention the new report fields.
+
+Result after implementation: both tests passed.
+
+Related regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py .\examples\czsc_strategy\tests\unit\test_portfolio_accounting.py .\examples\czsc_strategy\tests\unit\test_portfolio_ledger_report.py .\examples\czsc_strategy\tests\unit\test_a87_joint_replay.py .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py -q
+```
+
+Result: `62 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this
+log update. This closes the reporting/transparency part of the D2 risk-parity
+item; adding an actual turnover/rebalance optimizer would be a behavior-changing
+strategy design change and should not be bundled into this low-risk repair.
+
+## 2026-07-26 D1/D6 Signal Assumption and Terminology Disclosure Follow-Up
+
+### Goal
+
+Close the automatically actionable D1/D6 documentation gap from
+`AI_REVIEW_REPORT_2026-07-26_v2.md`: the strategy lacked an explicit expected
+turnover / signal-stability assumption, a unique Chan-terminology source, and a
+clear explanation that the `signal_zs_confirmation` `score=40` "未确认" branch
+is defensive rather than expected under the current zhongshu builder.
+
+### Changes
+
+- Added a README disclosure that the strategy has no explicit `预期换手` target
+  or rebalance-frequency constraint.
+- Documented the signal `稳定性假设`: confirmed strokes only, T+1 open execution,
+  and incremental/no-repaint validation.
+- Declared `skill_build/reference/缠论术语表.md` as the workspace terminology
+  mapping source for 笔 / 中枢 / 背驰 / 一买 / 二买 / 三买.
+- Clarified `signal_zs_confirmation` semantics:
+  - `score=30` is the reachable two-stroke "未确认" construction state.
+  - `score=40` is a defensive compatibility branch for legacy zhongshu objects
+    and is not expected with the current `build_zhongshu_from_bis` rules.
+- Added a repository hygiene guard so the disclosure cannot silently disappear.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_signal_assumption_docs_cover_turnover_stability_terms_and_unconfirmed_zs -q
+```
+
+Result before documentation update: failed because README did not contain
+`预期换手`.
+
+Result after documentation update: `1 passed`.
+
+Related regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py .\examples\czsc_strategy\tests\unit\test_signals.py .\examples\czsc_strategy\tests\unit\test_signal_properties.py .\examples\czsc_strategy\tests\unit\test_coverage_closure.py .\examples\czsc_strategy\tests\unit\test_more_coverage.py .\examples\czsc_strategy\tests\unit\test_branch_completion.py -q
+```
+
+Result: `47 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this
+log update. The structural clean-OOS blocker still requires valid forward SimNow
+observation days and the manual risk-halt decision; this follow-up only closes
+the remaining D1/D6 transparency gap.
+
+## 2026-07-26 D3 Remaining Literal Fallback Guard Follow-Up
+
+### Goal
+
+Close the remaining D3 single-source-of-truth gap where runtime code still used
+literal `STRATEGY_CONFIG.get(..., default)` fallbacks for keys already defined in
+`config.py`.
+
+### Changes
+
+- Expanded the AST guard to cover `data_adapter.py`, `limit_config.py`,
+  `signals.py`, and `validation.py` in addition to the existing runtime files.
+- Added the remaining configured strategy keys to the no-literal-fallback guard:
+  second-buy mode, short/regime routing, equity mode, MACD/divergence parameters,
+  ATR chop parameters, exit model, ATR trail multiplier, and partial-take-profit
+  fraction.
+- Replaced the flagged literal fallbacks with direct `STRATEGY_CONFIG[...]`
+  reads so changes to `config.py` cannot silently drift from runtime behavior.
+- Re-scanned remaining `STRATEGY_CONFIG.get(..., literal)` calls; only sell-side
+  parameters that intentionally inherit the corresponding buy-side defaults remain.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py::test_core_risk_config_keys_do_not_use_literal_get_fallbacks -q
+```
+
+Result before implementation: failed with 19 literal fallback violations.
+
+Result after implementation: `1 passed`.
+
+Related regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py .\examples\czsc_strategy\tests\unit\test_data_adapter.py .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py .\examples\czsc_strategy\tests\unit\test_divergence_macd.py .\examples\czsc_strategy\tests\unit\test_second_buy_mode.py .\examples\czsc_strategy\tests\unit\test_atr_chop_filter.py .\examples\czsc_strategy\tests\unit\test_exit_model.py .\examples\czsc_strategy\tests\unit\test_enable_short_false_equivalence.py .\examples\czsc_strategy\tests\unit\test_enable_short_independent_equivalence.py .\examples\czsc_strategy\tests\unit\test_positions.py .\examples\czsc_strategy\tests\unit\test_position_sizing.py .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py -q
+```
+
+Result: `141 passed`.
+
+### Next Action
+
+Run the full unit gate, SimNow workflow preflight, and czsc sync_check after this
+log update, then continue the review-priority queue. Live SimNow capture remains
+out of scope for this offline follow-up unless explicitly requested.
+
+## 2026-07-26 D5 Limit-Halt Settlement Basis Follow-Up
+
+### Goal
+
+Close the D5 review item that daily futures limit-band basis should prefer the previous trading day's settlement price, with an explicit previous-close fallback only when historical bars do not expose settlement fields.
+
+### Changes
+
+- Added `_settlement_or_close(...)` in `limit_config.py`, preferring `settlement`, `settle`, `settlement_price`, or `settle_price` when present and positive.
+- Updated `_daily_prev_close_map(...)` so each next trading day uses the previous day's settlement basis before falling back to close.
+- Documented that the limit-halt model follows previous-settlement semantics and falls back to previous close only when settlement is unavailable.
+- Added unit and hygiene guards covering settlement preference and README/code disclosure of the fallback.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py::test_daily_prev_close_map_prefers_previous_settlement_when_available -q
+```
+
+Result before implementation: failed because the map used previous close `100.0` instead of settlement `98.0`.
+
+Result after implementation: `1 passed`.
+
+Limit-halt regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py .\examples\czsc_strategy\tests\unit\test_limit_halt_off_equivalence.py -q
+```
+
+Result: `27 passed`.
+
+Documentation guard:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_limit_halt_docs_disclose_settlement_basis_and_close_fallback .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py -q
+```
+
+Result: `13 passed`.
+
+Full unit gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+```
+
+Result: `926 passed, 4 deselected, 4 xfailed`.
+
+Preflight and sync:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result before this log append: SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. SimNow promotion remains blocked by the unresolved risk halt decision and 0/20 valid observation days.
+
+## 2026-07-26 D4 Direct Execution-Timing Regression Follow-Up
+
+### Goal
+
+Close the D4 minor review item that the "signal T -> execution T+1 open" protocol was implemented and indirectly covered, but lacked a directly named regression test in `test_execution_timing.py`.
+
+### Changes
+
+- Added `test_signal_generated_on_bar_executes_next_bar_open`.
+- The test patches `get_all_signals(...)` to emit a signal on the first post-warmup trading bar.
+- The test replaces `ChanTimingStrategy` with a recording strategy and asserts the signal reaches `strategy.update(...)` on the next resampled trading bar with `execution_price` equal to that bar's open.
+- This is test coverage only; it does not change production execution behavior or SimNow automation rules.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_execution_timing.py::test_signal_generated_on_bar_executes_next_bar_open -q
+```
+
+Initial test iteration failed because the fixture injection targeted `engine.strategy`, while `run(...)` constructs `ChanTimingStrategy` internally.
+
+Second test iteration failed because the assertion used the raw 1-minute fixture index instead of the engine's resampled trading bars.
+
+Final result: `1 passed`.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_execution_timing.py -q
+```
+
+Result: `3 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `927 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. The structural D4 clean-OOS issue remains unresolved until enough valid forward SimNow observation days are collected and the risk-halt decision is closed.
+
+## 2026-07-26 D4 Rollover Gating Methodology Disclosure Follow-Up
+
+### Goal
+
+Close the D4 review item that formal rollover open-gating used full-window rollover transition detection but did not explicitly disclose the ex-post methodology in reports or user-facing configuration docs.
+
+### Changes
+
+- Added `rollover_open_gating_methodology` to generated reports when `rollover_open_gating="on"`.
+- The report now states that rollover transition detection is full-window and ex-post, and that the gate is protective open gating only.
+- Updated `README.md` to list `rollover_open_gating` and disclose the same methodology caveat.
+- Updated `config.py` comments so the switch's source-of-truth configuration documents the same limitation.
+- Added guards in `test_rollover_open_gating.py` and `test_repo_hygiene.py`.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_rollover_open_gating.py::test_formal_report_discloses_rollover_gating_ex_post_methodology -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_rollover_gating_docs_disclose_ex_post_full_window_detection -q
+```
+
+Result before implementation: report test failed with missing `rollover_open_gating_methodology`; docs guard failed because README did not mention `rollover_open_gating`.
+
+Result after implementation: both tests passed.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_rollover_open_gating.py -q
+```
+
+Result: `9 passed`.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. This disclosure does not solve the structural D4 clean-OOS blocker; forward SimNow observation and manual risk-halt review are still required before promotion.
+
+## 2026-07-26 D5 Limit-Halt Touch-Based Methodology Disclosure Follow-Up
+
+### Goal
+
+Close the D5 review item that `limit_halt_model="enforce"` uses a conservative bar-range touch rule, while generated reports and README methodology did not explicitly name that high/low touch-based口径.
+
+### Changes
+
+- Added `limit_halt_methodology` to generated reports when `limit_halt_model` is `aware` or `enforce`.
+- The report now states that the model is conservative, high/low touch-based, rejects directionally relevant at-limit fills under `enforce`, and retries on the next bar.
+- Updated README to disclose that `limit_halt_model` uses previous settlement/fallback previous close for bands and a conservative high/low touch-based execution口径.
+- Updated `_bar_at_limit(...)` docstring in `limit_config.py` to make the conservative high/low touch-based rule explicit.
+- Added report and documentation guards.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py::test_formal_report_discloses_limit_halt_touch_based_methodology -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_limit_halt_docs_disclose_touch_based_enforcement_methodology -q
+```
+
+Result before implementation: report test failed with missing `limit_halt_methodology`; docs guard failed because README did not disclose `high/low` touch methodology.
+
+Result after implementation: both tests passed.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py .\examples\czsc_strategy\tests\unit\test_limit_halt_off_equivalence.py -q
+```
+
+Result: `27 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `931 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. Remaining data-quality items such as splice-boundary limit semantics and missing-rate fail-closed behavior require careful scope selection to avoid changing research results unintentionally.
+
+## 2026-07-26 D5 Unparseable Row Rate Fail-Closed Follow-Up
+
+### Goal
+
+Close the D5 review item that datetime-unparseable historical rows were counted and skipped, but had no fail-closed missing-rate threshold for formal evaluation.
+
+### Changes
+
+- Added `max_unparseable_row_rate` to `STRATEGY_CONFIG`; default `None` preserves legacy research behavior.
+- `formal_evaluation_config()` now sets `max_unparseable_row_rate=0.001`.
+- `BacktestEngine.load_data()` now records `unparseable_rows_total` and `unparseable_row_rate` in addition to skipped count.
+- `bar_generator()` now fails closed before warmup/strategy execution when the configured threshold is exceeded.
+- Generated reports now surface `unparseable_rows_total`, `unparseable_row_rate`, and `max_unparseable_row_rate`.
+- README/config docs now disclose the formal fail-closed threshold.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a80_unparseable_rows.py::test_formal_evaluation_fails_closed_when_unparseable_row_rate_too_high -q
+```
+
+Result before implementation: failed because the run completed without an `error` field even with a high unparseable-row rate.
+
+Result after implementation: `1 passed`.
+
+Regression and docs:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a80_unparseable_rows.py .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_unparseable_row_rate_docs_disclose_formal_fail_closed_threshold -q
+```
+
+Result: A80/formal `15 passed`; docs guard `1 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `933 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. The splice-boundary limit-halt item remains more behavior-sensitive and should be scoped with a narrow test before changing replay semantics.
+
+## 2026-07-26 D3 Runtime Switch Fallback Guard Follow-Up
+
+### Goal
+
+Reduce the remaining D3 config-drift risk from duplicated literal defaults for formal/runtime switches in `backtest_engine.py` and `positions.py`.
+
+### Changes
+
+- Extended the existing AST guard to reject literal `STRATEGY_CONFIG.get(..., default)` fallbacks for:
+  - `trade_freq`
+  - `filter_freq`
+  - `resonance_filter`
+  - `resonance_freq_4h`
+  - `rollover_open_gating`
+  - `rollover_stat_tagging`
+  - `exit_event_semantics`
+  - `stop_execution_model`
+  - `stop_penalty_bp`
+- Replaced the matching runtime reads in `backtest_engine.py` and `positions.py` with hard `STRATEGY_CONFIG[...]` reads.
+- Kept this slice limited to keys already present in `STRATEGY_CONFIG`; optional compatibility `.get(...)` calls without literal defaults were not changed.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py::test_core_risk_config_keys_do_not_use_literal_get_fallbacks -q
+```
+
+Result before source fix: failed with 19 fallback violations across `backtest_engine.py` and `positions.py`.
+
+Result after source fix: `1 passed`.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py .\examples\czsc_strategy\tests\unit\test_resonance_filter.py .\examples\czsc_strategy\tests\unit\test_stop_execution_model.py .\examples\czsc_strategy\tests\unit\test_rollover_open_gating.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_a53_config_signal_cleanup.py .\examples\czsc_strategy\tests\unit\test_position_sizing_research_equivalence.py .\examples\czsc_strategy\tests\unit\test_position_sizing_report.py .\examples\czsc_strategy\tests\unit\test_report_metrics.py -q -m "not realdb"
+```
+
+Result: formal/resonance/stop/rollover `35 passed`; A53/position/report `34 passed, 2 deselected`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `933 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. Some lower-level indicator/diagnostic fallbacks may remain, but the guarded runtime/formal switch set now sources defaults from `config.py`.
+
+## 2026-07-26 D5 Rollover Splice Limit-Halt Suppression Follow-Up
+
+### Goal
+
+Close the D5 review item that limit-halt bands are meaningless on continuous-contract splice boundaries and could incorrectly defer exits when the splice jump touches or exceeds a computed daily limit band.
+
+### Changes
+
+- Suppressed limit-halt tagging/rejection on bars whose trading date is inside the `rollover_open_gating="on"` exclusion window.
+- Added `limit_halt_rollover_suppressed_bars` to generated reports when `limit_halt_model` is `aware` or `enforce`.
+- Kept normal limit-halt enforcement unchanged outside rollover splice exclusion windows.
+- Updated README/config docs to disclose splice-window suppression and the report counter.
+- Added regression coverage for an existing long position exiting inside the rollover window while a mocked lower-limit touch would otherwise reject the fill.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_rollover_open_gating.py::test_limit_halt_is_suppressed_inside_rollover_window_for_existing_exit -q
+```
+
+Result before implementation: failed with `len(pairs) == 0`, proving the rollover-window exit was deferred by the mocked limit-halt touch.
+
+Result after implementation: `1 passed`.
+
+Regression and docs:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py::test_enforce_rejects_long_signal_exit_at_lower_limit_then_fills_next_bar -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_limit_halt_docs_disclose_rollover_splice_suppression -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_rollover_open_gating.py .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py .\examples\czsc_strategy\tests\unit\test_limit_halt_off_equivalence.py -q
+```
+
+Result: non-splice enforce rejection `1 passed`; docs guard `1 passed`; rollover/limit-halt suite `37 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `935 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. The remaining hard blocker for promotion is still the external SimNow risk-halt review plus valid forward observation days.
+
+## 2026-07-26 D5 Contract Tick Rounding Follow-Up
+
+### Goal
+
+Close the D5 review item that `contract_specs.tick` was defined but unused, so recorded fill prices were not rounded to the exchange minimum price increment.
+
+### Changes
+
+- Added `price_tick_rounding` config switch.
+- Kept `price_tick_rounding="off"` by default to preserve legacy research baseline snapshots.
+- `formal_evaluation_config()` now sets `price_tick_rounding="on"`.
+- Added `_round_price_to_tick(...)` using `contract_specs[*]["tick"]` and `ROUND_HALF_UP` semantics.
+- Applied tick rounding at the recorded-fill entrances: `_open_long`, `_open_short`, `_close_long`, `_close_short`, and `_scale_out`.
+- Added `price_tick_rounding` to generated reports for machine-readable audit.
+- Updated README/config docs to disclose the formal-only tick-rounding scope.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_position_sizing.py::test_trade_prices_are_rounded_to_contract_tick -q
+```
+
+Result before implementation: failed because `open_price` remained `100.5` instead of rounding to AP888 tick `101.0`.
+
+Result after implementation: `1 passed`.
+
+Regression and docs:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_position_sizing.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_stop_execution_model.py .\examples\czsc_strategy\tests\unit\test_stop_execution_crosscheck.py .\examples\czsc_strategy\tests\unit\test_exit_model.py .\examples\czsc_strategy\tests\unit\test_limit_halt_aware.py .\examples\czsc_strategy\tests\unit\test_limit_halt_enforce.py .\examples\czsc_strategy\tests\unit\test_limit_halt_off_equivalence.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_formal_evaluation.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_price_tick_rounding_docs_disclose_formal_contract_spec_scope -q
+```
+
+Result: position sizing `19 passed`; stop/exit/limit suite `56 passed`; formal `10 passed`; docs guard `1 passed`.
+
+Full gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: unit gate `937 passed, 4 deselected, 4 xfailed`; SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable item. The SimNow promotion decision remains blocked by manual risk-halt review and valid forward observation-day requirements.
+
+## 2026-07-26 D2 PortfolioCoordinator Drawdown Breaker Follow-Up
+
+### Goal
+
+Close the D2 review item that `max_drawdown_breaker_pct` existed in `PortfolioLedger` / joint replay but the weight-based `PortfolioCoordinator` path had not yet implemented the same persistent drawdown-breaker semantics.
+
+### Changes
+
+- Added `PortfolioCoordinator.max_drawdown_breaker_pct`, `peak_equity`, `drawdown_breaker_active`, and `drawdown_breaker_triggers`.
+- Implemented peak-to-current drawdown detection in `PortfolioCoordinator.on_bar(...)`.
+- Drawdown breaker now flattens open weight-book positions, records `reason=drawdown_breaker_flatten`, blocks later opens, and persists across trading-day changes.
+- `_build_on_report(...)` now surfaces `drawdown_breaker_active` in equity rows and `drawdown_breaker_triggers` in the report.
+- Flattened pairs from drawdown breaker use `reason=portfolio_drawdown_breaker`; daily-loss flatten pairs keep `reason=portfolio_daily_loss_limit`.
+- Updated `README.md` and `config.py` to state that `PortfolioCoordinator` handles weight-based replay bookkeeping, while `PortfolioLedger` remains the true Position-level forced-liquidation path for `sizing_model="risk"`.
+
+### Verification
+
+Red/green evidence:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py::test_drawdown_breaker_flattens_blocks_and_persists_across_days .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py::test_drawdown_breaker_disabled_by_default_in_portfolio_coordinator -q
+```
+
+Result before implementation: failed because `PortfolioCoordinator` had no `drawdown_breaker_active`.
+
+Result after implementation: `2 passed`.
+
+Regression:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_portfolio_risk.py .\examples\czsc_strategy\tests\unit\test_a87_joint_replay.py .\examples\czsc_strategy\tests\unit\test_portfolio_ledger_report.py -q
+```
+
+Result: `48 passed`.
+
+Full unit gate:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+```
+
+Result: `924 passed, 4 deselected, 4 xfailed`.
+
+Preflight and sync:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: SimNow workflow preflight `327 passed`; czsc sync_check PASS.
+
+### Next Action
+
+Continue the review-priority queue with the next automatically actionable low-risk item. SimNow promotion remains blocked by the unresolved risk halt decision and 0/20 valid observation days.
+
+## 2026-07-27 Daily SimNow Observation Attempt (Blocked, No Live Capture)
+
+### Goal
+
+Advance the daily SimNow observation ledger per `NEXT_WORK.md`/`ACCEPTANCE.md`.
+
+### Findings
+
+- A prior risk-halt decision record, `simnow_risk_halt_decision_2026-07-24.json`, is still `decision_status=pending_decision` with `next_formal_observation_allowed=false`. Per A38/ACCEPTANCE.md "Risk Halt Review and Decision Gate", `run_next_work.ps1 -LiveCapture` must block before any SimNow connection while this record is unresolved.
+- The invocation also occurred outside all allowed formal start windows (`09:05`, `13:35`, `21:05` Asia/Shanghai).
+- Given both conditions, `-LiveCapture` was intentionally not attempted this run; only the read-only `-Preflight` path was executed to validate workflow health.
+
+### Verification
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result: script compiled; `328 passed` in the SimNow workflow unit suite; pending replay backfill plan reports `pending_historical_db_lag_days: 0`.
+
+No live capture, no SimNow connection, no orders, and no new `simnow_run_summary_*.json` were produced this run.
+
+### Next Action
+
+Blocked pending human decision on `simnow_risk_halt_decision_2026-07-24.json` (select one of `keep_halted` / `adjust_thresholds_with_documented_rationale` / `retire_candidate` / `reset_observation_window_after_strategy_change`, fill `operator_name`/`rationale`/`requires_observation_window_reset`, and set `decision_status=decided`). Once decided and `next_formal_observation_allowed=true`, resume formal `-LiveCapture` runs inside the next allowed start window (`09:05`, `13:35`, or `21:05`).
+
+## 2026-07-27 Risk Halt Decision Recorded: Observation Window Reset
+
+### Goal
+
+Resolve the pending `simnow_risk_halt_decision_2026-07-24.json` blocker identified above so formal `-LiveCapture` runs can resume.
+
+### Decision
+
+- `selected_decision`: `reset_observation_window_after_strategy_change`
+- `operator_name`: `hanabeatrisa`
+- `decision_status`: `decided`; `next_formal_observation_allowed`: `true`; `requires_observation_window_reset`: `true`
+- Rationale: `chan_strategy/` has uncommitted engine/positions/signals changes as of 2026-07-27 (`backtest_engine.py`, `config.py`, `data_adapter.py`, `limit_config.py`, `portfolio_engine.py`, `positions.py`, `sell_signals.py`, `signals.py`, `validation.py`, `zhongshu.py`; 347 insertions / 83 deletions), including the D2 `PortfolioCoordinator` drawdown-breaker parity fix and the D5 tick-rounding fix already logged above. The 2026-07-24 halt (`consecutive_loss_abs_pct`) came from a delayed-replay equity curve (`upto = daily.loc[:day]` in `export_simnow_replay_snapshot.py`) cumulated from the start of the replay through a fixed historical segment, `2023-06-19`~`2023-06-28`, produced by the pre-fix engine. Because that metric is a cumulative-to-date scan (not a rolling window), the same halt would keep re-triggering on every future observation day regardless of new data, so it is treated as stale pre-fix evidence rather than a live risk breach.
+
+### Changes
+
+- `simnow_risk_halt_decision_2026-07-24.json` / `.md`: filled and validated (`python .\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py --date 2026-07-24 --validate` → `{"valid": true, "errors": []}`).
+- `simnow_observation_window.json`: `observation_start_date` moved from `2026-07-14` to `2026-07-27`; the 8 ledger rows from 2026-07-14 through 2026-07-24 remain in `simnow_observation_ledger.jsonl` as audit history but are excluded from the new 20-day count, per existing `filter_records_by_start` semantics.
+- `tests/unit/test_simnow_ledger_summary.py::test_cli_writes_summary_json`: the fixture record date was hardcoded to `2026-07-14` and this test invokes `simnow_ledger_summary.py` without `--start-date`, so it depends on the repo's real default `simnow_observation_window.json`. Bumped the fixture date to `2026-07-27` to stay on/after the new start date; no other test in the suite depends on the real default config file for this date.
+
+### Verification
+
+```powershell
+python .\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py --date 2026-07-24 --validate
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+```
+
+Result before the test fixture fix: preflight failed at `test_simnow_ledger_summary.py::test_cli_writes_summary_json` (`assert 0 == 1`, the 2026-07-14 fixture row was filtered out by the new `observation_start_date`).
+
+Result after the fix: decision record `{"valid": true, "errors": []}`; preflight `328 passed`, script compiles, no pending replay backfill days.
+
+### Next Action
+
+Resume formal `-LiveCapture` runs inside the next allowed start window (`09:05`, `13:35`, or `21:05` Asia/Shanghai). Valid observation days now count starting `2026-07-27`; 20/20 valid days are required from this new start before promotion can be reconsidered.

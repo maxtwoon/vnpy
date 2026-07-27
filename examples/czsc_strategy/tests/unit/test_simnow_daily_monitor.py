@@ -467,6 +467,11 @@ def test_make_record_halts_when_workflow_order_safety_is_breached():
     assert record["order_safety"]["observed_raw_orders"] == 1
     assert record["order_safety"]["observed_raw_trades"] == 1
     assert record["consistency"]["reason"] == "workflow_order_safety_breach"
+    assert record["halt"]["rule_id"] == "workflow_order_safety_breach"
+    assert record["halt"]["family"] == "order_safety"
+    assert record["halt"]["severity"] == "critical"
+    assert record["halt"]["trigger_metrics"] == []
+    assert "只读" in record["halt"]["explained_cn"]
 
 
 def test_make_record_allows_observed_account_orders_when_workflow_is_read_only():
@@ -1098,6 +1103,11 @@ def test_action_recommendation_halt_threshold_breach_lists_metrics():
     )
     assert record["status"] == "halt"
     assert record["thresholds"]["status"] == "halt"
+    assert record["halt"]["rule_id"] == "threshold_breach"
+    assert record["halt"]["family"] == "strategy_risk"
+    assert record["halt"]["severity"] == "critical"
+    assert record["halt"]["trigger_metrics"] == ["gross_exposure"]
+    assert "gross_exposure" in record["halt"]["explained_cn"]
     rec = action_recommendation(record)
     assert rec["severity"] == "critical"
     assert "gross_exposure" in rec["action"]
@@ -1129,6 +1139,53 @@ def test_action_recommendation_halt_prefers_threshold_breach_over_consistency_re
     assert rec["status"] == "halt"
     assert rec["reason"] == "gross_exposure"
     assert "gross_exposure" in rec["action"]
+
+
+def test_action_recommendation_exposes_machine_readable_action_classes():
+    valid = action_recommendation({
+        "date": "2026-07-01",
+        "status": "pass",
+        "valid_observation": True,
+        "consistency": {"matched": True, "verified": True},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "pass"},
+        "subscription_coverage": {"missing_symbols": []},
+        "kline_coverage": {"missing_symbols": [], "short_symbols": []},
+    })
+    assert valid["action_class"] == "counts_for_20d"
+    assert valid["blocker_class"] == "none"
+
+    skipped = action_recommendation({
+        "date": "2026-07-02",
+        "status": "skipped",
+        "skip_reason": "simnow_no_ticks",
+        "valid_observation": False,
+        "thresholds": {"status": "pass"},
+    })
+    assert skipped["action_class"] == "rerun_next_session"
+    assert skipped["blocker_class"] == "wait"
+
+    pending = action_recommendation({
+        "date": "2026-07-03",
+        "status": "pending",
+        "valid_observation": False,
+        "consistency": {"matched": False, "reason": "subscription_incomplete"},
+        "thresholds": {"status": "pass"},
+        "subscription_coverage": {"missing_symbols": ["AP888"]},
+    })
+    assert pending["action_class"] == "investigate_infra"
+    assert pending["blocker_class"] == "review_now"
+
+    halted = action_recommendation({
+        "date": "2026-07-04",
+        "status": "halt",
+        "valid_observation": False,
+        "consistency": {"matched": False, "reason": "workflow_order_safety_breach"},
+        "thresholds": {"status": "pass"},
+        "order_safety": {"status": "halt"},
+    })
+    assert halted["action_class"] == "manual_review_required"
+    assert halted["blocker_class"] == "review_now"
 
 
 def test_build_action_summary_returns_one_row_per_record():
@@ -1183,7 +1240,16 @@ def test_build_action_summary_returns_one_row_per_record():
     assert {row["date"] for row in summary} == {"2026-06-27", "2026-07-01"}
     assert summary[0]["date"] == "2026-06-27"
     for row in summary:
-        assert set(row.keys()) >= {"date", "status", "reason", "severity", "action", "counts_for_20d"}
+        assert set(row.keys()) >= {
+            "date",
+            "status",
+            "reason",
+            "severity",
+            "action",
+            "action_class",
+            "blocker_class",
+            "counts_for_20d",
+        }
 
 
 def test_write_20d_markdown_carries_research_only_banner(tmp_path):
@@ -1230,9 +1296,11 @@ def test_write_20d_markdown_includes_action_summary(tmp_path):
     write_20d_markdown(summary, out)
     text = out.read_text(encoding="utf-8")
     assert "## Action Summary" in text
-    assert "| date | status | reason | severity | action | counts_for_20d |" in text
+    assert "| date | status | reason | severity | action_class | blocker_class | action | counts_for_20d |" in text
     assert "ctp_disconnect_097_no_snapshot" in text
     assert "kline_coverage_incomplete" in text
+    assert "wait_for_data" in text
+    assert "wait" in text
     assert "AP888" in text
 
 
@@ -1269,7 +1337,7 @@ def test_promotion_decision_report_includes_action_summary_with_reason_actions(t
     write_report(summary, out)
     text = out.read_text(encoding="utf-8")
     assert "## Action Summary" in text
-    assert "| date | status | reason | severity | action | counts_for_20d |" in text
+    assert "| date | status | reason | severity | action_class | blocker_class | action | counts_for_20d |" in text
     assert "historical_db_lag" in text
     assert "backfill" in text
     assert "kline_coverage_incomplete" in text
@@ -1314,10 +1382,73 @@ def test_promotion_decision_summary_includes_valid_days_and_blocking_actions():
     summary = decide_promotion(records, min_days=4)
     assert summary["valid_observation_days"] == 1
     assert summary["action_summary_count"] == 4
+    assert summary["blocking_action_counts"] == {
+        "wait_for_data": 3,
+    }
     assert summary["top_blocking_actions"] == [
-        {"reason": "historical_db_lag", "count": 2},
-        {"reason": "kline_coverage_incomplete", "count": 1},
+        {
+            "reason": "historical_db_lag",
+            "count": 2,
+            "action_class": "wait_for_data",
+            "blocker_class": "wait",
+            "governance_class": "data_readiness_gap",
+            "reasonableness": "reasonable",
+        },
+        {
+            "reason": "kline_coverage_incomplete",
+            "count": 1,
+            "action_class": "wait_for_data",
+            "blocker_class": "wait",
+            "governance_class": "data_readiness_gap",
+            "reasonableness": "reasonable",
+        },
     ]
+
+
+def test_promotion_decision_report_includes_structured_blocking_sections(tmp_path):
+    records = [
+        {
+            "date": "2026-06-22",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "historical_db_lag"},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-06-23",
+            "status": "pending",
+            "consistency": {"matched": False, "reason": "historical_db_lag"},
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+        {
+            "date": "2026-07-01",
+            "status": "skipped",
+            "skip_reason": "simnow_no_ticks",
+            "thresholds": {"status": "pass"},
+            "valid_observation": False,
+        },
+    ]
+
+    summary = decide_promotion(records, min_days=3)
+    out = tmp_path / "promotion.md"
+    write_report(summary, out)
+    text = out.read_text(encoding="utf-8")
+
+    assert "## Blocking Action Counts" in text
+    assert "| action_class | days |" in text
+    assert "| rerun_next_session | 1 |" in text
+    assert "| wait_for_data | 2 |" in text
+    assert "## Top Blocking Actions" in text
+    assert "| reason | days | action_class | blocker_class | governance_class | reasonableness |" in text
+    assert "| historical_db_lag | 2 | wait_for_data | wait | data_readiness_gap | reasonable |" in text
+    assert "| simnow_no_ticks | 1 | rerun_next_session | wait | expected_market_or_session | reasonable |" in text
+    assert "## Reason Governance" in text
+    assert "| governance_class | days |" in text
+    assert "| data_readiness_gap | 2 |" in text
+    assert "| expected_market_or_session | 1 |" in text
+    assert "- reason_rationality_verdict: `mostly_reasonable_non_code`" in text
+    assert "- pareto_summary.top3_share_pct: `100.0`" in text
 
 
 def test_promotion_decision_pass_valid_shows_counts_for_20d_true(tmp_path):
@@ -1592,8 +1723,62 @@ def test_make_record_produces_verified_consistency_for_captured_session_match():
 
     assert record["consistency"]["matched"] is True
     assert record["consistency"]["verified"] is True
+    assert record["environment_observation_valid"] is True
+    assert record["environment_observation_reason"] == ""
     assert record["valid_observation"] is True
     assert record["valid_observation_reason"] == ""
+
+
+def test_make_record_environment_observation_can_be_valid_when_risk_is_halted():
+    simnow = _events()
+    simnow["meta"] = {
+        "read_only": True,
+        "orders_sent_by_workflow": 0,
+        "workflow_order_actions": [],
+        "strategy_surface": {"source": "captured_session"},
+    }
+    simnow["raw"] = {
+        "logs": [{"msg": "connected"}],
+        "ticks": [{"dt": "2026-07-01 15:00", "symbol": "AP888"}],
+        "contracts_count": 1,
+        "accounts": [{"accountid": "demo"}],
+        "positions": [],
+        "subscribed": [{"research_symbol": "AP888"}],
+    }
+    simnow["meta"]["contract_map"] = {"AP888": {"enabled": True}}
+    replay = _events()
+    replay["meta"] = {"replay_available": True}
+
+    record = make_record(
+        "2026-07-01",
+        _baseline(),
+        simnow=simnow,
+        replay=replay,
+        risk={
+            "daily_return_pct": -0.01,
+            "drawdown_pct": -0.5,
+            "gross_exposure": 0.1,
+            "net_exposure": 0.1,
+            "both_long_short_symbols": 0,
+            "consecutive_loss": {"days": 6, "cumulative_return_pct": -0.08},
+            "symbol_concentration": {"top1_abs_share": 0.2},
+            "strategy_concentration": {"top1_abs_share": 0.2},
+        },
+        kline={
+            "expected_symbols": ["AP888"],
+            "symbols": ["AP888"],
+            "missing_symbols": [],
+            "short_symbols": [],
+            "min_bars_per_symbol": 30,
+        },
+    )
+
+    assert record["status"] == "halt"
+    assert record["thresholds"]["status"] == "halt"
+    assert record["environment_observation_valid"] is True
+    assert record["environment_observation_reason"] == ""
+    assert record["valid_observation"] is False
+    assert record["valid_observation_reason"] == "status_not_pass"
 
 
 def test_20d_report_excludes_unverified_matched_record():

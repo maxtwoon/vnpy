@@ -27,6 +27,10 @@ def _sample_run_summary(date: str = "2026-07-01") -> dict:
         "automation_exit_code": 20,
         "automation_reason": "kline_coverage_incomplete",
         "automation_action": "resolve pending gate before counting",
+        "automation_action_class": "wait_for_data",
+        "automation_blocker_class": "wait",
+        "operator_explanation_cn": "当前不计入 20 日有效观察；缺少 K 线覆盖。",
+        "user_action_needed_reason_cn": "当前阻塞属于等待型，无需立刻人工介入。",
         "record": {
             "status": "pending",
             "valid_observation": False,
@@ -56,13 +60,19 @@ def test_render_daily_brief_contains_required_fields():
     assert "automation_exit_code: `20`" in text
     assert "automation_reason: `kline_coverage_incomplete`" in text
     assert "automation_action: `resolve pending gate before counting`" in text
+    assert "operator_explanation_cn: `当前不计入 20 日有效观察；缺少 K 线覆盖。`" in text
+    assert "automation_action_class: `wait_for_data`" in text
+    assert "automation_blocker_class: `wait`" in text
     assert "record.status: `pending`" in text
     assert "record.valid_observation: `false`" in text
+    assert "record.action_class: `wait_for_data`" in text
+    assert "record.blocker_class: `wait`" in text
     assert "kline.missing_symbols: `AP888`" in text
     assert "kline.short_symbols: `A888,RB888,SC888,ZN888`" in text
     assert "promotion.valid_observation_days: `0`" in text
     assert "promotion.ready_to_expand: `false`" in text
     assert "needs_user_action: `false`" in text
+    assert "user_action_needed_reason_cn: `当前阻塞属于等待型，无需立刻人工介入。`" in text
     assert "## 结论" in text
     assert "## 下一步" in text
     assert "resolve pending gate before counting" in text
@@ -102,12 +112,58 @@ def test_render_daily_brief_halt_needs_user_action():
         {"metric": "drawdown_abs_pct", "value": 1.2992, "level": "warning", "unit": "%"},
         {"metric": "consecutive_loss_abs_pct", "value": 0.1218, "level": "halt", "unit": "%"},
     ]
+    summary["record"]["threshold_diagnostics"] = [
+        {
+            "metric": "drawdown_abs_pct",
+            "level": "warning",
+            "value": 1.2992,
+            "warning": 1.1854,
+            "halt": 1.3171,
+            "warning_gap": 0.1138,
+            "halt_gap": -0.0179,
+            "unit": "%",
+        },
+        {
+            "metric": "consecutive_loss_abs_pct",
+            "level": "halt",
+            "value": 0.1218,
+            "warning": 0.0581,
+            "halt": 0.0646,
+            "warning_gap": 0.0637,
+            "halt_gap": 0.0572,
+            "unit": "%",
+        },
+    ]
+    summary["risk_source_breakdown"] = {
+        "consecutive_loss": {
+            "available": True,
+            "complete": True,
+            "rows_available": True,
+            "reason": "",
+            "source": "delayed_replay.risk.consecutive_loss",
+            "days": 3,
+            "cumulative_return_pct": -0.1217590817,
+            "abs_cumulative_return_pct": 0.1217590817,
+            "start_date": "2026-07-22",
+            "end_date": "2026-07-24",
+            "rows": [
+                {"date": "2026-07-22", "daily_return_pct": -0.0401, "equity": 0.9996},
+                {"date": "2026-07-23", "daily_return_pct": -0.0502, "equity": 0.9991},
+                {"date": "2026-07-24", "daily_return_pct": -0.0314590817, "equity": 0.9988},
+            ],
+        },
+    }
 
     text = render_daily_brief(summary)
 
     assert "automation_status: `halt`" in text
     assert "needs_user_action: `true`" in text
     assert "consecutive_loss_abs_pct=0.1218%" in text
+    assert "## 阈值诊断" in text
+    assert "drawdown_abs_pct: `warning` (value=1.2992%, warning=1.1854%, halt=1.3171%, warning_gap=0.1138%, halt_gap=-0.0179%)" in text
+    assert "## 风险来源拆解" in text
+    assert "consecutive_loss: `available=true`, complete=`true`, rows_available=`true`, reason=`无`, source=`delayed_replay.risk.consecutive_loss`, days=`3`" in text
+    assert "2026-07-24: daily_return=`-0.0315%`, equity=`0.9988`" in text
 
 
 def test_render_daily_brief_failed_missing_run_summary():
@@ -154,6 +210,8 @@ def test_load_run_summary_missing_file_returns_empty():
 def test_public_needs_user_action_covers_required_cases():
     assert needs_user_action({"automation_status": "halt"}) is True
     assert needs_user_action({"automation_status": "failed"}) is True
+    assert needs_user_action({"automation_status": "pending", "automation_blocker_class": "review_now"}) is True
+    assert needs_user_action({"automation_status": "pending", "automation_blocker_class": "wait"}) is False
     assert needs_user_action({"automation_status": "pending", "automation_reason": "workflow_order_safety_breach"}) is True
     assert needs_user_action({"automation_status": "pending", "automation_reason": "subscription_incomplete"}) is True
     assert needs_user_action({"automation_status": "pending", "automation_reason": "kline_coverage_incomplete"}) is False
@@ -306,6 +364,7 @@ def test_render_daily_brief_includes_window_fields():
         "observation_start_date": "2026-04-14",
         "excluded_before_start_count": 12,
         "next_action": "continue_observation",
+        "next_action_class": "continue_observation",
         "promotion_blockers": ["need_17_more_valid_observation_days"],
     }
 
@@ -314,6 +373,64 @@ def test_render_daily_brief_includes_window_fields():
     assert "observation_start_date: `2026-04-14`" in text
     assert "excluded_before_start_count: `12`" in text
     assert "next_action: `continue_observation`" in text
+    assert "next_action_class: `continue_observation`" in text
+
+
+def test_render_daily_brief_includes_operational_bucket_counts():
+    summary = _sample_run_summary()
+    summary["ledger_summary"] = {
+        "available": True,
+        "min_days": 20,
+        "valid_observation_days": 3,
+        "consecutive_valid_days": 2,
+        "ready_to_expand": False,
+        "promotion_blockers": ["need_17_more_valid_observation_days"],
+        "blocking_action_counts": {
+            "rerun_next_session": 1,
+            "wait_for_data": 2,
+        },
+        "operational_bucket_counts": {
+            "data_pending_days": 2,
+            "infra_pending_days": 1,
+            "strategy_risk_halt_days": 1,
+            "trading_session_skipped_days": 1,
+        },
+        "reason_governance_counts": {
+            "data_readiness_gap": 2,
+            "expected_market_or_session": 1,
+            "workflow_safety_halt": 1,
+        },
+        "reason_rationality_verdict": "mixed_action_required",
+        "pareto_summary": {
+            "top3_share_pct": 100.0,
+        },
+    }
+
+    text = render_daily_brief(summary)
+
+    assert "reason_rationality_verdict: `mixed_action_required`" in text
+    assert "pareto_summary.top3_share_pct: `100.0`" in text
+    assert "reason_governance_counts.data_readiness_gap: `2`" in text
+    assert "reason_governance_counts.expected_market_or_session: `1`" in text
+    assert "reason_governance_counts.workflow_safety_halt: `1`" in text
+    assert "operational_bucket_counts.data_pending_days: `2`" in text
+    assert "operational_bucket_counts.infra_pending_days: `1`" in text
+    assert "operational_bucket_counts.strategy_risk_halt_days: `1`" in text
+    assert "operational_bucket_counts.trading_session_skipped_days: `1`" in text
+    assert "blocking_action_counts.rerun_next_session: `1`" in text
+    assert "blocking_action_counts.wait_for_data: `2`" in text
+
+
+def test_render_daily_brief_uses_blocker_class_for_manual_review_signal():
+    summary = _sample_run_summary()
+    summary["automation_reason"] = "historical_db_lag"
+    summary["automation_action_class"] = "investigate_infra"
+    summary["automation_blocker_class"] = "review_now"
+
+    text = render_daily_brief(summary)
+
+    assert "needs_user_action: `true`" in text
+    assert needs_user_action(summary) is True
 
 
 def test_render_daily_brief_missing_window_fields_no_crash():

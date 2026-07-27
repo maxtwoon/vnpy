@@ -8,9 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from declassify_historical_reports import build_banner
+from simnow_20d_aggregate import build_20d_aggregate
 from simnow_action_summary import _record_reason, build_action_summary
+from simnow_halt_metadata import extract_halt_metadata
 from simnow_monitor_config import SIMNOW_MONITOR_CONFIG
-from simnow_observation_rules import is_valid_observation, valid_observation_reason
+from simnow_observation_rules import (
+    environment_observation_reason,
+    is_environment_observation_valid,
+    is_valid_observation,
+    valid_observation_reason,
+)
 from simnow_observation_window import filter_records_by_start, load_observation_start_date
 from simnow_strategy_surface import filter_events_to_window
 
@@ -566,6 +573,9 @@ def make_record(
         record["status"] = "pending"
     else:
         record["status"] = "pass" if consistency.get("matched") else "pending"
+    record["halt"] = extract_halt_metadata(record)
+    record["environment_observation_valid"] = is_environment_observation_valid(record)
+    record["environment_observation_reason"] = environment_observation_reason(record) or ""
     record["valid_observation"] = is_valid_observation(record)
     record["valid_observation_reason"] = valid_observation_reason(record) or ""
     return record
@@ -604,92 +614,24 @@ def read_ledger(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def _count_by(values: list[str]) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for value in values:
-        key = value or "unknown"
-        counts[key] = counts.get(key, 0) + 1
-    return dict(sorted(counts.items()))
-
-
-def _consecutive_clean_days(records: list[dict[str, Any]]) -> int:
-    count = 0
-    for row in reversed(records):
-        if is_valid_observation(row):
-            count += 1
-        else:
-            break
-    return count
-
-
 def build_20d_report(
     records: list[dict[str, Any]],
     min_days: int = 20,
     observation_start_date: str | None = None,
 ) -> dict[str, Any]:
-    all_records = sorted(records, key=lambda x: str(x.get("date", "")))
-    ordered = sorted(filter_records_by_start(all_records, observation_start_date), key=lambda x: str(x.get("date", "")))
-    excluded_before_start_count = len(all_records) - len(ordered)
-    recent = ordered[-min_days:]
-    status_counts = _count_by([str(row.get("status") or "unknown") for row in recent])
-    pass_days = sum(1 for row in recent if row.get("status") == "pass")
-    valid_days = sum(1 for row in recent if is_valid_observation(row))
-    pending_days = sum(1 for row in recent if row.get("status") == "pending")
-    skipped_days = sum(1 for row in recent if row.get("status") == "skipped")
-    matched_days = sum(
-        1
-        for row in recent
-        if row.get("consistency", {}).get("matched") is True
-        and row.get("consistency", {}).get("verified") is True
+    return build_20d_aggregate(
+        records,
+        min_days=min_days,
+        observation_start_date=observation_start_date,
+        matched_day_predicate=lambda row: (
+            row.get("consistency", {}).get("matched") is True
+            and row.get("consistency", {}).get("verified") is True
+        ),
+        halt_day_predicate=lambda row: (
+            row.get("thresholds", {}).get("status") == "halt"
+            or row.get("order_safety", {}).get("status") == "halt"
+        ),
     )
-    halt_days = sum(
-        1
-        for row in recent
-        if row.get("thresholds", {}).get("status") == "halt" or row.get("order_safety", {}).get("status") == "halt"
-    )
-    warning_days = sum(1 for row in recent if row.get("thresholds", {}).get("status") == "warning")
-    last_valid = next((row for row in reversed(ordered) if is_valid_observation(row)), None)
-    clean_streak = _consecutive_clean_days(ordered)
-    blockers = []
-    if valid_days < min_days:
-        blockers.append(f"need_{min_days - valid_days}_more_valid_observation_days")
-    if pending_days:
-        blockers.append("pending_days_present")
-    if skipped_days:
-        blockers.append("skipped_days_present")
-    if pass_days != len(recent):
-        blockers.append("non_pass_days_present")
-    if matched_days != len(recent):
-        blockers.append("consistency_not_fully_matched")
-    if halt_days:
-        blockers.append("halt_threshold_breached")
-    ready = not blockers
-    reason_counts = _count_by([
-        _record_reason(row)
-        for row in recent
-        if row.get("status") in {"pending", "skipped"} or row.get("thresholds", {}).get("status") in {"warning", "halt"}
-    ])
-    return {
-        "required_days": min_days,
-        "observation_start_date": observation_start_date or "",
-        "excluded_before_start_count": excluded_before_start_count,
-        "observed_days": len(recent),
-        "valid_observation_days": valid_days,
-        "status_counts": status_counts,
-        "pass_days": pass_days,
-        "pending_days": pending_days,
-        "skipped_days": skipped_days,
-        "consistency_matched_days": matched_days,
-        "warning_days": warning_days,
-        "halt_days": halt_days,
-        "latest_record_date": str(ordered[-1].get("date")) if ordered else "",
-        "last_valid_observation_date": str(last_valid.get("date")) if last_valid else "",
-        "consecutive_clean_days": clean_streak,
-        "promotion_blockers": blockers,
-        "reason_counts": reason_counts,
-        "ready_to_expand": ready,
-        "records": recent,
-    }
 
 
 RESEARCH_ONLY_BANNER = "Diagnostic only, not a trading recommendation."
@@ -732,10 +674,16 @@ def write_20d_markdown(summary: dict[str, Any], out: Path) -> None:
             lines.append(f"| {reason} | {count} |")
     else:
         lines.append("| none | 0 |")
-    lines.extend(["", "## Action Summary", "", "| date | status | reason | severity | action | counts_for_20d |", "|---|---|---|---|---|---|"])
+    lines.extend([
+        "",
+        "## Action Summary",
+        "",
+        "| date | status | reason | severity | action_class | blocker_class | action | counts_for_20d |",
+        "|---|---|---|---|---|---|---|---|",
+    ])
     for rec in build_action_summary(summary["records"]):
         lines.append(
-            f"| {rec['date']} | {rec['status']} | {rec['reason']} | {rec['severity']} | {rec['action']} | {rec['counts_for_20d']} |"
+            f"| {rec['date']} | {rec['status']} | {rec['reason']} | {rec['severity']} | {rec['action_class']} | {rec['blocker_class']} | {rec['action']} | {rec['counts_for_20d']} |"
         )
     lines.extend([
         "",

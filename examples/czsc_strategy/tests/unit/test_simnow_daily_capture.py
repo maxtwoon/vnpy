@@ -23,6 +23,7 @@ def test_load_contract_map_filters_disabled_and_validates(tmp_path):
     p.write_text(
         """
         {
+          "_meta": {"version": "V1", "effective_date": "2026-07-22"},
           "AP888": {"symbol": "ap610", "exchange": "CZCE", "enabled": true},
           "SC888": {"symbol": "sc2608", "exchange": "INE", "enabled": false}
         }
@@ -64,6 +65,14 @@ def test_build_export_matches_daily_monitor_schema(tmp_path):
         config_path=tmp_path / "cfg.json",
         contract_map_path=tmp_path / "map.json",
         contract_map={"AP888": {"symbol": "ap610", "exchange": "CZCE"}},
+        contract_map_provenance={
+            "path": str(tmp_path / "map.json"),
+            "version": "V1",
+            "effective_date": "2026-07-22",
+            "note": "",
+            "enabled_symbols": ["AP888"],
+            "enabled_count": 1,
+        },
         started_at="2026-06-22T02:00:00+00:00",
         ended_at="2026-06-22T02:05:00+00:00",
         duration_seconds=300,
@@ -74,6 +83,14 @@ def test_build_export_matches_daily_monitor_schema(tmp_path):
     assert payload["meta"]["read_only"] is True
     assert payload["meta"]["orders_sent_by_workflow"] == 0
     assert payload["meta"]["workflow_order_actions"] == []
+    assert payload["meta"]["contract_map_provenance"] == {
+        "path": str(tmp_path / "map.json"),
+        "version": "V1",
+        "effective_date": "2026-07-22",
+        "note": "",
+        "enabled_symbols": ["AP888"],
+        "enabled_count": 1,
+    }
     assert payload["signals"] == []
     assert payload["trades"] == []
     assert payload["positions"] == []

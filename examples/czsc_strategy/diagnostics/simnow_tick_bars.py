@@ -34,7 +34,7 @@ def _minute_text(dt: datetime) -> str:
 def _contract_lookup(contract_map: dict[str, Any]) -> dict[tuple[str, str], str]:
     lookup = {}
     for research_symbol, row in contract_map.items():
-        if not isinstance(row, dict) or not row.get("enabled", True):
+        if str(research_symbol).startswith("_") or not isinstance(row, dict) or not row.get("enabled", True):
             continue
         symbol = str(row.get("symbol") or "").lower()
         exchange = str(row.get("exchange") or "").upper()
@@ -43,12 +43,23 @@ def _contract_lookup(contract_map: dict[str, Any]) -> dict[tuple[str, str], str]
     return lookup
 
 
+def apply_contract_map_override(payload: dict[str, Any], contract_map: dict[str, Any] | None) -> dict[str, Any]:
+    """Return ``payload`` with ``meta.contract_map`` replaced when override provided."""
+    if not contract_map:
+        return payload
+    effective = dict(payload)
+    meta = dict(effective.get("meta") or {})
+    meta["contract_map"] = contract_map
+    effective["meta"] = meta
+    return effective
+
+
 def _expected_symbols(payload: dict[str, Any]) -> list[str]:
     contract_map = payload.get("meta", {}).get("contract_map") or {}
     symbols = [
         str(research_symbol).upper()
         for research_symbol, row in contract_map.items()
-        if isinstance(row, dict) and row.get("enabled", True)
+        if not str(research_symbol).startswith("_") and isinstance(row, dict) and row.get("enabled", True)
     ]
     return sorted(symbols)
 
@@ -411,6 +422,11 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Aggregate SimNow capture ticks into local 1M replay bars.")
     parser.add_argument("--simnow-json", type=Path, required=True)
+    parser.add_argument(
+        "--contract-map-json",
+        type=Path,
+        help="Optional current contract-map JSON used to override payload.meta.contract_map for recompute/backfill.",
+    )
     parser.add_argument("--db-path", type=Path, default=DEFAULT_OUT_DB)
     parser.add_argument("--summary-json", type=Path)
     parser.add_argument("--min-bars-per-symbol", type=int, default=1)
@@ -438,6 +454,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     payload = load_json(args.simnow_json)
+    contract_map_override = load_json(args.contract_map_json) if args.contract_map_json else None
+    payload = apply_contract_map_override(payload, contract_map_override)
     bars = aggregate_ticks_to_1m(payload)
 
     if args.promote:

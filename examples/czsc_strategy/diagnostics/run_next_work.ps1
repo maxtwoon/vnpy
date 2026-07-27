@@ -2,6 +2,7 @@ param(
     [switch]$Preflight,
     [switch]$LiveCapture,
     [switch]$PostProcessOnly,
+    [switch]$RefreshReplay,
     [switch]$SkipReplay,
     [switch]$SkipKlineUpdate,
     [int]$DurationSeconds = 1800,
@@ -83,6 +84,107 @@ function Assert-LiveArtifactExists {
     }
 }
 
+function Assert-NoPendingRiskHaltDecision {
+    param([string]$OutDir)
+
+    $DecisionFiles = Get-ChildItem -LiteralPath $OutDir -Filter "simnow_risk_halt_decision_*.json" -File -ErrorAction SilentlyContinue |
+        Sort-Object Name
+    foreach ($DecisionFile in $DecisionFiles) {
+        $Decision = Get-Content -LiteralPath $DecisionFile.FullName -Raw | ConvertFrom-Json
+        $DecisionStatus = [string]$Decision.decision_status
+        $NextAllowed = $false
+        if ($Decision.PSObject.Properties.Name -contains "next_formal_observation_allowed") {
+            $NextAllowed = [bool]$Decision.next_formal_observation_allowed
+        }
+        if ($DecisionStatus -ne "decided" -or -not $NextAllowed) {
+            throw "pending risk halt decision blocks live capture: $($DecisionFile.FullName). Fill and validate the decision record before starting another live observation."
+        }
+
+        $Errors = [System.Collections.Generic.List[string]]::new()
+        $AllowedDecisions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        if ($Decision.PSObject.Properties.Name -contains "allowed_decisions") {
+            foreach ($Allowed in @($Decision.allowed_decisions)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$Allowed)) {
+                    [void]$AllowedDecisions.Add([string]$Allowed)
+                }
+            }
+        }
+        if ($AllowedDecisions.Count -eq 0) {
+            foreach ($Allowed in @(
+                "keep_halted",
+                "adjust_thresholds_with_documented_rationale",
+                "retire_candidate",
+                "reset_observation_window_after_strategy_change"
+            )) {
+                [void]$AllowedDecisions.Add($Allowed)
+            }
+        }
+
+        $SelectedDecision = [string]$Decision.selected_decision
+        if (-not $AllowedDecisions.Contains($SelectedDecision)) {
+            [void]$Errors.Add("selected_decision_not_allowed")
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$Decision.operator_name)) {
+            [void]$Errors.Add("operator_name_required")
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$Decision.rationale)) {
+            [void]$Errors.Add("rationale_required")
+        }
+        if (-not ($Decision.PSObject.Properties.Name -contains "requires_observation_window_reset") -or $null -eq $Decision.requires_observation_window_reset) {
+            [void]$Errors.Add("requires_observation_window_reset_required")
+        }
+        if ($Errors.Count -gt 0) {
+            throw "invalid risk halt decision blocks live capture: $($DecisionFile.FullName); errors=$([string]::Join(',', $Errors))"
+        }
+    }
+}
+
+function Invoke-ReplaySnapshotRefresh {
+    param(
+        [string]$Date,
+        [string]$ReplayReadinessJson,
+        [string]$ReplayJson,
+        [int]$ReplayTimeoutSeconds
+    )
+
+    Write-Step "Check replay DB readiness"
+    $ReplayReadinessOutput = & python ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py" --date $Date
+    $ReplayReadinessExitCode = $LASTEXITCODE
+    $ReplayReadinessOutput | Set-Content -LiteralPath $ReplayReadinessJson -Encoding UTF8
+    $ReplayReady = $ReplayReadinessExitCode -eq 0
+    if ($ReplayReady) {
+        Invoke-CheckedProcess `
+            -Label "Export same-day replay snapshot" `
+            -FilePath "python" `
+            -Arguments @(
+            ".\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py",
+            "--end", "$Date",
+            "--date", "$Date",
+            "--out-json", "$ReplayJson"
+        ) `
+            -TimeoutSeconds $ReplayTimeoutSeconds
+    } else {
+        Write-Host "Replay DB is not ready for $Date; skipping expensive replay export."
+        $Readiness = Get-Content -LiteralPath $ReplayReadinessJson -Raw | ConvertFrom-Json
+        $ReplayPlaceholder = [ordered]@{
+            signals = @()
+            trades = @()
+            positions = @()
+            risk = @{}
+            meta = [ordered]@{
+                date = $Date
+                replay_available = $false
+                replay_unavailable_reason = "historical_db_lag"
+                latest_db_date = $Readiness.latest_db_date
+                db_path = $Readiness.db_path
+                missing_or_lagged_symbols = $Readiness.missing_or_lagged_symbols
+                table_ranges = $Readiness.table_ranges
+            }
+        }
+        $ReplayPlaceholder | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ReplayJson -Encoding UTF8
+    }
+}
+
 function Assert-KlineCoverageWindow {
     param(
         [bool]$LiveCapture,
@@ -104,7 +206,8 @@ function Get-FormalCapturePlan {
         [bool]$LiveCapture,
         [bool]$SkipKlineUpdate,
         [datetimeoffset]$Now,
-        [int]$MinKlineBarsPerSymbol
+        [int]$MinKlineBarsPerSymbol,
+        [object]$ContractMap = $null
     )
 
     if (-not $LiveCapture -or $SkipKlineUpdate) {
@@ -152,9 +255,105 @@ function Get-FormalCapturePlan {
 
     $WindowStart = $LocalNow.Date + $MatchedSpec.trigger_start
     $WindowEnd = $LocalNow.Date + $MatchedSpec.capture_end
-    $RemainingSeconds = [int][math]::Floor(($WindowEnd - $LocalNow.DateTime).TotalSeconds)
+    $EffectiveWindowEnd = $WindowEnd
+    $SessionKey = "night"
+    if ($MatchedSpec.window_name -like "day_*") {
+        $SessionKey = "day"
+    }
+
+    if ($null -ne $ContractMap) {
+        $Entries = @()
+        if ($ContractMap -is [System.Collections.IDictionary]) {
+            $Entries = $ContractMap.GetEnumerator()
+        } else {
+            $Entries = $ContractMap.PSObject.Properties
+        }
+
+        $EffectiveCutoffRows = [System.Collections.Generic.List[object]]::new()
+        foreach ($Entry in $Entries) {
+            if ($ContractMap -is [System.Collections.IDictionary]) {
+                $Symbol = [string]$Entry.Key
+                $Row = $Entry.Value
+            } else {
+                $Symbol = [string]$Entry.Name
+                $Row = $Entry.Value
+            }
+
+            if ([string]::IsNullOrWhiteSpace($Symbol) -or $null -eq $Row) {
+                continue
+            }
+
+            $Enabled = $false
+            if ($Row -is [System.Collections.IDictionary]) {
+                if ($Row.Contains("enabled")) {
+                    $Enabled = [bool]$Row["enabled"]
+                }
+            } elseif ($Row.PSObject.Properties.Name -contains "enabled") {
+                $Enabled = [bool]$Row.enabled
+            }
+
+            if (-not $Enabled) {
+                continue
+            }
+
+            $CaptureEndMap = $null
+            if ($Row -is [System.Collections.IDictionary]) {
+                if ($Row.Contains("formal_session_capture_end")) {
+                    $CaptureEndMap = $Row["formal_session_capture_end"]
+                }
+            } elseif ($Row.PSObject.Properties.Name -contains "formal_session_capture_end") {
+                $CaptureEndMap = $Row.formal_session_capture_end
+            }
+
+            if ($null -eq $CaptureEndMap) {
+                continue
+            }
+
+            $CutoffText = $null
+            if ($CaptureEndMap -is [System.Collections.IDictionary]) {
+                if ($CaptureEndMap.Contains($MatchedSpec.window_name)) {
+                    $CutoffText = $CaptureEndMap[$MatchedSpec.window_name]
+                } elseif ($CaptureEndMap.Contains($SessionKey)) {
+                    $CutoffText = $CaptureEndMap[$SessionKey]
+                }
+            } else {
+                if ($CaptureEndMap.PSObject.Properties.Name -contains $MatchedSpec.window_name) {
+                    $CutoffText = $CaptureEndMap.$($MatchedSpec.window_name)
+                } elseif ($CaptureEndMap.PSObject.Properties.Name -contains $SessionKey) {
+                    $CutoffText = $CaptureEndMap.$($SessionKey)
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace([string]$CutoffText)) {
+                continue
+            }
+
+            $CutoffTime = [timespan]::Parse([string]$CutoffText)
+            $CutoffDateTime = $LocalNow.Date + $CutoffTime
+            if ($SessionKey -eq "night" -and $CutoffTime -lt $MatchedSpec.trigger_start) {
+                $CutoffDateTime = $CutoffDateTime.AddDays(1)
+            }
+            [void]$EffectiveCutoffRows.Add([pscustomobject]@{
+                symbol = $Symbol
+                cutoff_text = [string]$CutoffText
+                cutoff = $CutoffDateTime
+            })
+        }
+
+        if ($EffectiveCutoffRows.Count -gt 0) {
+            $EarliestCutoff = $EffectiveCutoffRows | Sort-Object cutoff, symbol | Select-Object -First 1
+            if ($EarliestCutoff.cutoff -lt $EffectiveWindowEnd) {
+                $EffectiveWindowEnd = $EarliestCutoff.cutoff
+            }
+        }
+    }
+
+    $RemainingSeconds = [int][math]::Floor(($EffectiveWindowEnd - $LocalNow.DateTime).TotalSeconds)
 
     if ($RemainingSeconds -lt $RequiredSeconds) {
+        if ($EffectiveWindowEnd -lt $WindowEnd -and $null -ne $EarliestCutoff) {
+            throw "Formal observation window rejected: enabled symbol $($EarliestCutoff.symbol) uses an earlier $SessionKey capture cutoff ($($EarliestCutoff.cutoff_text)), leaving only $RemainingSeconds seconds before the effective window close. MinKlineBarsPerSymbol ($MinKlineBarsPerSymbol) requires at least $RequiredSeconds seconds."
+        }
         throw "Formal observation window rejected: remaining window seconds ($RemainingSeconds) are shorter than MinKlineBarsPerSymbol ($MinKlineBarsPerSymbol); require at least $RequiredSeconds seconds before the window close."
     }
 
@@ -162,7 +361,7 @@ function Get-FormalCapturePlan {
         window_name = [string]$MatchedSpec.window_name
         trigger_label = [string]$MatchedSpec.trigger_label
         window_start = ([datetime]$WindowStart).ToString("yyyy-MM-ddTHH:mm:sszzz")
-        window_end = ([datetime]$WindowEnd).ToString("yyyy-MM-ddTHH:mm:sszzz")
+        window_end = ([datetime]$EffectiveWindowEnd).ToString("yyyy-MM-ddTHH:mm:sszzz")
         duration_seconds = $RemainingSeconds
     }
 }
@@ -308,10 +507,11 @@ $ContractMapPath = Join-Path $ScriptPath "simnow_contract_map.json"
 $ContractMap = Get-Content -LiteralPath $ContractMapPath -Raw | ConvertFrom-Json
 
 $FormalCapturePlan = Get-FormalCapturePlan `
-    -LiveCapture $LiveCapture.IsPresent `
+    -LiveCapture ($LiveCapture.IsPresent -and -not $PostProcessOnly.IsPresent) `
     -SkipKlineUpdate $SkipKlineUpdate.IsPresent `
     -Now (Get-Date) `
-    -MinKlineBarsPerSymbol $MinKlineBarsPerSymbol
+    -MinKlineBarsPerSymbol $MinKlineBarsPerSymbol `
+    -ContractMap $ContractMap
 
 if ($null -ne $FormalCapturePlan) {
     $DurationSeconds = [int]$FormalCapturePlan.duration_seconds
@@ -319,6 +519,10 @@ if ($null -ne $FormalCapturePlan) {
 
 if ([string]::IsNullOrWhiteSpace($Date)) {
     $Date = Get-Date -Format "yyyy-MM-dd"
+}
+
+if ($RefreshReplay.IsPresent -and $SkipReplay.IsPresent) {
+    throw "RefreshReplay cannot be combined with SkipReplay."
 }
 
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
@@ -335,10 +539,29 @@ $ReportMd = Join-Path $OutDir "simnow_report_$Date.md"
 $PromotionMd = Join-Path $OutDir "simnow_20d_promotion_decision.md"
 $RunSummaryJson = Join-Path $OutDir "simnow_run_summary_$Date.json"
 $DailyBriefMd = Join-Path $OutDir "simnow_daily_brief_$Date.md"
+$RiskHaltReviewJson = Join-Path $OutDir "simnow_risk_halt_review_$Date.json"
+$RiskHaltReviewMd = Join-Path $OutDir "simnow_risk_halt_review_$Date.md"
+$RiskHaltDecisionJson = Join-Path $OutDir "simnow_risk_halt_decision_$Date.json"
+$RiskHaltDecisionMd = Join-Path $OutDir "simnow_risk_halt_decision_$Date.md"
+$SessionRecordJson = $null
+$SessionReportMd = $null
+$SessionRunSummaryJson = $null
+$SessionDailyBriefMd = $null
 $LedgerSummaryJson = Join-Path $OutDir "simnow_ledger_summary.json"
 $HistoricalDbUpdateJson = Join-Path $OutDir "simnow_historical_db_update_$Date.json"
 $ThresholdsJson = Join-Path $ScriptPath "simnow_risk_thresholds.json"
 $LedgerPath = Join-Path $ScriptPath "simnow_observation_ledger.jsonl"
+
+if ($LiveCapture.IsPresent -and -not $PostProcessOnly.IsPresent) {
+    Assert-NoPendingRiskHaltDecision -OutDir $OutDir
+}
+
+if ($null -ne $FormalCapturePlan) {
+    $SessionRecordJson = Join-Path $OutDir "simnow_record_${Date}_$($FormalCapturePlan.window_name).json"
+    $SessionReportMd = Join-Path $OutDir "simnow_report_${Date}_$($FormalCapturePlan.window_name).md"
+    $SessionRunSummaryJson = Join-Path $OutDir "simnow_run_summary_${Date}_$($FormalCapturePlan.window_name).json"
+    $SessionDailyBriefMd = Join-Path $OutDir "simnow_daily_brief_${Date}_$($FormalCapturePlan.window_name).md"
+}
 
 if ($CaptureTimeoutSeconds -le 0) {
     $CaptureTimeoutSeconds = $DurationSeconds + 180
@@ -357,7 +580,7 @@ Assert-KlineCoverageWindow `
     -MinKlineBarsPerSymbol $MinKlineBarsPerSymbol
 
 Assert-FormalObservationWindow `
-    -LiveCapture $LiveCapture.IsPresent `
+    -LiveCapture ($LiveCapture.IsPresent -and -not $PostProcessOnly.IsPresent) `
     -SkipKlineUpdate $SkipKlineUpdate.IsPresent `
     -Now (Get-Date) `
     -ContractMap $ContractMap
@@ -379,13 +602,28 @@ try {
         "py_compile",
         ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
         ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py",
+        ".\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py",
         ".\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py",
         ".\examples\czsc_strategy\diagnostics\simnow_tick_bars.py",
         ".\examples\czsc_strategy\diagnostics\simnow_strategy_surface.py",
         ".\examples\czsc_strategy\diagnostics\simnow_observation_window.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_20d_aggregate.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_artifact_loader.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_automation_policy.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_halt_metadata.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_reason_governance.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_structured_access.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary_schema.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_daily_brief_default_summary.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_daily_brief_schema.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_daily_brief_sections.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_contract_map_meta.py",
         ".\examples\czsc_strategy\diagnostics\simnow_run_summary.py",
         ".\examples\czsc_strategy\diagnostics\simnow_daily_brief.py",
-        ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py"
+        ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_review.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py",
+        ".\examples\czsc_strategy\diagnostics\simnow_summary_consistency.py"
     )
 } finally {
     Remove-Item -Path $PyCompileCache -Recurse -Force -ErrorAction SilentlyContinue
@@ -400,14 +638,28 @@ Invoke-Checked "Run SimNow workflow unit tests" @(
     ".\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_daily_monitor.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_replay_readiness.py",
+    ".\examples\czsc_strategy\tests\unit\test_export_simnow_replay_snapshot.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_backfill_pending_replays.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_tick_bars.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_strategy_surface.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_20d_aggregate.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_artifact_loader.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_automation_policy.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_helper_boundaries.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_structured_access.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary_schema.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_default_summary.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_schema.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_sections.py",
     ".\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_docs.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_run_summary.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_daily_brief.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_review.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_risk_halt_decision.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_daily_brief_policy_sharing.py",
     ".\examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py",
+    ".\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py",
     "-q"
 )
 
@@ -541,40 +793,11 @@ if ($LiveCapture) {
         }
 
         if (-not $SkipReplay) {
-            Write-Step "Check replay DB readiness"
-            & python ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py" --date $Date > $ReplayReadinessJson
-            $ReplayReady = $LASTEXITCODE -eq 0
-            if ($ReplayReady) {
-                Invoke-CheckedProcess `
-                    -Label "Export same-day replay snapshot" `
-                    -FilePath "python" `
-                    -Arguments @(
-                    ".\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py",
-                    "--end", "$Date",
-                    "--date", "$Date",
-                    "--out-json", "$ReplayJson"
-                ) `
-                    -TimeoutSeconds $ReplayTimeoutSeconds
-            } else {
-                Write-Host "Replay DB is not ready for $Date; skipping expensive replay export."
-                $Readiness = Get-Content -LiteralPath $ReplayReadinessJson -Raw | ConvertFrom-Json
-                $ReplayPlaceholder = [ordered]@{
-                    signals = @()
-                    trades = @()
-                    positions = @()
-                    risk = @{}
-                    meta = [ordered]@{
-                        date = $Date
-                        replay_available = $false
-                        replay_unavailable_reason = "historical_db_lag"
-                        latest_db_date = $Readiness.latest_db_date
-                        db_path = $Readiness.db_path
-                        missing_or_lagged_symbols = $Readiness.missing_or_lagged_symbols
-                        table_ranges = $Readiness.table_ranges
-                    }
-                }
-                $ReplayPlaceholder | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ReplayJson -Encoding UTF8
-            }
+            Invoke-ReplaySnapshotRefresh `
+                -Date $Date `
+                -ReplayReadinessJson $ReplayReadinessJson `
+                -ReplayJson $ReplayJson `
+                -ReplayTimeoutSeconds $ReplayTimeoutSeconds
         }
     } else {
         Write-Step "Resume live post-processing from existing artifacts"
@@ -582,7 +805,13 @@ if ($LiveCapture) {
         if (-not $SkipKlineUpdate) {
             Assert-LiveArtifactExists -Path $KlineSummaryJson -Label "kline summary JSON"
         }
-        if (-not $SkipReplay) {
+        if ($RefreshReplay.IsPresent -and -not $SkipReplay.IsPresent) {
+            Invoke-ReplaySnapshotRefresh `
+                -Date $Date `
+                -ReplayReadinessJson $ReplayReadinessJson `
+                -ReplayJson $ReplayJson `
+                -ReplayTimeoutSeconds $ReplayTimeoutSeconds
+        } elseif (-not $SkipReplay) {
             Assert-LiveArtifactExists -Path $ReplayJson -Label "replay JSON"
         }
     }
@@ -651,6 +880,64 @@ if ($LiveCapture) {
         throw "Daily brief generation failed with exit code $LASTEXITCODE"
     }
 
+    Write-Step "Generate risk halt review pack"
+    $RiskHaltReviewArgs = @(
+        ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_review.py",
+        "--date", $Date,
+        "--run-summary", $RunSummaryJson,
+        "--out-json", $RiskHaltReviewJson,
+        "--out-md", $RiskHaltReviewMd
+    )
+    & python @RiskHaltReviewArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Risk halt review generation failed with exit code $LASTEXITCODE"
+    }
+
+    Write-Step "Generate risk halt decision template"
+    $RiskHaltDecisionArgs = @(
+        ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py",
+        "--date", $Date,
+        "--review-json", $RiskHaltReviewJson,
+        "--out-json", $RiskHaltDecisionJson,
+        "--out-md", $RiskHaltDecisionMd
+    )
+    & python @RiskHaltDecisionArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Risk halt decision template generation failed with exit code $LASTEXITCODE"
+    }
+
+    Write-Step "Mirror session-scoped artifacts"
+    if ($null -ne $SessionRecordJson) {
+        Copy-Item -LiteralPath $RecordJson -Destination $SessionRecordJson -Force
+    }
+    if ($null -ne $SessionReportMd) {
+        Copy-Item -LiteralPath $ReportMd -Destination $SessionReportMd -Force
+    }
+    if ($null -ne $SessionRunSummaryJson) {
+        Copy-Item -LiteralPath $RunSummaryJson -Destination $SessionRunSummaryJson -Force
+    }
+    if ($null -ne $SessionDailyBriefMd) {
+        Copy-Item -LiteralPath $DailyBriefMd -Destination $SessionDailyBriefMd -Force
+    }
+
+    Write-Step "Validate summary consistency"
+    $ConsistencyArgs = @(
+        ".\examples\czsc_strategy\diagnostics\simnow_summary_consistency.py",
+        "--date", $Date,
+        "--run-summary", $RunSummaryJson,
+        "--record-json", $RecordJson,
+        "--ledger-summary", $LedgerSummaryJson,
+        "--daily-brief", $DailyBriefMd,
+        "--report-md", $ReportMd
+    )
+    if ((-not $SkipKlineUpdate) -and (Test-Path -LiteralPath $KlineSummaryJson)) {
+        $ConsistencyArgs += @("--kline-json", $KlineSummaryJson)
+    }
+    & python @ConsistencyArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Summary consistency validation failed with exit code $LASTEXITCODE"
+    }
+
     Write-Step "Live capture workflow complete"
     Write-Host "Capture JSON: $CaptureJson"
     if (Test-Path -LiteralPath $ReplayJson) {
@@ -664,6 +951,10 @@ if ($LiveCapture) {
     Write-Host "Promotion MD: $PromotionMd"
     Write-Host "Run summary JSON: $RunSummaryJson"
     Write-Host "Daily brief MD: $DailyBriefMd"
+    Write-Host "Risk halt review JSON: $RiskHaltReviewJson"
+    Write-Host "Risk halt review MD: $RiskHaltReviewMd"
+    Write-Host "Risk halt decision JSON: $RiskHaltDecisionJson"
+    Write-Host "Risk halt decision MD: $RiskHaltDecisionMd"
     Write-Host "Ledger summary JSON: $LedgerSummaryJson"
     Write-Host "Historical DB update JSON: $HistoricalDbUpdateJson"
     if ($MonitorExitCode -eq 2) {

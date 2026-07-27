@@ -6,6 +6,41 @@ from typing import Any
 REASON_CONSISTENCY_PROVENANCE_UNVERIFIED = "consistency_provenance_unverified"
 
 
+def is_environment_observation_valid(record: dict[str, Any]) -> bool:
+    """Return True when the read-only environment observation gates passed."""
+    return environment_observation_reason(record) is None
+
+
+def environment_observation_reason(record: dict[str, Any]) -> str | None:
+    """Return the first environment gate preventing a usable observation day.
+
+    Unlike ``valid_observation_reason()``, this ignores strategy risk threshold
+    halts so a clean read-only capture can still count as an environment-valid
+    observation even when the candidate is in strategy-level risk stop mode.
+    """
+    subscription = record.get("subscription_coverage") or {}
+    kline = record.get("kline_coverage") or {}
+    consistency = record.get("consistency") or {}
+    safety = record.get("order_safety") or {}
+    skip_reason = str(record.get("skip_reason") or "")
+
+    if skip_reason:
+        return skip_reason
+    if safety.get("status") != "pass":
+        return "order_safety_not_pass"
+    if consistency.get("matched") is not True:
+        return str(consistency.get("reason") or "consistency_not_matched")
+    if consistency.get("verified") is not True:
+        return REASON_CONSISTENCY_PROVENANCE_UNVERIFIED
+    if subscription.get("missing_symbols"):
+        return "subscription_missing_symbols"
+    if kline.get("missing_symbols"):
+        return "kline_missing_symbols"
+    if kline.get("short_symbols"):
+        return "kline_short_symbols"
+    return None
+
+
 def is_valid_observation(record: dict[str, Any]) -> bool:
     """Return True only for a day eligible for the 20-day SimNow promotion count."""
     return valid_observation_reason(record) is None

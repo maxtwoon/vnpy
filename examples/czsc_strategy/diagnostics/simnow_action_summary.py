@@ -67,23 +67,59 @@ def _pass_gaps(record: dict[str, Any]) -> list[str]:
     return gaps
 
 
+def _classify_pending_action(reason: str) -> tuple[str, str]:
+    if reason in {
+        "historical_db_lag",
+        "kline_coverage_incomplete",
+        "kline_coverage_too_short",
+        "simnow_or_replay_export_missing",
+    }:
+        return "wait_for_data", "wait"
+    if reason in {
+        "subscription_incomplete",
+        "event_surface_mismatch",
+        "no_captured_session_data_only_replay_derived",
+    }:
+        return "investigate_infra", "review_now"
+    return "resolve_observation_gaps", "review_now"
+
+
+def _classify_skipped_action(reason: str) -> tuple[str, str]:
+    if reason in {
+        "simnow_no_ticks",
+        "simnow_no_snapshot",
+        "ctp_disconnect_097_no_snapshot",
+    }:
+        return "rerun_next_session", "wait"
+    return "rerun_next_session", "wait"
+
+
+def _classify_halt_action(reason: str) -> tuple[str, str]:
+    if reason == "workflow_order_safety_breach":
+        return "manual_review_required", "review_now"
+    return "manual_review_required", "review_now"
+
+
 def action_recommendation(record: dict[str, Any]) -> dict[str, Any]:
     """Return a human-readable action recommendation for a single daily record."""
     status = str(record.get("status") or "unknown")
     reason = _record_reason(record)
     counts = bool(record.get("valid_observation"))
+
     if status == "skipped":
         severity = "info"
+        action_class, blocker_class = _classify_skipped_action(reason)
         if reason == "simnow_no_ticks":
             action = "可能是节假日、非交易时段或无行情；建议下一个有效交易时段重跑。"
         elif reason == "ctp_disconnect_097_no_snapshot":
-            action = "CTP 连接失败；建议检查 SimNow 服务、网络、账号状态。"
+            action = "CTP 连接失败；建议检查 SimNow 服务、网络、账户状态。"
         elif reason == "simnow_no_snapshot":
             action = "无有效快照；建议检查交易时段和连接日志。"
         else:
             action = "当日未产生有效市场数据；建议检查交易时段和连接日志。"
     elif status == "pending":
         severity = "medium"
+        action_class, blocker_class = _classify_pending_action(reason)
         if reason == "historical_db_lag":
             action = "历史 DB 未覆盖当天；建议等待或执行 backfill。"
         elif reason == "event_surface_mismatch":
@@ -113,6 +149,7 @@ def action_recommendation(record: dict[str, Any]) -> dict[str, Any]:
             action = "观察条件未满足；建议查看详细日志。"
     elif status == "halt":
         severity = "critical"
+        action_class, blocker_class = _classify_halt_action(reason)
         if reason == "workflow_order_safety_breach":
             action = "观察流程疑似下单，必须停止观察并人工审查。"
         else:
@@ -123,20 +160,29 @@ def action_recommendation(record: dict[str, Any]) -> dict[str, Any]:
     elif status == "pass":
         if counts:
             severity = "ok"
+            action_class = "counts_for_20d"
+            blocker_class = "none"
             action = "计入 20 日有效观察。"
         else:
             severity = "warning"
+            action_class = "resolve_observation_gaps"
+            blocker_class = "review_now"
             gaps = _pass_gaps(record)
             action = "status=pass 但仍有 gate 未满足：" + "; ".join(gaps) + "。"
     else:
         severity = "unknown"
-        action = "未知状态；建议人工复查。"
+        action_class = "unknown"
+        blocker_class = "review_now"
+        action = "未知状态；建议人工复核。"
+
     return {
         "date": str(record.get("date") or ""),
         "status": status,
         "reason": reason,
         "severity": severity,
         "action": action,
+        "action_class": action_class,
+        "blocker_class": blocker_class,
         "counts_for_20d": counts,
     }
 

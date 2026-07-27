@@ -8,13 +8,29 @@ def _prompt_text() -> str:
     return (DIAG / "AUTOMATION_PROMPT.md").read_text(encoding="utf-8")
 
 
-def test_automation_prompt_uses_observation_duration_not_smoke_for_daily_run():
+def test_automation_prompt_uses_formal_window_duration_not_fixed_daily_duration():
     text = _prompt_text()
 
-    assert "-DurationSeconds 1800" in text
+    formal_command = (
+        "powershell -ExecutionPolicy Bypass -File .\\examples\\czsc_strategy\\diagnostics\\run_next_work.ps1 "
+        "-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb"
+    )
+
+    assert formal_command in text
+    assert "-LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30" not in text
     assert "-MinKlineBarsPerSymbol 30" in text
     assert "-DurationSeconds 300 -SkipKlineUpdate" in text
-    assert "-DurationSeconds 300\n" not in text
+    assert "09:05" in text
+    assert "13:35" in text
+    assert "21:05" in text
+
+
+def test_automation_prompt_documents_2105_formal_schedule_not_post_close_run():
+    text = _prompt_text()
+
+    assert "北京时间 `21:05`" in text
+    assert "每个交易日" in text
+    assert "15:20" not in text
 
 
 def test_automation_prompt_machine_source_is_run_summary_only():
@@ -106,19 +122,21 @@ def test_automation_prompt_documents_optional_historical_db_update():
     text = _prompt_text()
 
     assert "-UpdateHistoricalDb" in text
-    assert "-LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb" in text
+    assert "-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb" in text
     assert "simnow_historical_db_update_YYYY-MM-DD.json" in text
     assert "historical_db_update.status" in text
     assert "historical_db_update.exit_code" in text
 
 
-def test_automation_prompt_uses_historical_db_update_in_formal_daily_run():
+def test_automation_prompt_uses_auto_formal_window_in_formal_daily_run():
     text = _prompt_text()
 
     assert (
         "powershell -ExecutionPolicy Bypass -File .\\examples\\czsc_strategy\\diagnostics\\run_next_work.ps1 "
-        "-LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb"
+        "-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb"
     ) in text
+    assert "DurationSeconds" in text
+    assert "smoke" in text.lower()
 
 
 def test_automation_prompt_reports_account_contamination_separately():
@@ -136,6 +154,48 @@ def test_acceptance_documents_historical_db_update_gate():
     assert "simnow_historical_db_update_YYYY-MM-DD.json" in text
     assert "historical_db_update" in text
     assert "UpdateHistoricalDb" in text
+
+
+def test_acceptance_documents_risk_halt_review_and_decision_gate():
+    text = (DIAG / "ACCEPTANCE.md").read_text(encoding="utf-8")
+
+    for expected in (
+        "Risk Halt Review and Decision Gate",
+        "simnow_risk_halt_review_YYYY-MM-DD.json",
+        "simnow_risk_halt_review_YYYY-MM-DD.md",
+        "simnow_risk_halt_decision_YYYY-MM-DD.json",
+        "simnow_risk_halt_decision_YYYY-MM-DD.md",
+        "pending_decision",
+        "next_formal_observation_allowed",
+        "operator_name",
+        "rationale",
+        "requires_observation_window_reset",
+    ):
+        assert expected in text
+
+
+def test_next_work_tracks_risk_halt_review_and_live_capture_blocker():
+    text = (DIAG / "NEXT_WORK.md").read_text(encoding="utf-8")
+
+    for expected in (
+        "A36",
+        "A37",
+        "A38",
+        "simnow_risk_halt_review_YYYY-MM-DD.json",
+        "simnow_risk_halt_decision_YYYY-MM-DD.json",
+        "next_formal_observation_allowed",
+        "pending risk halt decision",
+    ):
+        assert expected in text
+
+
+def test_next_work_does_not_describe_formal_run_as_fixed_1800_seconds():
+    text = (DIAG / "NEXT_WORK.md").read_text(encoding="utf-8")
+
+    assert "formal 1800-second observation command" not in text
+    assert "defaults to 1800 seconds" not in text
+    assert "formal auto-window observation command" in text
+    assert "Do not pass a fixed `DurationSeconds`" in text
 
 
 def test_automation_prompt_requires_read_only_no_orders():

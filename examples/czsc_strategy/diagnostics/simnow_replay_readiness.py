@@ -17,7 +17,13 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 from chan_strategy.config import SQLITE_DB_PATH  # noqa: E402
-from diagnostics.backtest_matrix_report import DEFAULT_SYMBOLS  # noqa: E402
+from simnow_contract_map_meta import enabled_symbols as enabled_symbols_from_payload, load_contract_map_payload  # noqa: E402
+
+DEFAULT_CONTRACT_MAP = HERE / "simnow_contract_map.json"
+
+
+def load_enabled_symbols(contract_map_path: Path = DEFAULT_CONTRACT_MAP) -> list[str]:
+    return enabled_symbols_from_payload(load_contract_map_payload(contract_map_path))
 
 
 def table_ranges(db_path: Path, symbols: list[str]) -> dict[str, dict[str, Any]]:
@@ -75,10 +81,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Check whether historical DB can support same-day SimNow replay.")
     parser.add_argument("--db-path", type=Path, default=Path(SQLITE_DB_PATH))
     parser.add_argument("--date", required=True)
-    parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
+    parser.add_argument("--symbols", nargs="+")
     args = parser.parse_args()
 
-    payload = build_readiness(args.db_path, args.date, args.symbols)
+    symbols = args.symbols or load_enabled_symbols()
+    payload = build_readiness(args.db_path, args.date, symbols)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     if not payload["ready"]:
         raise SystemExit(1)

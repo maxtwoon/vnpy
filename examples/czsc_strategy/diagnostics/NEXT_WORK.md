@@ -32,8 +32,8 @@ with 100% consistency between SimNow and replay event surfaces and no risk-thres
 | A8 | DONE | Build SimNow tick-to-1M local kline update | `simnow_tick_bars.py` aggregates captured CTP ticks into `{symbol}_1M_raw` bars and `run_next_work.ps1` writes them before replay readiness |
 | A9 | DONE | Promote kline coverage to a formal daily gate | Daily records store `kline_coverage`; reports show `kline_missing`; incomplete coverage stays `pending` with reason `kline_coverage_incomplete` |
 | A10 | DONE | Add minimum kline coverage threshold | `run_next_work.ps1 -MinKlineBarsPerSymbol` defaults to `30`; reports show `kline_short`; short coverage stays `pending` with reason `kline_coverage_too_short` |
-| A11 | DONE | Reject too-short live captures for observation runs | `run_next_work.ps1` defaults to 1800 seconds and rejects `DurationSeconds < MinKlineBarsPerSymbol * 60` unless `-SkipKlineUpdate` is used |
-| A12 | DONE | Freeze the daily automation prompt | `AUTOMATION_PROMPT.md` documents the official 1800-second observation command and separates 300-second smoke tests |
+| A11 | DONE | Reject too-short explicit live captures for observation runs | `run_next_work.ps1` rejects explicit `DurationSeconds < MinKlineBarsPerSymbol * 60` unless `-SkipKlineUpdate` is used; formal runs compute duration from the active start window |
+| A12 | DONE | Freeze the daily automation prompt | `AUTOMATION_PROMPT.md` documents the formal auto-window observation command and separates 300-second smoke tests |
 | A13 | DONE | Promote subscription completeness to a formal gate | Daily records store `subscription_coverage`; reports show `subscription_missing`; missing subscriptions stay `pending` with reason `subscription_incomplete` |
 | A14 | DONE | Promote read-only order safety to a formal gate | Capture exports declare `meta.read_only=true` and `orders_sent_by_workflow=0`; monitor writes `order_safety` and halts on workflow order actions |
 | A15 | DONE | Add explicit valid-observation counting | Daily records include `valid_observation`; 20-day and promotion reports show `valid_observation_days`, counted only when safety, replay, kline, subscription, and risk gates all pass |
@@ -55,6 +55,9 @@ with 100% consistency between SimNow and replay event surfaces and no risk-thres
 | A32 | DONE | Wire real project inputs into audit issue diagnostics | `audit_issue_diagnostics.py` now auto-collects cost inputs from `chan_strategy` config/engine/position defaults, stop-loss pairs and signal records from diagnostics JSON, and continuous-contract evidence from diagnostics filenames; M1 and H2 are now quantified on real project data |
 | A34 | DONE | Restart formal 20-day observation window from 2026-07-14 | `simnow_observation_window.json` defines `observation_start_date=2026-07-14`; ledger summary, 20-day report, and promotion decision preserve older ledger rows but exclude them from the new 20-day progress |
 | A35 | DONE | Add optional historical DB auto-update to the read-only observation wrapper | `run_next_work.ps1 -LiveCapture -UpdateHistoricalDb` runs the configured DB update before capture, writes `simnow_historical_db_update_YYYY-MM-DD.json`, and run summary / daily brief expose `historical_db_update` status |
+| A36 | DONE | Add risk-halt manual review pack | `simnow_risk_halt_review.py` reads `simnow_run_summary_YYYY-MM-DD.json` and writes `simnow_risk_halt_review_YYYY-MM-DD.json` / `.md` with automation status, safety snapshot, threshold diagnostics, and risk-source breakdown |
+| A37 | DONE | Add risk-halt decision record template and validator | `simnow_risk_halt_decision.py` writes `simnow_risk_halt_decision_YYYY-MM-DD.json` / `.md`; defaults to `pending_decision`, requires a complete signed decision, and keeps `next_formal_observation_allowed=false` until reviewed |
+| A38 | DONE | Block live capture while a risk-halt decision is pending | `run_next_work.ps1 -LiveCapture` scans prior `simnow_risk_halt_decision_*.json` files and rejects live capture before SimNow connection when any pending risk halt decision is incomplete, invalid, or not explicitly allowed |
 
 ## Commands
 
@@ -67,13 +70,18 @@ powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\ru
 Read-only live capture for a valid observation attempt:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
 ```
+
+Formal live capture must start inside one of the allowed Asia/Shanghai windows:
+`09:05`, `13:35`, or `21:05`. Do not pass a fixed `DurationSeconds` for a formal
+observation; the wrapper computes the capture length from the current formal
+window to its close.
 
 Read-only live capture with the formal historical replay DB update skipped:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -SkipHistoricalDbUpdate
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -SkipHistoricalDbUpdate
 ```
 
 Short read-only smoke test that is not eligible for a valid daily observation:
@@ -112,7 +120,7 @@ python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py -
 - Kline coverage is a formal daily gate. A day with missing enabled symbols is not a valid observation day and is not eligible for historical DB backfill unless the missing bars can be produced from captured SimNow ticks.
 - Minimum kline coverage is configurable through `run_next_work.ps1 -MinKlineBarsPerSymbol` and defaults to `30` 1M bars per enabled symbol.
 - `run_next_work.ps1` rejects live capture when `DurationSeconds < MinKlineBarsPerSymbol * 60`, unless `-SkipKlineUpdate` is used for an explicit smoke test.
-- `AUTOMATION_PROMPT.md` is the copy/paste prompt for recurring Codex automation. It uses the formal 1800-second observation command and keeps 300-second runs as non-observation smoke tests.
+- `AUTOMATION_PROMPT.md` is the copy/paste prompt for recurring Codex automation. It uses the formal auto-window observation command and keeps 300-second runs as non-observation smoke tests.
 - Subscription coverage is a formal daily gate. A day with missing enabled research symbols in `raw.subscribed` remains `pending/subscription_incomplete`.
 - Order safety is a formal hard gate. A capture produced by this workflow must declare `meta.read_only=true` and `meta.orders_sent_by_workflow=0`; explicit workflow order actions halt the day with `workflow_order_safety_breach`.
 - `valid_observation_days` is the official 20-day progress denominator. A row counts only when `status=pass`, replay consistency is matched, thresholds pass, order safety passes, subscriptions are complete, and kline coverage is complete/non-short.
@@ -136,3 +144,9 @@ python .\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py -
 - A34 restarts the formal 20-day observation cycle from `2026-07-14`. Existing ledger rows are preserved as audit evidence, but `simnow_ledger_summary.py`, `simnow_daily_monitor.py`, and `simnow_promotion_decision.py` count only rows on or after the configured `observation_start_date`.
 
 - A35 adds a formal historical replay DB update step to the read-only wrapper. Formal `-LiveCapture` runs now update the configured DB by default before SimNow capture and write `simnow_historical_db_update_YYYY-MM-DD.json`; `-SkipHistoricalDbUpdate` keeps an explicit opt-out path. The run summary and daily brief expose this status, but SimNow remains read-only and no account PnL is used as strategy PnL.
+
+- A36 adds a risk-halt review pack. When `automation_status=halt`, the wrapper writes `simnow_risk_halt_review_YYYY-MM-DD.json` and `.md` so the halt reason, threshold diagnostics, safety snapshot, and delayed-replay risk source are reviewable from read-only artifacts.
+
+- A37 adds a risk-halt decision record. `simnow_risk_halt_decision_YYYY-MM-DD.json` defaults to `decision_status=pending_decision` and `next_formal_observation_allowed=false`; a human must fill a selected decision, operator, rationale, observation-window reset flag, and explicit allow flag before the record validates.
+
+- A38 blocks live capture when any prior `simnow_risk_halt_decision_*.json` remains pending or invalid. This gate runs before SimNow connection and reports `pending risk halt decision`; `-Preflight` and `-PostProcessOnly` remain available for safe validation/repair.

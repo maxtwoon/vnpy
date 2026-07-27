@@ -182,6 +182,44 @@ def _portfolio_daily(rows: list[dict[str, Any]]) -> pd.DataFrame:
     return out
 
 
+def _consecutive_loss_breakdown(daily: pd.DataFrame) -> dict[str, Any]:
+    """Return the max loss streak with the daily rows that compose it."""
+    base = _max_consecutive_losses(daily)
+    end_date = base.get("end_date")
+    days = int(base.get("days", 0) or 0)
+    if not end_date or days <= 0:
+        return {
+            **base,
+            "start_date": None,
+            "rows": [],
+        }
+
+    matching_positions = [i for i, index_date in enumerate(daily.index) if str(index_date) == str(end_date)]
+    if not matching_positions:
+        return {
+            **base,
+            "start_date": None,
+            "rows": [],
+        }
+
+    end_pos = matching_positions[-1]
+    start_pos = max(0, end_pos - days + 1)
+    streak = daily.iloc[start_pos : end_pos + 1]
+    rows = [
+        {
+            "date": str(date),
+            "daily_return_pct": float(row["daily_return"]) * 100,
+            "equity": float(row["equity"]),
+        }
+        for date, row in streak.iterrows()
+    ]
+    return {
+        **base,
+        "start_date": rows[0]["date"] if rows else None,
+        "rows": rows,
+    }
+
+
 def _risk_for_day(daily: pd.DataFrame, trades: list[dict[str, Any]], day: datetime.date) -> dict[str, Any]:
     if daily.empty or day not in daily.index:
         return {}
@@ -196,7 +234,7 @@ def _risk_for_day(daily: pd.DataFrame, trades: list[dict[str, Any]], day: dateti
         "long_exposure": float(day_row.get("long_exposure", 0.0)),
         "short_exposure": float(day_row.get("short_exposure", 0.0)),
         "both_long_short_symbols": int(day_row.get("both_long_short_symbols", 0)),
-        "consecutive_loss": _max_consecutive_losses(upto),
+        "consecutive_loss": _consecutive_loss_breakdown(upto),
         "symbol_concentration": _concentration(trades, "symbol"),
         "strategy_concentration": _concentration(trades, "strategy"),
     }

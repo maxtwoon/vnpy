@@ -16,14 +16,15 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 from chan_strategy.config import SQLITE_DB_PATH  # noqa: E402
-from diagnostics.backtest_matrix_report import DEFAULT_SYMBOLS  # noqa: E402
+from simnow_contract_map_meta import contract_map_provenance  # noqa: E402
 from simnow_daily_monitor import DEFAULT_LEDGER, read_ledger, write_json  # noqa: E402
-from simnow_replay_readiness import build_readiness  # noqa: E402
+from simnow_replay_readiness import DEFAULT_CONTRACT_MAP, build_readiness, load_enabled_symbols  # noqa: E402
 
 
 DEFAULT_PLAN = HERE / "simnow_backfill_plan.json"
 DEFAULT_THRESHOLDS = HERE / "simnow_risk_thresholds.json"
 DEFAULT_PROMOTION_REPORT = HERE / "simnow_20d_promotion_decision.md"
+DEFAULT_LEDGER_SUMMARY = HERE / "simnow_ledger_summary.json"
 
 
 def _pending_reason(record: dict[str, Any]) -> str:
@@ -69,10 +70,14 @@ def build_backfill_plan(
     db_path: Path,
     out_dir: Path,
     symbols: list[str],
+    contract_map_path: Path = DEFAULT_CONTRACT_MAP,
     requested_dates: set[str] | None = None,
 ) -> dict[str, Any]:
     records = read_ledger(ledger_path)
     dates = pending_replay_dates(records, requested_dates=requested_dates)
+    provenance = contract_map_provenance(contract_map_path)
+    provenance["enabled_symbols"] = list(symbols)
+    provenance["enabled_count"] = len(symbols)
     rows = []
     for trade_date in dates:
         readiness = build_readiness(db_path, trade_date, symbols)
@@ -100,19 +105,100 @@ def build_backfill_plan(
         "ledger": str(ledger_path),
         "db_path": str(db_path),
         "symbols": symbols,
+        "contract_map_provenance": provenance,
         "pending_historical_db_lag_days": len(rows),
         "rows": rows,
     }
 
 
-def _run_checked(args: list[str]) -> None:
+def resolve_symbols(symbols: list[str] | None, contract_map_path: Path = DEFAULT_CONTRACT_MAP) -> list[str]:
+    """Use explicit symbols when provided, otherwise the current enabled contract set."""
+    if symbols:
+        return list(symbols)
+    return load_enabled_symbols(contract_map_path)
+
+
+def _run_checked(args: list[str], accepted_exit_codes: set[int] | None = None) -> None:
+    accepted_exit_codes = accepted_exit_codes or {0}
     result = subprocess.run(args, cwd=HERE.parents[2], check=False)
-    if result.returncode != 0:
+    if result.returncode not in accepted_exit_codes:
         raise RuntimeError(f"command failed with exit code {result.returncode}: {' '.join(args)}")
+
+
+def _refresh_summary_artifacts(rows: list[dict[str, Any]], ledger_path: Path, promotion_report: Path) -> None:
+    if not rows:
+        return
+
+    out_dir = Path(rows[0]["simnow_json"]).parent
+    ledger_summary = out_dir / DEFAULT_LEDGER_SUMMARY.name
+    _run_checked([
+        sys.executable,
+        str(HERE / "simnow_ledger_summary.py"),
+        "--ledger",
+        str(ledger_path),
+        "--out-json",
+        str(ledger_summary),
+    ])
+    _run_checked([
+        sys.executable,
+        str(HERE / "simnow_promotion_decision.py"),
+        "--ledger",
+        str(ledger_path),
+        "--report-md",
+        str(promotion_report),
+    ])
+    for row in rows:
+        trade_date = row["date"]
+        historical_db_update = out_dir / f"simnow_historical_db_update_{trade_date}.json"
+        run_summary = out_dir / f"simnow_run_summary_{trade_date}.json"
+        daily_brief = out_dir / f"simnow_daily_brief_{trade_date}.md"
+        _run_checked([
+            sys.executable,
+            str(HERE / "simnow_run_summary.py"),
+            "--date",
+            trade_date,
+            "--out-dir",
+            str(out_dir),
+            "--out-json",
+            str(run_summary),
+            "--ledger",
+            str(ledger_path),
+            "--ledger-summary",
+            str(ledger_summary),
+            "--historical-db-update",
+            str(historical_db_update),
+        ])
+        _run_checked([
+            sys.executable,
+            str(HERE / "simnow_daily_brief.py"),
+            "--date",
+            trade_date,
+            "--run-summary",
+            str(run_summary),
+            "--out-md",
+            str(daily_brief),
+        ])
+        _run_checked([
+            sys.executable,
+            str(HERE / "simnow_summary_consistency.py"),
+            "--date",
+            trade_date,
+            "--run-summary",
+            str(run_summary),
+            "--record-json",
+            str(out_dir / f"simnow_record_{trade_date}.json"),
+            "--ledger-summary",
+            str(ledger_summary),
+            "--daily-brief",
+            str(daily_brief),
+            "--report-md",
+            str(out_dir / f"simnow_report_{trade_date}.md"),
+        ])
 
 
 def execute_backfill(plan: dict[str, Any], ledger_path: Path, thresholds_path: Path, promotion_report: Path) -> dict[str, Any]:
     results = []
+    executed_rows: list[dict[str, Any]] = []
     for row in plan["rows"]:
         if row["action"] != "ready_to_backfill":
             results.append({**row, "executed": False})
@@ -145,16 +231,11 @@ def execute_backfill(plan: dict[str, Any], ledger_path: Path, thresholds_path: P
             row["record_json"],
             "--report-md",
             row["report_md"],
-        ])
-        results.append({**row, "action": "backfilled", "executed": True})
-    _run_checked([
-        sys.executable,
-        str(HERE / "simnow_promotion_decision.py"),
-        "--ledger",
-        str(ledger_path),
-        "--report-md",
-        str(promotion_report),
-    ])
+        ], accepted_exit_codes={0, 2})
+        refreshed = {**row, "action": "backfilled", "executed": True}
+        results.append(refreshed)
+        executed_rows.append(refreshed)
+    _refresh_summary_artifacts(executed_rows, ledger_path, promotion_report)
     return {**plan, "rows": results}
 
 
@@ -163,7 +244,8 @@ def main() -> None:
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
     parser.add_argument("--db-path", type=Path, default=Path(SQLITE_DB_PATH))
     parser.add_argument("--out-dir", type=Path, default=HERE)
-    parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
+    parser.add_argument("--symbols", nargs="+")
+    parser.add_argument("--contract-map", type=Path, default=DEFAULT_CONTRACT_MAP)
     parser.add_argument("--date", action="append", default=[])
     parser.add_argument("--out-json", type=Path, default=DEFAULT_PLAN)
     parser.add_argument("--thresholds", type=Path, default=DEFAULT_THRESHOLDS)
@@ -172,11 +254,13 @@ def main() -> None:
     args = parser.parse_args()
 
     requested_dates = set(args.date) if args.date else None
+    symbols = resolve_symbols(args.symbols, args.contract_map)
     plan = build_backfill_plan(
         ledger_path=args.ledger,
         db_path=args.db_path,
         out_dir=args.out_dir,
-        symbols=args.symbols,
+        symbols=symbols,
+        contract_map_path=args.contract_map,
         requested_dates=requested_dates,
     )
     if args.execute:

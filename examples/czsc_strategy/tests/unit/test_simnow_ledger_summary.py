@@ -59,6 +59,15 @@ def _skipped_record(date: str, reason: str) -> dict:
 
 
 def _halt_record(date: str, reason: str) -> dict:
+    halt = {
+        "rule_id": "workflow_order_safety_breach" if reason == "workflow_order_safety_breach" else "threshold_breach",
+        "family": "order_safety" if reason == "workflow_order_safety_breach" else "strategy_risk",
+        "severity": "critical",
+        "trigger_metrics": [] if reason == "workflow_order_safety_breach" else [reason],
+        "explained_cn": "只读观察流程检测到下单动作，必须停止自动化并人工复核。"
+        if reason == "workflow_order_safety_breach"
+        else f"风险阈值触发停线：{reason}。",
+    }
     return {
         "date": date,
         "status": "halt",
@@ -66,6 +75,7 @@ def _halt_record(date: str, reason: str) -> dict:
         "consistency": {"matched": False, "reason": reason},
         "thresholds": {"status": "halt"},
         "order_safety": {"status": "halt"},
+        "halt": halt,
     }
 
 
@@ -119,6 +129,12 @@ def test_mixed_records_counts_and_blockers():
     assert summary["reason_counts"].get("historical_db_lag") == 1
     assert summary["reason_counts"].get("simnow_no_ticks") == 1
     assert summary["reason_counts"].get("workflow_order_safety_breach") == 1
+    assert summary["operational_bucket_counts"] == {
+        "data_pending_days": 1,
+        "safety_halt_days": 1,
+        "trading_session_skipped_days": 1,
+    }
+    assert summary["halt_family_counts"] == {"order_safety": 1}
     blockers = summary["promotion_blockers"]
     assert "need_19_more_valid_observation_days" in blockers
     assert "pending_days_present" in blockers
@@ -159,28 +175,40 @@ def test_latest_action_from_action_summary():
 
     assert "kline_coverage_incomplete" in summary["latest_action"]["reason"]
     assert summary["latest_action"]["action"] != ""
+    assert summary["latest_action"]["action_class"] == "wait_for_data"
+    assert summary["latest_action"]["blocker_class"] == "wait"
+    assert summary["blocking_action_counts"] == {"wait_for_data": 1}
+    assert summary["next_action_class"] == "wait_for_data"
 
 
 def test_next_action_mapping():
     ready = build_ledger_summary([_valid_record(f"2026-06-{i:02d}") for i in range(1, 21)])
     assert ready["next_action"] == "review promotion readiness"
+    assert ready["next_action_class"] == "review_promotion_readiness"
 
     pending = build_ledger_summary([_pending_record("2026-06-20", "historical_db_lag")])
     assert pending["next_action"] == "resolve latest pending reason"
+    assert pending["next_action_class"] == "wait_for_data"
 
     skipped = build_ledger_summary([_skipped_record("2026-06-20", "simnow_no_ticks")])
     assert skipped["next_action"] == "wait for next valid session"
+    assert skipped["next_action_class"] == "rerun_next_session"
 
     halt = build_ledger_summary([_halt_record("2026-06-20", "workflow_order_safety_breach")])
     assert halt["next_action"] == "manual review required"
+    assert halt["next_action_class"] == "manual_review_required"
 
     other = build_ledger_summary([_valid_record("2026-06-20"), _valid_record("2026-06-21")])
     assert other["next_action"] == "continue daily observation"
+    assert other["next_action_class"] == "continue_observation"
 
 
 def test_cli_writes_summary_json(tmp_path):
     ledger_path = tmp_path / "simnow_observation_ledger.jsonl"
-    _write_jsonl(ledger_path, [_pending_record("2026-07-14", "historical_db_lag")])
+    # This CLI invocation does not pass --start-date, so it falls back to the
+    # repo's default simnow_observation_window.json. The record date must stay
+    # on/after that config's observation_start_date or it gets filtered out.
+    _write_jsonl(ledger_path, [_pending_record("2026-07-27", "historical_db_lag")])
     out_path = tmp_path / "simnow_ledger_summary.json"
 
     result = subprocess.run(
@@ -279,3 +307,28 @@ def test_ledger_summary_filters_before_observation_start():
     assert summary["valid_observation_days"] == 1
     assert summary["halt_days"] == 0
     assert summary["latest_date"] == "2026-07-14"
+
+
+def test_operational_buckets_split_data_infra_risk_and_session_causes():
+    records = [
+        _pending_record("2026-06-20", "historical_db_lag"),
+        _pending_record("2026-06-21", "subscription_incomplete"),
+        _pending_record("2026-06-22", "kline_coverage_too_short"),
+        _skipped_record("2026-06-23", "ctp_disconnect_097_no_snapshot"),
+        _halt_record("2026-06-24", "consecutive_loss_abs_pct"),
+        _halt_record("2026-06-25", "workflow_order_safety_breach"),
+    ]
+
+    summary = build_ledger_summary(records)
+
+    assert summary["operational_bucket_counts"] == {
+        "data_pending_days": 2,
+        "infra_pending_days": 1,
+        "safety_halt_days": 1,
+        "strategy_risk_halt_days": 1,
+        "trading_session_skipped_days": 1,
+    }
+    assert summary["halt_family_counts"] == {
+        "order_safety": 1,
+        "strategy_risk": 1,
+    }

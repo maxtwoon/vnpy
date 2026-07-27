@@ -4,7 +4,7 @@
 
 工作区：`D:\repo\vnpy`
 
-建议执行时间：每周一到周五，北京时间 `15:20` 之后。自动化本身不识别交易所节假日；如果当天节假日、非交易时段、SimNow 服务不可用或无有效行情，记录为 `skipped` 或 `pending`，不要当作代码失败。
+建议执行时间：每个交易日，北京时间 `21:05`（Asia/Shanghai）formal 窗口。自动化本身不识别交易所节假日；如果当天节假日、非交易时段、SimNow 服务不可用或无有效行情，记录为 `skipped` 或 `pending`，不要当作代码失败。
 
 ## 安全底线（必须遵守）
 
@@ -36,19 +36,23 @@
 3. 如果预检通过，运行正式只读观察采集：
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
    ```
 
-   This is the default daily acceptance command. It explicitly enables the
-   pre-capture historical replay DB update so the formal run has the best
-   chance to clear same-day replay readiness.
+   This is the default daily acceptance command. Do not pass a fixed
+   `DurationSeconds` for a formal observation; the wrapper computes the capture
+   length from the active formal window to its close. The allowed formal start
+   windows are `09:05`, `13:35`, and `21:05` Asia/Shanghai, each with the
+   wrapper-defined grace period. The command explicitly enables the pre-capture
+   historical replay DB update so the formal run has the best chance to clear
+   same-day replay readiness.
 
    If the historical DB update is already handled by an external scheduled
    task and you need to bypass the wrapper's default formal update behavior,
    use the explicit skip switch:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -DurationSeconds 1800 -MinKlineBarsPerSymbol 30 -SkipHistoricalDbUpdate
+   powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -SkipHistoricalDbUpdate
    ```
 
    Formal live captures now update the historical DB by default unless

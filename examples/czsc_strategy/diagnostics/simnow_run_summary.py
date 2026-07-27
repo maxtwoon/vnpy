@@ -7,6 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from simnow_action_summary import _record_reason
+from simnow_artifact_loader import load_json_dict, load_jsonl_records
+from simnow_automation_policy import (
+    classify_automation_status,
+    operator_explanation_cn,
+    user_action_needed_reason_cn,
+    needs_user_action,
+)
+from simnow_ledger_summary_schema import filter_safe_ledger_summary
 from simnow_observation_window import load_observation_start_date
 from simnow_promotion_decision import decide_promotion
 
@@ -18,48 +26,19 @@ DEFAULT_LEDGER = HERE / "simnow_observation_ledger.jsonl"
 SENSITIVE_KEY_PATTERNS = {"密码", "授权码", "auth_code", "password", "BrokerID", "username", "UserID"}
 SENSITIVE_VALUE_FRAGMENTS = {"setting_masked"}
 
-SAFE_LEDGER_SUMMARY_FIELDS = {
-    "generated_at",
-    "min_days",
-    "observation_start_date",
-    "excluded_before_start_count",
-    "total_rows",
-    "valid_observation_days",
-    "pending_days",
-    "skipped_days",
-    "halt_days",
-    "failed_days",
-    "latest_date",
-    "latest_valid_date",
-    "consecutive_valid_days",
-    "ready_to_expand",
-    "promotion_blockers",
-    "reason_counts",
-    "automation_status_counts",
-    "latest_action",
-    "next_action",
-}
-
-
 def load_json(path: Path) -> dict[str, Any]:
     """Load a JSON file if it exists; otherwise return an empty dict."""
-    if not path or not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+    return load_json_dict(path)
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     """Load a JSONL file if it exists; otherwise return an empty list."""
-    if not path or not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return load_jsonl_records(path)
 
 
 def load_ledger_summary(path: Path) -> dict[str, Any]:
     """Load a ledger summary JSON if it exists; otherwise return an empty dict."""
-    if not path or not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+    return load_json_dict(path)
 
 
 def default_artifact_paths(date: str, out_dir: Path) -> dict[str, Path]:
@@ -68,6 +47,7 @@ def default_artifact_paths(date: str, out_dir: Path) -> dict[str, Path]:
         "capture_json": out_dir / f"simnow_export_{date}.json",
         "kline_json": out_dir / f"simnow_kline_update_{date}.json",
         "replay_json": out_dir / f"simnow_replay_{date}.json",
+        "replay_readiness_json": out_dir / f"simnow_replay_readiness_{date}.json",
         "historical_db_update_json": out_dir / f"simnow_historical_db_update_{date}.json",
         "record_json": out_dir / f"simnow_record_{date}.json",
         "observation_report_md": out_dir / f"simnow_report_{date}.md",
@@ -87,6 +67,36 @@ def extract_capture_summary(capture: dict[str, Any]) -> dict[str, Any]:
         "orders": len(raw.get("orders") or []),
         "trades": len(raw.get("trades") or []),
         "subscribed_count": len(subscribed),
+    }
+
+
+def extract_contract_map_provenance(capture: dict[str, Any]) -> dict[str, Any]:
+    """Summarize which formal contract-map snapshot produced this capture."""
+    meta = capture.get("meta") or {}
+    provenance = meta.get("contract_map_provenance")
+    if isinstance(provenance, dict):
+        return {
+            "path": str(provenance.get("path") or ""),
+            "version": str(provenance.get("version") or ""),
+            "effective_date": str(provenance.get("effective_date") or ""),
+            "note": str(provenance.get("note") or ""),
+            "enabled_symbols": list(provenance.get("enabled_symbols") or []),
+            "enabled_count": int(provenance.get("enabled_count", 0) or 0),
+        }
+
+    contract_map = meta.get("contract_map") or {}
+    enabled_symbols = sorted(
+        str(symbol).upper()
+        for symbol, row in contract_map.items()
+        if not str(symbol).startswith("_") and isinstance(row, dict) and row.get("enabled", True)
+    )
+    return {
+        "path": str(meta.get("contract_map_path") or ""),
+        "version": "",
+        "effective_date": "",
+        "note": "",
+        "enabled_symbols": enabled_symbols,
+        "enabled_count": len(enabled_symbols),
     }
 
 
@@ -194,24 +204,167 @@ def extract_historical_db_update_summary(update: dict[str, Any]) -> dict[str, An
     }
 
 
-def extract_record_summary(record: dict[str, Any]) -> dict[str, Any]:
+def extract_formal_readiness(
+    capture: dict[str, Any],
+    kline: dict[str, Any],
+    historical_db_update: dict[str, Any],
+    replay: dict[str, Any],
+    replay_readiness: dict[str, Any],
+) -> dict[str, Any]:
+    """Summarize whether formal-observation prerequisites were satisfied."""
+    meta = capture.get("meta") or {}
+    strategy_surface = meta.get("strategy_surface") or {}
+    replay_meta = replay.get("meta") or {}
+
+    historical_status = str(historical_db_update.get("status") or "skipped")
+    historical_ready = historical_status == "passed"
+
+    if replay_readiness:
+        replay_ready = bool(replay_readiness.get("ready"))
+        replay_latest_db_date = str(replay_readiness.get("latest_db_date") or "")
+        replay_missing_or_lagged_symbols = list(replay_readiness.get("missing_or_lagged_symbols") or [])
+    else:
+        replay_ready = bool(replay_meta.get("replay_available"))
+        replay_latest_db_date = str(replay_meta.get("latest_db_date") or "")
+        replay_missing_or_lagged_symbols = list(replay_meta.get("missing_or_lagged_symbols") or [])
+
+    kline_missing_symbols = list(kline.get("missing_symbols") or [])
+    kline_short_symbols = list(kline.get("short_symbols") or [])
+    kline_ready = not kline_missing_symbols and not kline_short_symbols
+
+    blocking_reasons: list[str] = []
+    if not historical_ready:
+        blocking_reasons.append("historical_db_update_not_passed")
+    if not replay_ready:
+        blocking_reasons.append("replay_db_not_ready")
+    if kline_missing_symbols:
+        blocking_reasons.append("kline_missing_symbols")
+    if kline_short_symbols:
+        blocking_reasons.append("kline_short_symbols")
+
+    return {
+        "capture_started_at": str(meta.get("started_at") or ""),
+        "capture_ended_at": str(meta.get("ended_at") or ""),
+        "capture_duration_seconds": int(meta.get("duration_seconds", 0) or 0),
+        "strategy_window_start": str(strategy_surface.get("window_start") or ""),
+        "strategy_window_end": str(strategy_surface.get("window_end") or ""),
+        "read_only_declared": meta.get("read_only") is True,
+        "historical_db_update_status": historical_status,
+        "historical_db_ready": historical_ready,
+        "replay_db_ready": replay_ready,
+        "replay_latest_db_date": replay_latest_db_date,
+        "replay_missing_or_lagged_symbols": replay_missing_or_lagged_symbols,
+        "kline_coverage_ready": kline_ready,
+        "kline_missing_symbols": kline_missing_symbols,
+        "kline_short_symbols": kline_short_symbols,
+        "min_bars_per_symbol": kline.get("min_bars_per_symbol"),
+        "overall_ready": not blocking_reasons,
+        "blocking_reasons": blocking_reasons,
+    }
+
+
+def _resolve_environment_observation(record: dict[str, Any], kline: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Resolve environment-observation validity, with fallback for legacy records."""
+    if "environment_observation_valid" in record or "environment_observation_reason" in record:
+        return {
+            "valid": bool(record.get("environment_observation_valid")),
+            "reason": str(record.get("environment_observation_reason") or ""),
+        }
+
+    consistency = record.get("consistency") or {}
+    safety = record.get("order_safety") or {}
+    subscription = record.get("subscription_coverage") or {}
+    kline = kline or record.get("kline_coverage") or {}
+    skip_reason = str(record.get("skip_reason") or "")
+
+    if skip_reason:
+        return {"valid": False, "reason": skip_reason}
+    if safety.get("status") != "pass":
+        return {"valid": False, "reason": "order_safety_not_pass"}
+    if subscription.get("missing_symbols"):
+        return {"valid": False, "reason": "subscription_missing_symbols"}
+    if kline.get("missing_symbols"):
+        return {"valid": False, "reason": "kline_missing_symbols"}
+    if kline.get("short_symbols"):
+        return {"valid": False, "reason": "kline_short_symbols"}
+    if consistency.get("matched") is not True:
+        return {"valid": False, "reason": str(consistency.get("reason") or "consistency_not_matched")}
+    return {"valid": True, "reason": ""}
+
+
+def extract_record_summary(record: dict[str, Any], kline: dict[str, Any] | None = None) -> dict[str, Any]:
     """Summarize the daily monitor record JSON."""
     threshold_rows = []
     for row in (record.get("thresholds", {}).get("rows") or []):
-        threshold_rows.append({
+        normalized_row = {
             "metric": row.get("metric", ""),
             "value": row.get("value"),
             "level": row.get("level", ""),
             "unit": row.get("unit", ""),
-        })
+        }
+        for key in ("warning", "halt", "baseline"):
+            if key in row and row.get(key) is not None:
+                normalized_row[key] = row.get(key)
+        threshold_rows.append(normalized_row)
+    environment = _resolve_environment_observation(record, kline)
+    halt = record.get("halt") or {}
     return {
         "status": record.get("status", ""),
         "valid_observation": bool(record.get("valid_observation")),
+        "environment_observation_valid": environment["valid"],
+        "environment_observation_reason": environment["reason"],
         "reason": _record_reason(record),
         "threshold_status": record.get("thresholds", {}).get("status", ""),
         "order_safety_status": record.get("order_safety", {}).get("status", ""),
         "consistency_matched": bool(record.get("consistency", {}).get("matched")),
         "threshold_rows": threshold_rows,
+        "threshold_diagnostics": build_threshold_diagnostics(threshold_rows),
+        "halt_rule_id": str(halt.get("rule_id") or ""),
+        "halt_family": str(halt.get("family") or ""),
+        "halt_severity": str(halt.get("severity") or ""),
+        "halt_trigger_metrics": list(halt.get("trigger_metrics") or []),
+        "halt_explained_cn": str(halt.get("explained_cn") or ""),
+    }
+
+
+def build_threshold_diagnostics(threshold_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Surface threshold gaps for warning/halt rows to aid manual risk review."""
+    diagnostics: list[dict[str, Any]] = []
+    for row in threshold_rows:
+        level = str(row.get("level") or "")
+        if level not in {"warning", "halt"}:
+            continue
+        value = float(row.get("value", 0.0) or 0.0)
+        warning = float(row.get("warning", 0.0) or 0.0)
+        halt = float(row.get("halt", 0.0) or 0.0)
+        baseline = float(row.get("baseline", 0.0) or 0.0)
+        warning_gap = value - warning
+        halt_gap = value - halt
+        warning_gap_pct_of_halt = 0.0
+        if halt:
+            warning_gap_pct_of_halt = warning_gap / halt
+        diagnostics.append({
+            "metric": str(row.get("metric") or ""),
+            "level": level,
+            "value": value,
+            "warning": warning,
+            "halt": halt,
+            "baseline": baseline,
+            "unit": str(row.get("unit") or ""),
+            "warning_gap": warning_gap,
+            "halt_gap": halt_gap,
+            "warning_gap_pct_of_halt": warning_gap_pct_of_halt,
+        })
+    return diagnostics
+
+
+def extract_environment_observation_summary(record: dict[str, Any], kline: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Summarize whether the read-only environment observation itself succeeded."""
+    environment = _resolve_environment_observation(record, kline)
+    return {
+        "valid": environment["valid"],
+        "reason": environment["reason"],
+        "counts_for_20d": bool(record.get("valid_observation")),
     }
 
 
@@ -233,63 +386,43 @@ def extract_delayed_replay_summary(replay: dict[str, Any], record: dict[str, Any
     }
 
 
-def classify_automation_status(summary: dict[str, Any]) -> dict[str, Any]:
-    """Derive the external automation status from a run summary.
-
-    Returns a dict with:
-      - automation_status: valid | skipped | pending | halt | failed
-      - automation_exit_code: 0 | 10 | 20 | 30 | 40
-      - automation_reason: the underlying record reason, if available
-      - automation_action: a short English recommendation for the automation platform
-    """
-    record = summary.get("record") or {}
-    status = str(record.get("status") or "")
-    reason = str(record.get("reason") or "")
-    valid = bool(record.get("valid_observation"))
-
-    if status == "pass" and valid:
-        return {
-            "automation_status": "valid",
-            "automation_exit_code": 0,
-            "automation_reason": reason,
-            "automation_action": "counts_for_20d",
+def extract_risk_source_breakdown(replay: dict[str, Any]) -> dict[str, Any]:
+    """Expose compact replay risk source details needed for manual review."""
+    risk = replay.get("risk") or {}
+    consecutive = risk.get("consecutive_loss") or risk.get("max_consecutive_loss") or {}
+    rows = [
+        {
+            "date": str(row.get("date") or ""),
+            "daily_return_pct": float(row.get("daily_return_pct", 0.0) or 0.0),
+            "equity": float(row.get("equity", 0.0) or 0.0),
         }
-    if status == "skipped":
-        return {
-            "automation_status": "skipped",
-            "automation_exit_code": 10,
-            "automation_reason": reason,
-            "automation_action": "no valid market data / rerun next valid session",
-        }
-    if status == "pending":
-        return {
-            "automation_status": "pending",
-            "automation_exit_code": 20,
-            "automation_reason": reason,
-            "automation_action": "resolve pending gate before counting",
-        }
-    if status == "halt":
-        return {
-            "automation_status": "halt",
-            "automation_exit_code": 30,
-            "automation_reason": reason,
-            "automation_action": "stop automation and review manually",
-        }
+        for row in consecutive.get("rows") or []
+    ]
+    days = int(consecutive.get("days", 0) or 0)
+    cumulative_return_pct = float(consecutive.get("cumulative_return_pct", 0.0) or 0.0)
+    available = bool(days or rows)
+    rows_available = bool(rows)
+    complete = bool(available and (days == 0 or len(rows) == days))
+    reason = ""
+    if available and not rows_available:
+        reason = "missing_consecutive_loss_rows"
+    elif available and not complete:
+        reason = "incomplete_consecutive_loss_rows"
     return {
-        "automation_status": "failed",
-        "automation_exit_code": 40,
-        "automation_reason": reason or "missing critical artifact or unknown status",
-        "automation_action": "missing critical artifact or unknown status",
+        "consecutive_loss": {
+            "available": available,
+            "complete": complete,
+            "rows_available": rows_available,
+            "reason": reason,
+            "source": "delayed_replay.risk.consecutive_loss",
+            "days": days,
+            "cumulative_return_pct": cumulative_return_pct,
+            "abs_cumulative_return_pct": abs(cumulative_return_pct),
+            "start_date": str(consecutive.get("start_date") or ""),
+            "end_date": str(consecutive.get("end_date") or ""),
+            "rows": rows,
+        }
     }
-
-
-def _safe_ledger_summary(ledger_summary: dict[str, Any]) -> dict[str, Any]:
-    """Return only the safe aggregate fields from a ledger summary."""
-    safe: dict[str, Any] = {"available": True}
-    for key in SAFE_LEDGER_SUMMARY_FIELDS:
-        if key in ledger_summary:
-            safe[key] = ledger_summary[key]
-    return safe
 
 
 def build_run_summary(
@@ -308,11 +441,12 @@ def build_run_summary(
     kline = load_json(files.get("kline_json"))
     historical_db_update = load_json(files.get("historical_db_update_json"))
     replay = load_json(files.get("replay_json"))
+    replay_readiness = load_json(files.get("replay_readiness_json"))
     record = load_json(files.get("record_json"))
     promotion = promotion_summary or {}
 
     if ledger_summary:
-        ledger_section: dict[str, Any] = _safe_ledger_summary(ledger_summary)
+        ledger_section: dict[str, Any] = filter_safe_ledger_summary(ledger_summary)
     else:
         ledger_section = {"available": False, "reason": "missing_ledger_summary"}
 
@@ -321,12 +455,22 @@ def build_run_summary(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "files": {name: str(path) for name, path in files.items()},
         "capture": extract_capture_summary(capture),
+        "contract_map_provenance": extract_contract_map_provenance(capture),
         "environment_capture": extract_environment_capture(capture),
         "account_contamination": extract_account_contamination(capture),
         "historical_db_update": extract_historical_db_update_summary(historical_db_update),
+        "formal_readiness": extract_formal_readiness(
+            capture,
+            kline,
+            historical_db_update,
+            replay,
+            replay_readiness,
+        ),
         "kline": extract_kline_summary(kline),
-        "record": extract_record_summary(record),
+        "record": extract_record_summary(record, kline),
+        "environment_observation": extract_environment_observation_summary(record, kline),
         "delayed_replay": extract_delayed_replay_summary(replay, record),
+        "risk_source_breakdown": extract_risk_source_breakdown(replay),
         "promotion": {
             "ready_to_expand": bool(promotion.get("ready_to_expand")),
             "valid_observation_days": int(promotion.get("valid_observation_days", 0)),
@@ -334,12 +478,16 @@ def build_run_summary(
             "observation_start_date": promotion.get("observation_start_date", ""),
             "excluded_before_start_count": int(promotion.get("excluded_before_start_count", 0)),
             "promotion_blockers": list(promotion.get("promotion_blockers") or []),
+            "blocking_action_counts": dict(promotion.get("blocking_action_counts") or {}),
             "top_blocking_actions": list(promotion.get("top_blocking_actions") or []),
         },
         "ledger_summary": ledger_section,
     }
     automation = classify_automation_status(core)
     summary = {**automation, **core}
+    summary["operator_explanation_cn"] = operator_explanation_cn(summary)
+    summary["user_action_needed"] = needs_user_action(summary)
+    summary["user_action_needed_reason_cn"] = user_action_needed_reason_cn(summary)
 
     sensitive = contains_sensitive_data(summary)
     if sensitive:

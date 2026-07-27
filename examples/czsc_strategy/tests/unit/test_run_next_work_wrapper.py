@@ -1,10 +1,29 @@
 from pathlib import Path
+import json
+import shutil
 import subprocess
 import tempfile
+
+import pytest
 
 
 DIAG = Path(__file__).resolve().parents[2] / "diagnostics"
 RUN_NEXT_WORK = DIAG / "run_next_work.ps1"
+
+
+def test_run_powershell_script_skips_when_powershell_is_unavailable(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+
+    with pytest.raises(pytest.skip.Exception):
+        _run_powershell_script("Write-Host 'unreachable'")
+
+
+def _powershell_executable() -> str:
+    for name in ("powershell", "pwsh"):
+        executable = shutil.which(name)
+        if executable:
+            return executable
+    pytest.skip("PowerShell executable is not available in this test environment")
 
 
 def _extract_function(script_text: str, name: str) -> str:
@@ -29,7 +48,7 @@ def _run_powershell_script(script_text: str) -> subprocess.CompletedProcess[byte
         handle.write(script_text)
         path = handle.name
     return subprocess.run(
-        ["powershell", "-NoProfile", "-File", path],
+        [_powershell_executable(), "-NoProfile", "-File", path],
         capture_output=True,
         text=False,
         timeout=15,
@@ -342,6 +361,79 @@ def test_formal_capture_plan_rejects_when_remaining_time_is_shorter_than_min_bar
     assert "remaining" in output
 
 
+def test_formal_capture_plan_rejects_when_symbol_specific_session_end_is_too_soon():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        (
+            "$contractMap = @{ "
+            "A888 = @{ enabled = $true; formal_session_capture_end = @{ night = '21:30:00' } }; "
+            "SC888 = @{ enabled = $true; formal_session_capture_end = @{ night = '23:00:00' } } "
+            "}"
+        ),
+        "$now = [datetimeoffset]::Parse('2026-07-21T21:05:00+08:00')",
+        (
+            "Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false "
+            "-Now $now -MinKlineBarsPerSymbol 30 -ContractMap $contractMap"
+        ),
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "A888" in output
+    assert "21:30:00" in output
+    assert "MinKlineBarsPerSymbol" in output
+
+
+def test_formal_capture_plan_night_window_supports_next_day_symbol_cutoff():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        get_formal_plan,
+        (
+            "$contractMap = @{ "
+            "ZN888 = @{ enabled = $true; formal_session_capture_end = @{ night = '01:00:00' } }; "
+            "SC888 = @{ enabled = $true; formal_session_capture_end = @{ night = '02:30:00' } } "
+            "}"
+        ),
+        "$now = [datetimeoffset]::Parse('2026-07-22T21:05:00+08:00')",
+        (
+            "$plan = Get-FormalCapturePlan -LiveCapture $true -SkipKlineUpdate $false "
+            "-Now $now -MinKlineBarsPerSymbol 30 -ContractMap $contractMap"
+        ),
+        "$plan | ConvertTo-Json -Compress",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert '"window_name":"night_open"' in output
+    assert '"window_end":"2026-07-22T23:00:00+08:00"' in output
+    assert '"duration_seconds":6900' in output
+
+
+def test_enabled_night_symbols_define_formal_session_capture_end_in_contract_map():
+    contract_map = json.loads((DIAG / "simnow_contract_map.json").read_text(encoding="utf-8"))
+
+    missing = []
+    for symbol, row in contract_map.items():
+        if not row.get("enabled"):
+            continue
+        if "night" not in row.get("formal_sessions", []):
+            continue
+        cutoff = row.get("formal_session_capture_end", {}).get("night")
+        if not cutoff:
+            missing.append(symbol)
+
+    assert missing == []
+
+
 def test_historical_db_update_tables_include_enabled_symbols_only():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     get_update_tables = _extract_function(script_text, "Get-HistoricalDbUpdateTables")
@@ -404,6 +496,34 @@ def test_run_summary_output_hosted():
     assert "Run summary JSON:" in script_text
 
 
+def test_session_scoped_run_summary_json_variable_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "$SessionRunSummaryJson = $null" in script_text
+
+
+def test_session_scoped_daily_brief_md_variable_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "$SessionDailyBriefMd = $null" in script_text
+
+
+def test_session_scoped_record_json_variable_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "$SessionRecordJson = $null" in script_text
+
+
+def test_session_scoped_report_md_variable_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "$SessionReportMd = $null" in script_text
+
+
+def test_formal_window_initializes_session_scoped_artifacts():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert 'Join-Path $OutDir "simnow_run_summary_${Date}_$($FormalCapturePlan.window_name).json"' in script_text
+    assert 'Join-Path $OutDir "simnow_daily_brief_${Date}_$($FormalCapturePlan.window_name).md"' in script_text
+    assert 'Join-Path $OutDir "simnow_record_${Date}_$($FormalCapturePlan.window_name).json"' in script_text
+    assert 'Join-Path $OutDir "simnow_report_${Date}_$($FormalCapturePlan.window_name).md"' in script_text
+
+
 def test_daily_brief_md_variable_defined():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "$DailyBriefMd = Join-Path $OutDir" in script_text
@@ -433,14 +553,63 @@ def test_daily_brief_output_hosted():
     assert "Daily brief MD:" in script_text
 
 
+def test_session_scoped_artifact_copy_step_after_daily_brief():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    brief_index = script_text.index("Generate daily brief")
+    session_copy_index = script_text.index("Mirror session-scoped artifacts")
+    consistency_index = script_text.index("Validate summary consistency")
+    assert session_copy_index > brief_index
+    assert consistency_index > session_copy_index
+
+
+def test_session_scoped_artifact_copy_includes_run_summary_and_daily_brief():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    step_index = script_text.index("Mirror session-scoped artifacts")
+    block = script_text[step_index:step_index + 1200]
+    assert "Copy-Item -LiteralPath $RunSummaryJson -Destination $SessionRunSummaryJson -Force" in block
+    assert "Copy-Item -LiteralPath $DailyBriefMd -Destination $SessionDailyBriefMd -Force" in block
+    assert "Copy-Item -LiteralPath $RecordJson -Destination $SessionRecordJson -Force" in block
+    assert "Copy-Item -LiteralPath $ReportMd -Destination $SessionReportMd -Force" in block
+
+
 def test_preflight_pytest_includes_daily_brief_tests():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "test_simnow_daily_brief.py" in script_text
 
 
+def test_preflight_pytest_includes_risk_halt_review_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_risk_halt_review.py" in script_text
+
+
+def test_preflight_pytest_includes_risk_halt_decision_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_risk_halt_decision.py" in script_text
+
+
+def test_preflight_pytest_includes_daily_brief_policy_sharing_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_daily_brief_policy_sharing.py" in script_text
+
+
 def test_preflight_py_compile_includes_daily_brief_script():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "simnow_daily_brief.py" in script_text
+
+
+def test_preflight_py_compile_includes_risk_halt_review_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_risk_halt_review.py" in script_text
+
+
+def test_preflight_py_compile_includes_risk_halt_decision_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_risk_halt_decision.py" in script_text
+
+
+def test_preflight_py_compile_includes_summary_consistency_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_summary_consistency.py" in script_text
 
 
 def test_ledger_summary_json_variable_defined():
@@ -458,9 +627,69 @@ def test_preflight_py_compile_includes_observation_window_script():
     assert "simnow_observation_window.py" in script_text
 
 
+def test_preflight_py_compile_includes_20d_aggregate_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_20d_aggregate.py" in script_text
+
+
+def test_preflight_py_compile_includes_artifact_loader_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_artifact_loader.py" in script_text
+
+
+def test_preflight_py_compile_includes_structured_access_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_structured_access.py" in script_text
+
+
+def test_preflight_py_compile_includes_automation_policy_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_automation_policy.py" in script_text
+
+
+def test_preflight_py_compile_includes_halt_metadata_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_halt_metadata.py" in script_text
+
+
+def test_preflight_py_compile_includes_reason_governance_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_reason_governance.py" in script_text
+
+
+def test_preflight_py_compile_includes_ledger_summary_schema_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_ledger_summary_schema.py" in script_text
+
+
+def test_preflight_py_compile_includes_daily_brief_default_summary_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_daily_brief_default_summary.py" in script_text
+
+
+def test_preflight_py_compile_includes_daily_brief_schema_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_daily_brief_schema.py" in script_text
+
+
+def test_preflight_py_compile_includes_daily_brief_sections_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_daily_brief_sections.py" in script_text
+
+
+def test_preflight_py_compile_includes_contract_map_meta_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "simnow_contract_map_meta.py" in script_text
+
+
 def test_preflight_py_compile_includes_strategy_surface_script():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "simnow_strategy_surface.py" in script_text
+
+
+def test_preflight_py_compile_includes_replay_snapshot_script():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "export_simnow_replay_snapshot.py" in script_text
 
 
 def test_preflight_pytest_includes_ledger_summary_tests():
@@ -468,9 +697,64 @@ def test_preflight_pytest_includes_ledger_summary_tests():
     assert "test_simnow_ledger_summary.py" in script_text
 
 
+def test_preflight_pytest_includes_summary_consistency_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_summary_consistency.py" in script_text
+
+
 def test_preflight_pytest_includes_strategy_surface_tests():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     assert "test_simnow_strategy_surface.py" in script_text
+
+
+def test_preflight_pytest_includes_20d_aggregate_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_20d_aggregate.py" in script_text
+
+
+def test_preflight_pytest_includes_artifact_loader_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_artifact_loader.py" in script_text
+
+
+def test_preflight_pytest_includes_helper_boundary_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_helper_boundaries.py" in script_text
+
+
+def test_preflight_pytest_includes_structured_access_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_structured_access.py" in script_text
+
+
+def test_preflight_pytest_includes_automation_policy_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_automation_policy.py" in script_text
+
+
+def test_preflight_pytest_includes_ledger_summary_schema_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_ledger_summary_schema.py" in script_text
+
+
+def test_preflight_pytest_includes_daily_brief_default_summary_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_daily_brief_default_summary.py" in script_text
+
+
+def test_preflight_pytest_includes_daily_brief_schema_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_daily_brief_schema.py" in script_text
+
+
+def test_preflight_pytest_includes_daily_brief_sections_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_simnow_daily_brief_sections.py" in script_text
+
+
+def test_preflight_pytest_includes_replay_snapshot_tests():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert "test_export_simnow_replay_snapshot.py" in script_text
 
 
 def test_ledger_summary_step_after_monitor_and_before_promotion():
@@ -548,12 +832,158 @@ def test_halt_monitor_does_not_stop_summary_generation():
     ledger_index = script_text.index("Generate ledger summary")
     summary_index = script_text.index("Generate run summary")
     brief_index = script_text.index("Generate daily brief")
+    review_index = script_text.index("Generate risk halt review pack")
+    decision_index = script_text.index("Generate risk halt decision template")
+    consistency_index = script_text.index("Validate summary consistency")
     halt_guard_index = script_text.index("if ($MonitorExitCode -eq 2)")
 
-    assert halt_guard_index > brief_index
+    assert review_index > brief_index
+    assert decision_index > review_index
+    assert consistency_index > decision_index
+    assert halt_guard_index > consistency_index
     assert ledger_index > monitor_index
     assert summary_index > ledger_index
     assert brief_index > summary_index
+
+
+def test_risk_halt_review_paths_and_generation_step_present():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    step_index = script_text.index("Generate risk halt review pack")
+    block = script_text[step_index:step_index + 900]
+
+    assert "$RiskHaltReviewJson = Join-Path $OutDir \"simnow_risk_halt_review_$Date.json\"" in script_text
+    assert "$RiskHaltReviewMd = Join-Path $OutDir \"simnow_risk_halt_review_$Date.md\"" in script_text
+    assert "simnow_risk_halt_review.py" in block
+    assert "--run-summary" in block
+    assert "$RunSummaryJson" in block
+    assert "--out-json" in block
+    assert "$RiskHaltReviewJson" in block
+    assert "--out-md" in block
+    assert "$RiskHaltReviewMd" in block
+
+
+def test_risk_halt_decision_paths_and_generation_step_present():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    step_index = script_text.index("Generate risk halt decision template")
+    block = script_text[step_index:step_index + 900]
+
+    assert "$RiskHaltDecisionJson = Join-Path $OutDir \"simnow_risk_halt_decision_$Date.json\"" in script_text
+    assert "$RiskHaltDecisionMd = Join-Path $OutDir \"simnow_risk_halt_decision_$Date.md\"" in script_text
+    assert "simnow_risk_halt_decision.py" in block
+    assert "--review-json" in block
+    assert "$RiskHaltReviewJson" in block
+    assert "--out-json" in block
+    assert "$RiskHaltDecisionJson" in block
+    assert "--out-md" in block
+    assert "$RiskHaltDecisionMd" in block
+
+
+def test_pending_risk_halt_decision_gate_function_present():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "function Assert-NoPendingRiskHaltDecision" in script_text
+    assert "simnow_risk_halt_decision_*.json" in script_text
+    assert "pending risk halt decision blocks live capture" in script_text
+
+
+def test_pending_risk_halt_decision_gate_runs_before_live_capture():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    gate_index = script_text.index("Assert-NoPendingRiskHaltDecision -OutDir $OutDir")
+    capture_index = script_text.index("Run read-only SimNow capture")
+    assert gate_index < capture_index
+
+
+def test_pending_risk_halt_decision_gate_blocks_unreviewed_decision():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    helper = _extract_function(script_text, "Assert-NoPendingRiskHaltDecision")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        helper,
+        "$dir = Join-Path $env:TEMP ('simnow_decision_gate_' + [System.Guid]::NewGuid().ToString('N'))",
+        "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+        "$decision = Join-Path $dir 'simnow_risk_halt_decision_2026-07-24.json'",
+        "@'",
+        "{",
+        '  "date": "2026-07-24",',
+        '  "decision_status": "pending_decision",',
+        '  "next_formal_observation_allowed": false',
+        "}",
+        "'@ | Set-Content -LiteralPath $decision -Encoding UTF8",
+        "Assert-NoPendingRiskHaltDecision -OutDir $dir",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "pending risk halt decision blocks live capture" in output
+
+
+def test_pending_risk_halt_decision_gate_blocks_invalid_decided_record():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    helper = _extract_function(script_text, "Assert-NoPendingRiskHaltDecision")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        helper,
+        "$dir = Join-Path $env:TEMP ('simnow_decision_gate_' + [System.Guid]::NewGuid().ToString('N'))",
+        "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+        "$decision = Join-Path $dir 'simnow_risk_halt_decision_2026-07-24.json'",
+        "@'",
+        "{",
+        '  "date": "2026-07-24",',
+        '  "decision_status": "decided",',
+        '  "selected_decision": "resume_observation",',
+        '  "next_formal_observation_allowed": true,',
+        '  "operator_name": "",',
+        '  "rationale": "",',
+        '  "requires_observation_window_reset": null,',
+        '  "allowed_decisions": ["keep_halted"]',
+        "}",
+        "'@ | Set-Content -LiteralPath $decision -Encoding UTF8",
+        "Assert-NoPendingRiskHaltDecision -OutDir $dir",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode != 0
+    assert "invalid risk halt decision blocks live capture" in output
+    assert "selected_decision_not_allowed" in output
+    assert "operator_name_required" in output
+    assert "rationale_required" in output
+    assert "requires_observation_window_reset_required" in output
+
+
+def test_pending_risk_halt_decision_gate_allows_signed_allowed_decision():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    helper = _extract_function(script_text, "Assert-NoPendingRiskHaltDecision")
+    command = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        helper,
+        "$dir = Join-Path $env:TEMP ('simnow_decision_gate_' + [System.Guid]::NewGuid().ToString('N'))",
+        "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+        "$decision = Join-Path $dir 'simnow_risk_halt_decision_2026-07-24.json'",
+        "@'",
+        "{",
+        '  "date": "2026-07-24",',
+        '  "decision_status": "decided",',
+        '  "selected_decision": "keep_halted",',
+        '  "next_formal_observation_allowed": true,',
+        '  "operator_name": "risk-reviewer",',
+        '  "rationale": "Signed decision.",',
+        '  "requires_observation_window_reset": false',
+        "}",
+        "'@ | Set-Content -LiteralPath $decision -Encoding UTF8",
+        "Assert-NoPendingRiskHaltDecision -OutDir $dir",
+        "Write-Host 'decision-gate-ok'",
+    ])
+
+    completed = _run_powershell_script(command)
+    output = _decode_output(completed.stdout + completed.stderr)
+
+    assert completed.returncode == 0, output
+    assert "decision-gate-ok" in output
 
 
 def test_historical_db_update_parameters_defined():
@@ -622,3 +1052,52 @@ def test_post_process_only_resume_step_present():
     assert "Assert-LiveArtifactExists -Path $CaptureJson -Label \"capture JSON\"" in script_text
     assert "Assert-LiveArtifactExists -Path $KlineSummaryJson -Label \"kline summary JSON\"" in script_text
     assert "Assert-LiveArtifactExists -Path $ReplayJson -Label \"replay JSON\"" in script_text
+
+
+def test_refresh_replay_parameter_defined():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "[switch]$RefreshReplay" in script_text
+
+
+def test_refresh_replay_rejects_skip_replay_combination():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "RefreshReplay cannot be combined with SkipReplay" in script_text
+
+
+def test_replay_refresh_helper_is_reused_by_live_and_post_process():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "function Invoke-ReplaySnapshotRefresh" in script_text
+    assert script_text.count("Invoke-ReplaySnapshotRefresh `") >= 2
+
+
+def test_post_process_only_can_refresh_replay_without_existing_replay_assertion():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    resume_index = script_text.index("Resume live post-processing from existing artifacts")
+    resume_block = script_text[resume_index:resume_index + 1400]
+
+    assert "if ($RefreshReplay.IsPresent -and -not $SkipReplay.IsPresent)" in resume_block
+    assert "Invoke-ReplaySnapshotRefresh" in resume_block
+    assert "elseif (-not $SkipReplay)" in resume_block
+    assert "Assert-LiveArtifactExists -Path $ReplayJson -Label \"replay JSON\"" in resume_block
+
+
+def test_post_process_only_bypasses_formal_capture_plan_gate():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "-LiveCapture ($LiveCapture.IsPresent -and -not $PostProcessOnly.IsPresent)" in script_text
+
+
+def test_post_process_only_bypasses_formal_observation_window_gate():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "-LiveCapture ($LiveCapture.IsPresent -and -not $PostProcessOnly.IsPresent)" in script_text
+
+
+def test_replay_readiness_json_written_with_utf8_set_content():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert '> $ReplayReadinessJson' not in script_text
+    assert 'Set-Content -LiteralPath $ReplayReadinessJson -Encoding UTF8' in script_text
