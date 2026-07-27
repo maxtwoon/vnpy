@@ -3,6 +3,11 @@
 All strategy signals and analysis tools should use this module so the displayed
 current center and the center used by buy/sell point signals stay aligned.
 
+Terminology source note: ``skill_build/reference/缠论术语表.md`` is the
+workspace mapping between Chan-theory terms and code signal fields. It is a
+non-authoritative glossary for this repository, not a claim that these helpers
+match a single canonical Chan-theory definition.
+
 Deviation from textbook Chan-theory zhongshu (non-authoritative implementation
 note, added 2026-07-26 audit; not a claim about what "correct" Chan theory
 requires): standard Chan-theory zhongshu construction lets a center extend

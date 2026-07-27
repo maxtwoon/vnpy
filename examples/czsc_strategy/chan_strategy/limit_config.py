@@ -2,7 +2,10 @@
 
 This module is the single source of truth for the exchange-published
 steady-state daily price-limit percentages used by both the A50 diagnostic
-and the A51 per-trade limit/halt tagging logic.
+and the A51 per-trade limit/halt tagging logic.  Exchange rules define futures
+limit bands from the previous trading day's settlement price; when historical
+bars do not expose settlement data, the helpers fall back to the previous close
+and keep that approximation explicit in their names/docs.
 """
 from __future__ import annotations
 
@@ -16,6 +19,10 @@ import pandas as pd
 # The exchanges reserve the right to widen limits for specific contracts,
 # newly listed contracts, or after limit-hit days; consumers of this config
 # document that simplification explicitly.
+# temporary_widening_windows verification status:
+# manual_confirmation_required. AP888/RB888 temporary windows are not
+# independently verified against a primary exchange notice; treat them as
+# research-only overrides until a human confirms the original exchange notice.
 SYMBOL_LIMIT_CONFIG: dict[str, dict[str, Any]] = {
     "AP888": {
         "limit_pct": 0.05,
@@ -103,15 +110,29 @@ def _trading_day_for_limit(dt: datetime, night_session_start_hour: int = 20) -> 
     return _trading_day(dt, daily_agg="trading_calendar", night_session_start_hour=night_session_start_hour)
 
 
+def _settlement_or_close(bar: Any) -> float:
+    """Return settlement when a bar exposes it; otherwise fall back to close."""
+    for attr in ("settlement", "settle", "settlement_price", "settle_price"):
+        value = getattr(bar, attr, None)
+        if value is not None and float(value) > 0:
+            return float(value)
+    return float(bar.close)
+
+
 def _daily_prev_close_map(
     bars: list[Any],
     night_session_start_hour: int | None = None,
 ) -> dict[date, tuple[float | None, date | None]]:
-    """Map each trading date to the previous trading day's last close.
+    """Map each trading date to the previous trading day's settlement/close.
 
     Returns ``{trading_day: (prev_close, prev_trading_day)}``.  The first
-    trading day in the loaded window has no previous close and is therefore
+    trading day in the loaded window has no previous value and is therefore
     mapped to ``(None, None)``.
+
+    Futures exchanges define limit bands from previous settlement.  When a bar
+    provides ``settlement`` / ``settle`` / ``settlement_price`` /
+    ``settle_price``, that value is used; otherwise the previous close remains
+    the explicit fallback for minute-bar-only historical data.
 
     Bucketing uses exchange trading days so that a night-session bar
     (e.g. 21:00 on calendar day D) is not treated as part of day D's "previous
@@ -120,12 +141,12 @@ def _daily_prev_close_map(
     from chan_strategy.config import STRATEGY_CONFIG
 
     if night_session_start_hour is None:
-        night_session_start_hour = int(STRATEGY_CONFIG.get("night_session_start_hour", 20))
+        night_session_start_hour = int(STRATEGY_CONFIG["night_session_start_hour"])
 
     daily_close: dict[date, float] = {}
     for bar in bars:
         trading_day = _trading_day_for_limit(bar.dt, night_session_start_hour)
-        daily_close[trading_day] = float(bar.close)
+        daily_close[trading_day] = _settlement_or_close(bar)
 
     sorted_dates = sorted(daily_close)
     prev_map: dict[date, tuple[float | None, date | None]] = {}
@@ -170,9 +191,10 @@ def _bar_at_limit(
 ) -> tuple[bool, bool, float | None, float | None]:
     """Return (touched_upper, touched_lower, upper, lower) for a bar.
 
-    A bar is considered to have touched or breached its daily upper limit if
-    any part of the bar's range (high/low) reaches or exceeds the computed
-    upper bound; similarly for the lower limit.
+    This is a conservative high/low touch-based model: a bar is considered to
+    have touched or breached its daily upper limit if any part of the bar's
+    range (high/low) reaches or exceeds the computed upper bound; similarly for
+    the lower limit.
     """
     if prev_close is None or prev_close <= 0:
         return False, False, None, None

@@ -42,12 +42,17 @@ def _v(signal_dict: dict) -> str:
 
 
 def test_core_risk_config_keys_do_not_use_literal_get_fallbacks():
-    """Core risk defaults must stay single-sourced in config.py."""
+    """Core risk defaults must stay single-sourced and fail-fast in config.py."""
     project_root = Path(__file__).resolve().parents[2]
     files = [
+        project_root / "chan_strategy" / "backtest_engine.py",
+        project_root / "chan_strategy" / "data_adapter.py",
+        project_root / "chan_strategy" / "limit_config.py",
         project_root / "chan_strategy" / "positions.py",
         project_root / "chan_strategy" / "portfolio_engine.py",
         project_root / "chan_strategy" / "portfolio_ledger.py",
+        project_root / "chan_strategy" / "signals.py",
+        project_root / "chan_strategy" / "validation.py",
     ]
     keys = {
         "sizing_model",
@@ -61,6 +66,35 @@ def test_core_risk_config_keys_do_not_use_literal_get_fallbacks():
         "cluster_gross_cap",
         "daily_agg",
         "night_session_start_hour",
+        "trade_freq",
+        "filter_freq",
+        "resonance_filter",
+        "resonance_freq_4h",
+        "rollover_open_gating",
+        "rollover_stat_tagging",
+        "exit_event_semantics",
+        "stop_execution_model",
+        "stop_penalty_bp",
+        "pos_1buy",
+        "pos_2buy",
+        "pos_3buy",
+        "pos_1sell",
+        "pos_2sell",
+        "pos_3sell",
+        "second_buy_mode",
+        "enable_short",
+        "regime_model",
+        "equity_mode",
+        "divergence_model",
+        "macd_fast",
+        "macd_slow",
+        "macd_signal",
+        "atr_period",
+        "atr_lookback",
+        "atr_percentile_floor",
+        "exit_model",
+        "atr_trail_mult",
+        "partial_tp_frac",
     }
     violations: list[str] = []
 
@@ -71,10 +105,12 @@ def test_core_risk_config_keys_do_not_use_literal_get_fallbacks():
                 continue
             if not isinstance(node.func, ast.Attribute) or node.func.attr != "get":
                 continue
+            if not isinstance(node.func.value, ast.Name) or node.func.value.id != "STRATEGY_CONFIG":
+                continue
             if not node.args or not isinstance(node.args[0], ast.Constant):
                 continue
             key = node.args[0].value
-            if key in keys and (len(node.args) >= 2 or node.keywords):
+            if key in keys:
                 violations.append(f"{path.relative_to(project_root)}:{node.lineno}:{key}")
 
     assert violations == []

@@ -24,6 +24,7 @@ def restore_sizing_config():
         "equity_mode": STRATEGY_CONFIG.get("equity_mode", "fixed"),
         "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model", "close"),
         "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
+        "price_tick_rounding": STRATEGY_CONFIG.get("price_tick_rounding", "off"),
     }
     yield
     STRATEGY_CONFIG.update(saved)
@@ -63,6 +64,22 @@ def test_contract_specs_have_cited_exchange_values():
         assert specs[symbol]["multiplier"] == spec["multiplier"]
         assert specs[symbol]["tick"] == pytest.approx(spec["tick"])
         assert specs[symbol]["margin_rate"] == pytest.approx(spec["margin_rate"])
+
+
+def test_trade_prices_are_rounded_to_contract_tick():
+    """Recorded fill prices must land on the exchange tick grid."""
+    STRATEGY_CONFIG["sizing_model"] = "research"
+    STRATEGY_CONFIG["price_tick_rounding"] = "on"
+    p = _pos("AP888", stop_loss=200)
+
+    p._open_long(100.5, NOW)
+    p._close_long(101.49, NOW, "signal_exit")
+
+    pair = p.pairs[-1]
+    assert pair["open_price"] == pytest.approx(101.0)
+    assert pair["close_price"] == pytest.approx(101.0)
+    assert p.trades[0].price == pytest.approx(101.0)
+    assert p.trades[1].price == pytest.approx(101.0)
 
 
 # --------------------------------------------------------------- research mode

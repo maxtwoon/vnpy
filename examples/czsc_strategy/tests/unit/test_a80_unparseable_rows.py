@@ -151,6 +151,9 @@ def test_backtest_report_includes_unparseable_rows_skipped(
     assert "error" not in report
     assert engine.unparseable_rows_skipped == len(bad_rows)
     assert report["unparseable_rows_skipped"] == len(bad_rows)
+    assert report["unparseable_rows_total"] == len(valid_rows) + len(bad_rows)
+    assert report["unparseable_row_rate"] == pytest.approx(len(bad_rows) / (len(valid_rows) + len(bad_rows)))
+    assert report["max_unparseable_row_rate"] is None
 
 
 def test_formal_evaluation_report_includes_unparseable_rows_skipped(
@@ -158,7 +161,7 @@ def test_formal_evaluation_report_includes_unparseable_rows_skipped(
 ) -> None:
     """The formal-evaluation path also surfaces the skipped-row count."""
     symbol = "AP888"
-    valid_rows = _make_valid_rows(150, datetime(2024, 1, 2, 9, 0), symbol=symbol)
+    valid_rows = _make_valid_rows(1000, datetime(2024, 1, 2, 9, 0), symbol=symbol)
     bad_rows = [
         ("2024-01-02 malformed", symbol, 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0),
     ]
@@ -179,3 +182,34 @@ def test_formal_evaluation_report_includes_unparseable_rows_skipped(
 
     assert "error" not in report
     assert report["unparseable_rows_skipped"] == len(bad_rows)
+
+
+def test_formal_evaluation_fails_closed_when_unparseable_row_rate_too_high(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Formal evaluation must fail closed when skipped datetime rows exceed the configured rate."""
+    symbol = "AP888"
+    valid_rows = _make_valid_rows(150, datetime(2024, 1, 2, 9, 0), symbol=symbol)
+    bad_rows = [
+        (f"2024-01-02 malformed-{i}", symbol, 100.0, 101.0, 99.0, 100.0, 1000.0, 100000.0)
+        for i in range(10)
+    ]
+    db = _build_a80_db(tmp_path / "formal_too_many_bad_rows.db", valid_rows + bad_rows)
+    _add_rollover_metadata_table(db, symbol, valid_rows)
+
+    monkeypatch.setitem(STRATEGY_CONFIG, "trade_freq", "1分钟")
+    engine = BacktestEngine(
+        symbol=symbol,
+        db_path=str(db),
+        table_name="test_1M_raw",
+        freq="1",
+    )
+
+    with formal_evaluation_config():
+        report = engine.run(warmup_bars=20)
+
+    assert report["error"] == "unparseable_row_rate_exceeded"
+    assert report["unparseable_rows_skipped"] == len(bad_rows)
+    assert report["unparseable_rows_total"] == len(valid_rows) + len(bad_rows)
+    assert report["unparseable_row_rate"] == pytest.approx(10 / 160)
+    assert report["max_unparseable_row_rate"] == 0.001

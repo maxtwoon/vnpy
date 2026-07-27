@@ -2,6 +2,26 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.46（2026-07-27）- 风险/成本/数据质量披露强化与配置漂移防护
+
+- **数据质量 fail-closed 门禁**：`BacktestEngine.run()` 计算 `unparseable_row_rate`，
+  当超过 `STRATEGY_CONFIG["max_unparseable_row_rate"]` 时中止运行（默认 `None` 保持历史行为，
+  `formal_evaluation_config()` 设为 `0.001`）。
+- **成交价格 tick 取整**：新增 `price_tick_rounding` 配置开关与
+  `Position._round_price_to_tick`，正式评估模式下记录成交价按交易所最小变动价位取整。
+- **PortfolioCoordinator 回撤熔断**：weight-based 联合回放路径现在具备与
+  `PortfolioLedger`（`sizing_model="risk"`）同等的持久性、跨交易日回撤熔断语义。
+- **配置键单一真值硬化**：核心风控/配置键从 `STRATEGY_CONFIG.get(key, 字面量默认值)` 改为
+  `STRATEGY_CONFIG[key]` 硬索引（`test_a53_config_signal_cleanup.py` 新增 AST 级回归防止再引入
+  字面量 fallback）；删除两个从未被消费的历史配置键（`base_freq`/`confirm_freq`、`total_capital`）。
+- **报告披露扩展**：生成的报告新增 `margin_model_caveat`、`limit_halt_rule_caveat`、
+  `slippage_model_caveat` 等字段，把研究性假设内联披露给下游报告消费方。
+- **仓库卫生**：`_patch_backtest*.py` 一次性补丁脚本与根目录 `test_backtest_idempotent.py`
+  按仓库既有约定重新标注/迁移；新增 `tests/unit/test_repo_hygiene.py` 覆盖上述及
+  data_cache 清理、`IN_FLIGHT_CHANGES.md` 清单的卫生检查。
+
+不涉及任何交易/信号逻辑变更；均为成本/风险/数据质量记账、披露与配置单一真值强化。
+
 ## 0.2.45（2026-07-27）- A105 可复用 HTML 可视化回测报告模板
 
 - **新增 HTML 可视化回测报告**：新增 `chan_strategy/html_report.py`，为每次回测自动生成一份

@@ -1,4 +1,4 @@
-"""Patch script to update run_baostock_backtest.py for new strategy."""
+"""ONE-SHOT / LEGACY patch script for archived Baostock backtest experiments."""
 import re
 
 fpath = r'd:\repo\vnpy\examples\czsc_strategy\run_baostock_backtest.py'

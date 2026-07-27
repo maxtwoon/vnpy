@@ -109,12 +109,12 @@ def _strategy_weight_fixed(strategy: str, symbol: str | None = None) -> float:
         "二卖空头": "pos_2sell",
         "三卖空头": "pos_3sell",
     }
-    config_key = key_map.get(strategy, "pos_1buy")
+    config_key = key_map[strategy]
     if symbol is not None:
         item = overrides.get(_research_symbol_key(symbol), None)
         if isinstance(item, dict) and config_key in item:
             return float(item[config_key])
-    return float(STRATEGY_CONFIG.get(config_key, 0.10))
+    return float(STRATEGY_CONFIG[config_key])
 
 
 def _position_sign(strategy: str) -> int:
@@ -177,6 +177,10 @@ class PortfolioCoordinator:
         self.night_session_start_hour = int(self.cfg["night_session_start_hour"])
         self.cluster_gross_cap = float(self.cfg["cluster_gross_cap"])
         self.daily_loss_limit_pct = float(self.cfg["daily_loss_limit_pct"])
+        raw_breaker_pct = self.cfg.get("max_drawdown_breaker_pct")
+        self.max_drawdown_breaker_pct = (
+            None if raw_breaker_pct is None else float(raw_breaker_pct)
+        )
         self.lookback = int(self.cfg.get("risk_parity_lookback", 60))
         self.corr_clusters = dict(self.cfg.get("corr_clusters") or {})
 
@@ -191,10 +195,13 @@ class PortfolioCoordinator:
         self.current_trading_day: datetime.date | None = None
         self.prev_day_close_equity: float = self.initial_capital
         self.current_equity: float = self.initial_capital
+        self.peak_equity: float = self.initial_capital
+        self.drawdown_breaker_active: bool = False
 
         # Evidence / diagnostics
         self.blocked_opens: list[dict[str, Any]] = []
         self.loss_limit_triggers: list[dict[str, Any]] = []
+        self.drawdown_breaker_triggers: list[dict[str, Any]] = []
         self.flat_events: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ helpers
@@ -309,10 +316,31 @@ class PortfolioCoordinator:
                     "equity": self.current_equity,
                     "day_pnl_pct": day_pnl_pct,
                 })
-                self._flatten_all(dt, prices)
+                self._flatten_all(dt, prices, "daily_loss_limit_flatten")
+
+        if self.current_equity > self.peak_equity:
+            self.peak_equity = self.current_equity
+        if (
+            self.max_drawdown_breaker_pct is not None
+            and not self.drawdown_breaker_active
+            and self.peak_equity > 0
+        ):
+            drawdown_pct = (self.current_equity - self.peak_equity) / self.peak_equity
+            if drawdown_pct <= -self.max_drawdown_breaker_pct:
+                self.drawdown_breaker_active = True
+                self.drawdown_breaker_triggers.append({
+                    "dt": dt.isoformat(sep=" "),
+                    "trading_day": str(trading_day),
+                    "equity": self.current_equity,
+                    "peak_equity": self.peak_equity,
+                    "drawdown_pct": drawdown_pct,
+                })
+                self._flatten_all(dt, prices, "drawdown_breaker_flatten")
 
     def allow_open(self, symbol: str, strategy: str, dt: datetime, price: float) -> bool:
         """Return True if a new position may be opened under portfolio rules."""
+        if self.drawdown_breaker_active:
+            return False
         if self.daily_loss_limit_active:
             return False
 
@@ -353,8 +381,8 @@ class PortfolioCoordinator:
                 0.0, self.cluster_exposure.get(cluster, 0.0) - abs(pos["weight"])
             )
 
-    def _flatten_all(self, dt: datetime, prices: dict[str, float]) -> None:
-        """Flatten every open position when the daily loss limit is hit."""
+    def _flatten_all(self, dt: datetime, prices: dict[str, float], reason: str) -> None:
+        """Flatten every open position when a portfolio circuit breaker is hit."""
         if not self.open_positions:
             return
         keys = list(self.open_positions.keys())
@@ -369,6 +397,7 @@ class PortfolioCoordinator:
                 "open_price": pos["open_price"],
                 "flat_price": price,
                 "weight": pos["weight"],
+                "reason": reason,
             })
             for cluster in self._clusters_for_symbol(symbol):
                 self.cluster_exposure[cluster] = max(
@@ -506,6 +535,13 @@ class PortfolioEngine:
             "equity_curve": equity_curve,
             "pairs": all_pairs,
             "sizing_caveat": sizing_caveat,
+            "transaction_cost_model": "round_trip_commission_plus_single_side_slippage",
+            "round_trip_cost_formula": "2 * commission_rate + slippage",
+            "slippage_application": "single_side_per_round_trip",
+            "slippage_model_caveat": (
+                "Aggregated pairs inherit the single-symbol cost model: commission on both "
+                "open and close plus single-side slippage once per round-trip."
+            ),
             # A92: this path has no portfolio-level circuit breaker at all.
             "circuit_breaker_caveat": (
                 "portfolio_risk='off'：本报告不包含任何组合级日亏损限额/强制平仓保护；"
@@ -632,6 +668,12 @@ class PortfolioEngine:
                 # Deduct round-trip costs so flatten pairs are net-of-cost, matching
                 # every other coordinated_pairs entry sourced from Position.
                 net_pnl = gross_pnl - (2 * self.commission_rate + self.slippage)
+                flat_reason = ev.get("reason", "daily_loss_limit_flatten")
+                pair_reason = (
+                    "portfolio_drawdown_breaker"
+                    if flat_reason == "drawdown_breaker_flatten"
+                    else "portfolio_daily_loss_limit"
+                )
                 coordinated_pairs.append({
                     "symbol": symbol,
                     "strategy": strategy,
@@ -642,8 +684,8 @@ class PortfolioEngine:
                     "pnl_pct": net_pnl,
                     "weight": pos["weight"],
                     "bars_held": None,
-                    "reason": "portfolio_daily_loss_limit",
-                    "reason_code": "portfolio_daily_loss_limit",
+                    "reason": pair_reason,
+                    "reason_code": pair_reason,
                 })
                 flattened_this_bar = True
 
@@ -661,6 +703,7 @@ class PortfolioEngine:
                 "net_exposure": sum(pos["sign"] * abs(pos["weight"]) for pos in open_positions.values()),
                 "cluster_exposure": dict(coordinator.cluster_exposure),
                 "loss_limit_active": coordinator.daily_loss_limit_active,
+                "drawdown_breaker_active": coordinator.drawdown_breaker_active,
                 "symbol_weights": dict(coordinator.symbol_weights),
             })
 
@@ -670,6 +713,16 @@ class PortfolioEngine:
             if report.get("sizing_caveat"):
                 sizing_caveat = report["sizing_caveat"]
                 break
+
+        max_symbol_weight_observed = 0.0
+        if STRATEGY_CONFIG["weighting"] == "risk_parity":
+            for row in coordinated_equity_curve:
+                weights = row.get("symbol_weights") or {}
+                if weights:
+                    max_symbol_weight_observed = max(
+                        max_symbol_weight_observed,
+                        max(abs(float(weight)) for weight in weights.values()),
+                    )
 
         return {
             "portfolio_risk": "on",
@@ -683,8 +736,30 @@ class PortfolioEngine:
             "pairs": coordinated_pairs,
             "blocked_opens": coordinator.blocked_opens,
             "loss_limit_triggers": coordinator.loss_limit_triggers,
+            "drawdown_breaker_triggers": coordinator.drawdown_breaker_triggers,
             "flat_events": coordinator.flat_events,
             "sizing_caveat": sizing_caveat,
+            "transaction_cost_model": "round_trip_commission_plus_single_side_slippage",
+            "round_trip_cost_formula": "2 * commission_rate + slippage",
+            "slippage_application": "single_side_per_round_trip",
+            "slippage_model_caveat": (
+                "The weight-based portfolio report keeps flatten pairs net-of-cost using "
+                "commission on both open and close plus single-side slippage once per round-trip."
+            ),
+            "risk_parity_rebalance_policy": (
+                "every_bar" if STRATEGY_CONFIG["weighting"] == "risk_parity" else "not_applicable"
+            ),
+            "risk_parity_turnover_control": (
+                "none" if STRATEGY_CONFIG["weighting"] == "risk_parity" else "not_applicable"
+            ),
+            "max_symbol_weight_observed": max_symbol_weight_observed,
+            "risk_parity_concentration_caveat": (
+                "risk_parity recomputes symbol weights every bar without turnover "
+                "or rebalance constraints; missing/dropout symbol bars can increase "
+                "the active-symbol concentration until data coverage resumes."
+                if STRATEGY_CONFIG["weighting"] == "risk_parity"
+                else None
+            ),
             # A92: the weight-based PortfolioCoordinator's "flatten" only
             # adjusts its own internal weight bookkeeping — it never closes a
             # real Position, so these flat_events are not real capital actions.
@@ -942,6 +1017,13 @@ class PortfolioEngine:
             # ambiguous between the two.
             "flatten_status": _flatten_status_note(ledger.loss_limit_triggers, flat_events),
             "sizing_caveat": sizing_caveat,
+            "transaction_cost_model": "round_trip_commission_plus_single_side_slippage",
+            "round_trip_cost_formula": "2 * commission_rate + slippage",
+            "slippage_application": "single_side_per_round_trip",
+            "slippage_model_caveat": (
+                "Joint replay reports realized pairs from Position accounting, which deducts "
+                "commission on both open and close plus single-side slippage once per round-trip."
+            ),
         }
 
     def run(self) -> dict[str, Any]:

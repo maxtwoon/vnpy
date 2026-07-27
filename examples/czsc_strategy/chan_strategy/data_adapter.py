@@ -172,9 +172,9 @@ def resample_bars(
         # Lazy import to keep the module usable in contexts without config.
         from chan_strategy.config import STRATEGY_CONFIG
         if daily_agg is None:
-            daily_agg = STRATEGY_CONFIG.get("daily_agg", "natural")
+            daily_agg = STRATEGY_CONFIG["daily_agg"]
         if night_session_start_hour is None:
-            night_session_start_hour = STRATEGY_CONFIG.get("night_session_start_hour", 20)
+            night_session_start_hour = STRATEGY_CONFIG["night_session_start_hour"]
 
     if daily_agg == "trading_calendar":
         return _resample_daily_trading_calendar(bars, target_freq, night_session_start_hour)

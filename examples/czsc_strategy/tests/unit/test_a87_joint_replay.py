@@ -394,6 +394,9 @@ def test_joint_replay_no_trades_smoke(monkeypatch):
     assert report["blocked_opens"] == []
     assert report["loss_limit_triggers"] == []
     assert report["pairs"] == []
+    assert report["transaction_cost_model"] == "round_trip_commission_plus_single_side_slippage"
+    assert report["round_trip_cost_formula"] == "2 * commission_rate + slippage"
+    assert report["slippage_application"] == "single_side_per_round_trip"
     assert report["flatten_on_breach"] == "implemented_see_A90"
     assert report["flat_events"] == []
     assert len(report["equity_curve"]) == 20  # 120 trade bars, warmup 100

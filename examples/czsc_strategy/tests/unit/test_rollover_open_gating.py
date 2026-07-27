@@ -215,6 +215,32 @@ def test_gating_does_not_affect_exit_of_already_open_position(synthetic_1m_bars,
     assert report.get("rollover_open_gating_rejected_opens", {}).get("一买多头", 0) == 0
 
 
+def test_limit_halt_is_suppressed_inside_rollover_window_for_existing_exit(
+    synthetic_1m_bars, monkeypatch, tmp_path
+):
+    """Splice-window limit bands are not meaningful; exits should not be deferred by them."""
+    bars = synthetic_1m_bars(days=25, per_day=240, start=datetime(2024, 1, 2, 9, 0))
+    db = _make_rollover_db(tmp_path, transition_offset=14)
+
+    STRATEGY_CONFIG["limit_halt_model"] = "enforce"
+    STRATEGY_CONFIG["stop_loss_1buy"] = 100000
+    STRATEGY_CONFIG["trailing_start_bp"] = 100000
+
+    def fake_bar_at_limit(*args, **kwargs):
+        return False, True, 105.0, 95.0
+
+    monkeypatch.setattr(backtest_module, "_bar_at_limit", fake_bar_at_limit)
+
+    pairs, report = _run_symbol(monkeypatch, bars, db, gating="on", open_at=2, close_at=9)
+
+    assert len(pairs) == 1
+    pair = pairs[0]
+    assert pair["open_dt"].date() == date(2024, 1, 14)
+    assert pair["close_dt"].date() == date(2024, 1, 15)
+    assert pair["is_exit_at_limit"] is False
+    assert report["limit_halt_rollover_suppressed_bars"] >= 1
+
+
 # ------------------------------------------------------------------ fail-closed on detection failure
 
 
@@ -278,3 +304,36 @@ def test_run_formal_evaluation_mode_label_includes_rollover_gating(monkeypatch):
     assert report["mode_label"] == (
         "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,rollover_open_gating=on)"
     )
+
+
+def test_formal_report_discloses_rollover_gating_ex_post_methodology(monkeypatch):
+    """Formal reports must disclose that rollover gating uses full-window transition detection."""
+    from datetime import datetime as dt
+
+    monkeypatch.setattr(BacktestEngine, "run", lambda self: {"ok": True})
+    monkeypatch.setattr(BacktestEngine, "print_report", lambda self, report=None: None)
+
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.bars = []
+    engine.equity_curve = [
+        {"dt": dt(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0},
+    ]
+
+    class FakeStrategy:
+        positions = []
+
+        def evaluate_all(self):
+            return {"fake": {"total_trades": 0, "win_rate": 0, "profit_factor": 0}}
+
+        def get_combined_trades(self):
+            return []
+
+    engine.strategy = FakeStrategy()
+
+    with formal_evaluation_config():
+        report = engine.generate_report()
+
+    methodology = report["rollover_open_gating_methodology"]
+    assert "full-window" in methodology
+    assert "ex-post" in methodology
+    assert "protective" in methodology

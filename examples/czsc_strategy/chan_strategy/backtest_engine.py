@@ -97,6 +97,8 @@ def formal_evaluation_config():
         "rollover_open_gating",
         "stop_execution_model",
         "daily_agg",
+        "max_unparseable_row_rate",
+        "price_tick_rounding",
     )
     overrides = {
         "sizing_model": "risk",
@@ -104,6 +106,8 @@ def formal_evaluation_config():
         "rollover_open_gating": "on",
         "stop_execution_model": "intrabar",
         "daily_agg": "trading_calendar",
+        "max_unparseable_row_rate": 0.001,
+        "price_tick_rounding": "on",
     }
     saved: dict[str, str] = {}
     for key in keys:
@@ -331,6 +335,12 @@ class BacktestEngine:
                 unparseable_count=unparseable_count,
             )
             self.unparseable_rows_skipped = unparseable_count[0]
+            self.unparseable_rows_total = len(self.bars) + self.unparseable_rows_skipped
+            self.unparseable_row_rate = (
+                self.unparseable_rows_skipped / self.unparseable_rows_total
+                if self.unparseable_rows_total
+                else 0.0
+            )
             print(f"加载数据: {self.symbol}, 频率={self.freq}, "
                   f"范围={self.start_date}~{self.end_date}, "
                   f"共{len(self.bars)}根K线"
@@ -408,10 +418,31 @@ class BacktestEngine:
         # A76: per-run rollover open-gating audit state
         self._rollover_rejected_opens: dict[str, int] = {}
         self._rollover_unavailable_reason: str | None = None
+        self._limit_halt_rollover_suppressed_bars = 0
         # A80: honest data-quality reporting for rows skipped during bar loading
         self.unparseable_rows_skipped = 0
+        self.unparseable_rows_total = 0
+        self.unparseable_row_rate = 0.0
         # 清空 bars 强制重新加载，避免日期/参数修改后仍使用旧数据
         self.bars = []
+
+    def _unparseable_row_quality_error(self) -> dict | None:
+        """Return a fail-closed data-quality error when skipped-row rate is too high."""
+        max_rate = STRATEGY_CONFIG.get("max_unparseable_row_rate")
+        if max_rate is None:
+            return None
+
+        max_rate = float(max_rate)
+        if self.unparseable_row_rate <= max_rate:
+            return None
+
+        return {
+            "error": "unparseable_row_rate_exceeded",
+            "unparseable_rows_skipped": self.unparseable_rows_skipped,
+            "unparseable_rows_total": self.unparseable_rows_total,
+            "unparseable_row_rate": self.unparseable_row_rate,
+            "max_unparseable_row_rate": max_rate,
+        }
 
     def bar_generator(
         self, warmup_bars: int = 100
@@ -446,12 +477,16 @@ class BacktestEngine:
         if not self.load_data():
             return {"error": "数据加载失败"}
 
+        quality_error = self._unparseable_row_quality_error()
+        if quality_error is not None:
+            return quality_error
+
         if len(self.bars) < 100:
             return {"error": f"数据不足: 实际{len(self.bars)}根K线"}
 
         # --- 多级别K线合成 ---
-        trade_freq_name = STRATEGY_CONFIG.get("trade_freq", "30分钟")
-        filter_freq_name = STRATEGY_CONFIG.get("filter_freq", "日线")
+        trade_freq_name = STRATEGY_CONFIG["trade_freq"]
+        filter_freq_name = STRATEGY_CONFIG["filter_freq"]
 
         # 确定交易周期的分钟数
         trade_minutes = self._freq_to_minutes(trade_freq_name)
@@ -463,8 +498,8 @@ class BacktestEngine:
         print(f"K线合成: {len(self.bars)}根1分钟 → {len(trade_bars)}根{trade_freq_name}")
 
         # 从1分钟K线合成日线K线（用于趋势过滤）
-        daily_agg = STRATEGY_CONFIG.get("daily_agg", "natural")
-        night_session_start_hour = STRATEGY_CONFIG.get("night_session_start_hour", 20)
+        daily_agg = STRATEGY_CONFIG["daily_agg"]
+        night_session_start_hour = STRATEGY_CONFIG["night_session_start_hour"]
         daily_bars = resample_bars(
             self.bars, Freq.D, target_minutes=None,
             daily_agg=daily_agg,
@@ -473,8 +508,8 @@ class BacktestEngine:
         print(f"K线合成: {len(self.bars)}根1分钟 → {len(daily_bars)}根日线")
 
         # 从1分钟K线合成4H K线（仅用于 A44 daily_4h 共振模式）
-        resonance_filter = STRATEGY_CONFIG.get("resonance_filter", "off")
-        freq_4h_name = STRATEGY_CONFIG.get("resonance_freq_4h", "240分钟")
+        resonance_filter = STRATEGY_CONFIG["resonance_filter"]
+        freq_4h_name = STRATEGY_CONFIG["resonance_freq_4h"]
         h4_bars: list[RawBar] = []
         czsc_4h = None
         if resonance_filter == "daily_4h":
@@ -495,8 +530,8 @@ class BacktestEngine:
         warmup_dt = trade_bars[warmup_bars - 1].dt if warmup_bars <= len(trade_bars) else trade_bars[-1].dt
         daily_warmup_bars = [b for b in daily_bars if b.dt <= warmup_dt]
         czsc_daily = CZSC(daily_warmup_bars) if len(daily_warmup_bars) >= 3 else None
-        enable_daily_filter = STRATEGY_CONFIG.get("filter_freq") == "日线" and czsc_daily is not None
-        if STRATEGY_CONFIG.get("filter_freq") == "日线" and czsc_daily is None:
+        enable_daily_filter = STRATEGY_CONFIG["filter_freq"] == "日线" and czsc_daily is not None
+        if STRATEGY_CONFIG["filter_freq"] == "日线" and czsc_daily is None:
             print("日线趋势过滤不可用: 日线预热数据不足，已自动禁用日线过滤")
 
         # 4H CZSC（A44 daily_4h 共振）- 找到warmup对应的4H范围
@@ -526,11 +561,11 @@ class BacktestEngine:
               f"交易{len(trade_bars)-warmup_bars}根K线")
 
         pending_signals = None  # 上一根bar产生的待执行信号
-        sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
+        sizing_model = STRATEGY_CONFIG["sizing_model"]
         risk_mode = sizing_model == "risk"
 
         # A51/A67: pre-compute daily previous-close map for limit-band tagging/gating.
-        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
+        limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
         limit_active = limit_halt_model in ("aware", "enforce")
         prev_close_map = _daily_prev_close_map(trade_bars) if limit_active else {}
         if limit_active:
@@ -544,7 +579,7 @@ class BacktestEngine:
                 )
 
         # A76: pre-compute rollover exclusion window when gating is active.
-        rollover_open_gating = STRATEGY_CONFIG.get("rollover_open_gating", "off")
+        rollover_open_gating = STRATEGY_CONFIG["rollover_open_gating"]
         rollover_gating_active = rollover_open_gating == "on"
         excluded_dates: set[date] = set()
         if rollover_gating_active:
@@ -606,6 +641,14 @@ class BacktestEngine:
                         )
                     prev_close, _ = prev_close_map.get(bar_trading_day, (None, None))
                     touched_upper, touched_lower, _, _ = _bar_at_limit(bar, prev_close, limit_pct)
+                    if rollover_open_blocked:
+                        # Continuous-contract splice windows can jump far beyond
+                        # an exchange daily band; suppress limit-halt tagging and
+                        # fill rejection there instead of treating splice gaps as
+                        # executable-session limit locks.
+                        if touched_upper or touched_lower:
+                            self._limit_halt_rollover_suppressed_bars += 1
+                        touched_upper, touched_lower = False, False
                     # Pass both directional touches down to the position layer; each
                     # position resolves the touch that matters for its own side.
                     entry_at_limit = (touched_upper, touched_lower)
@@ -741,12 +784,12 @@ class BacktestEngine:
                 else:
                     # 计算当前权益（增量更新，避免每根bar遍历全部历史pairs）
                     pos_weights = {
-                        "一买多头": STRATEGY_CONFIG.get("pos_1buy", 0.10),
-                        "二买多头": STRATEGY_CONFIG.get("pos_2buy", 0.20),
-                        "三买多头": STRATEGY_CONFIG.get("pos_3buy", 0.30),
-                        "一卖空头": STRATEGY_CONFIG.get("pos_1sell", 0.10),
-                        "二卖空头": STRATEGY_CONFIG.get("pos_2sell", 0.20),
-                        "三卖空头": STRATEGY_CONFIG.get("pos_3sell", 0.30),
+                        "一买多头": STRATEGY_CONFIG["pos_1buy"],
+                        "二买多头": STRATEGY_CONFIG["pos_2buy"],
+                        "三买多头": STRATEGY_CONFIG["pos_3buy"],
+                        "一卖空头": STRATEGY_CONFIG["pos_1sell"],
+                        "二卖空头": STRATEGY_CONFIG["pos_2sell"],
+                        "三卖空头": STRATEGY_CONFIG["pos_3sell"],
                     }
                     weight_symbol = self.table_name.split("_")[0] if self.table_name else self.symbol
                     pos_weights = _apply_symbol_position_overrides(pos_weights, weight_symbol)
@@ -754,7 +797,7 @@ class BacktestEngine:
                     long_exposure = 0.0
                     short_exposure = 0.0
                     for pos in self.strategy.positions:
-                        weight = pos_weights.get(pos.name, 0.10)
+                        weight = pos_weights[pos.name]
                         if pos.pos > 0:
                             long_exposure += weight
                         elif pos.pos < 0:
@@ -805,7 +848,7 @@ class BacktestEngine:
 
             # A52: post-loop rollover-window tagging only when explicitly enabled.
             # "off" skips this entirely, keeping the legacy path byte-identical.
-            if STRATEGY_CONFIG.get("rollover_stat_tagging", "off") == "on":
+            if STRATEGY_CONFIG["rollover_stat_tagging"] == "on":
                 excluded_dates = self._rollover_excluded_dates()
                 for pos in self.strategy.positions:
                     for pair in pos.pairs:
@@ -930,10 +973,10 @@ class BacktestEngine:
         if not self.equity_curve:
             return {"error": "未执行回测"}
 
-        sizing_model = STRATEGY_CONFIG.get("sizing_model", "research")
-        limit_halt_model = STRATEGY_CONFIG.get("limit_halt_model", "off")
-        portfolio_risk = STRATEGY_CONFIG.get("portfolio_risk", "off")
-        rollover_open_gating = STRATEGY_CONFIG.get("rollover_open_gating", "off")
+        sizing_model = STRATEGY_CONFIG["sizing_model"]
+        limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
+        portfolio_risk = STRATEGY_CONFIG["portfolio_risk"]
+        rollover_open_gating = STRATEGY_CONFIG["rollover_open_gating"]
 
         # 基础信息
         report = {
@@ -941,17 +984,29 @@ class BacktestEngine:
             "freq": self.freq,
             "sizing_model": sizing_model,
             "limit_halt_model": limit_halt_model,
-            "exit_event_semantics": STRATEGY_CONFIG.get("exit_event_semantics", "legacy"),
-            "stop_execution_model": STRATEGY_CONFIG.get("stop_execution_model", "close"),
-            "stop_penalty_bp": STRATEGY_CONFIG.get("stop_penalty_bp", 0),
-            "resonance_filter": STRATEGY_CONFIG.get("resonance_filter", "off"),
+            "exit_event_semantics": STRATEGY_CONFIG["exit_event_semantics"],
+            "stop_execution_model": STRATEGY_CONFIG["stop_execution_model"],
+            "stop_penalty_bp": STRATEGY_CONFIG["stop_penalty_bp"],
+            "price_tick_rounding": STRATEGY_CONFIG["price_tick_rounding"],
+            "resonance_filter": STRATEGY_CONFIG["resonance_filter"],
             "portfolio_risk": portfolio_risk,
             "rollover_open_gating": rollover_open_gating,
-            "weighting": STRATEGY_CONFIG.get("weighting", "fixed"),
+            "weighting": STRATEGY_CONFIG["weighting"],
             "period": f"{self.start_date} ~ {self.end_date}",
             "total_bars": len(self.bars),
             "unparseable_rows_skipped": self.unparseable_rows_skipped,
+            "unparseable_rows_total": self.unparseable_rows_total,
+            "unparseable_row_rate": self.unparseable_row_rate,
+            "max_unparseable_row_rate": STRATEGY_CONFIG.get("max_unparseable_row_rate"),
             "traded_bars": len(self.equity_curve),
+            "transaction_cost_model": "round_trip_commission_plus_single_side_slippage",
+            "round_trip_cost_formula": "2 * commission_rate + slippage",
+            "slippage_application": "single_side_per_round_trip",
+            "slippage_model_caveat": (
+                "The backtest deducts commission on both open and close but applies single-side "
+                "slippage once per round-trip; cost-sensitivity runs should be consulted before treating "
+                "results as robust to a two-sided slippage assumption."
+            ),
             "mode_label": _compute_mode_label(
                 sizing_model, limit_halt_model, portfolio_risk, rollover_open_gating
             ),
@@ -964,8 +1019,15 @@ class BacktestEngine:
         report["max_short_exposure"] = max((e.get("short_exposure", 0.0) for e in self.equity_curve), default=0.0)
         report["max_gross_exposure"] = max((e.get("gross_exposure", 0.0) for e in self.equity_curve), default=0.0)
         report["both_long_short_bars"] = sum(1 for e in self.equity_curve if e.get("both_long_short", False))
+        report["long_short_overlap_policy"] = "independent_long_short_substrategies"
+        report["long_short_overlap_metric"] = "both_long_short_bars"
+        report["long_short_overlap_caveat"] = (
+            "When enable_short=True and regime_model=\"independent\", long and short "
+            "sub-strategies are self-gated and may overlap on the same symbol; "
+            "both_long_short_bars audits that modeling simplification."
+        )
 
-        if STRATEGY_CONFIG.get("sizing_model", "research") == "risk":
+        if STRATEGY_CONFIG["sizing_model"] == "risk":
             report["max_total_open_margin"] = max(
                 (e.get("total_open_margin", 0.0) for e in self.equity_curve), default=0.0
             )
@@ -975,11 +1037,38 @@ class BacktestEngine:
             report["final_total_open_margin"] = (
                 self.equity_curve[-1].get("total_open_margin", 0.0) if self.equity_curve else 0.0
             )
+            report["margin_rate_source"] = "contract_specs.exchange_minimum_research"
+            report["maintenance_margin_model"] = "not_modeled"
+            report["broker_forced_liquidation_model"] = "not_modeled"
+            report["margin_model_caveat"] = (
+                "Risk sizing uses exchange-minimum margin rates from contract_specs for "
+                "research bookkeeping only; maintenance margin, broker add-ons, margin calls, "
+                "and broker forced liquidation are not modeled."
+            )
+
+        if limit_halt_model in ("aware", "enforce"):
+            report["limit_halt_methodology"] = (
+                "conservative high/low touch-based model: a bar is treated as at-limit when "
+                "its range touches the directionally relevant daily limit band; enforce mode "
+                "rejects that fill and retries on the next bar"
+            )
+            report["limit_halt_temporary_widening_status"] = "manual_confirmation_required"
+            report["limit_halt_rule_caveat"] = (
+                "Steady-state limit bands are configured from exchange-published rules, but "
+                "temporary_widening_windows for AP888/RB888 are not independently verified "
+                "against a primary exchange notice and require human confirmation before "
+                "being treated as authoritative."
+            )
+            report["limit_halt_rollover_suppressed_bars"] = self._limit_halt_rollover_suppressed_bars
 
         # A76: surface rollover open-gating audit state so degraded/unavailable
         # detection is not silently indistinguishable from "gating worked".
         if rollover_open_gating == "on":
             positions = getattr(self.strategy, "positions", []) if self.strategy else []
+            report["rollover_open_gating_methodology"] = (
+                "full-window ex-post rollover transition detection; protective open gating only, "
+                "so formal backtests may be slightly optimistic versus live point-in-time detection"
+            )
             report["rollover_open_gating_rejected_opens"] = {
                 pos.name: pos._rollover_rejected_opens for pos in positions
             }

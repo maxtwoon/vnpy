@@ -1,4 +1,4 @@
-"""Patch 3: add min hold bars and cooldown to reduce over-trading."""
+"""ONE-SHOT / LEGACY patch script for archived Baostock backtest experiments."""
 
 fpath = r'd:\repo\vnpy\examples\czsc_strategy\run_baostock_backtest.py'
 content = open(fpath, 'r', encoding='utf-8').read()

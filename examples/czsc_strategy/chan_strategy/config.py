@@ -24,6 +24,10 @@ STRATEGY_CONFIG = {
     "enable_short": False,     # 是否启用一卖/二卖/三卖空头子策略
     "regime_model": "independent",  # "independent" (default, each side self-gated) | "router" (daily regime selects allowed side)
     "enable_short_symbols": None,  # Research-only short enable list; None means all when enable_short=True.
+    # long_short_overlap_policy = independent_long_short_substrategies:
+    # when enable_short=True and regime_model="independent", long/short
+    # sub-strategies may overlap on the same symbol; reports audit this via
+    # both_long_short_bars.
     "symbol_position_overrides": {},  # Research-only per-symbol pos_* overrides.
     "pos_1sell": 0.10,         # 一卖仓位10%（左侧试仓）
     "pos_2sell": 0.20,         # 二卖仓位20%
@@ -139,6 +143,10 @@ STRATEGY_CONFIG = {
     # (long entry at upper limit, long exit at lower limit, etc.) and records the rejection
     # via ``fill_rejected_at_limit``.  "enforce" is a research-only opt-in mode and does not
     # model exchange queue position or partial fills.
+    # In rollover splice exclusion windows produced by rollover_open_gating="on",
+    # BacktestEngine suppresses limit-halt tagging/rejection because the
+    # continuous-contract splice jump is not an executable session limit lock;
+    # generated reports count these bars as limit_halt_rollover_suppressed_bars.
     "limit_halt_model": "off",            # "off" (legacy, default) | "aware" | "enforce"
 
     # A52 rollover-window stat tagging (P10). "off" is the legacy byte-identical default;
@@ -150,9 +158,26 @@ STRATEGY_CONFIG = {
     # "on" blocks NEW long/short opens on bars whose trading date falls inside the
     # rollover exclusion window. Exits, stop-loss, timeout and risk-control for
     # already-open positions are unaffected. Enabled by formal_evaluation_config()
-    # for formal-evaluation runs.
+    # for formal-evaluation runs. The exclusion window is built from full-window
+    # ex-post rollover transition detection and is protective open gating only,
+    # so formal backtests may be slightly optimistic versus live point-in-time
+    # rollover detection.
     "rollover_open_gating": "off",        # "off" (legacy, default) | "on"
 
+    # Data-quality fail-closed threshold for rows skipped because datetime
+    # parsing failed. Default None preserves legacy research behavior; formal
+    # evaluation sets 0.001 so material timestamp corruption stops the run.
+    "max_unparseable_row_rate": None,
+
+    # Price tick rounding for recorded research fills. Default "off" preserves
+    # legacy baseline snapshots; formal evaluation sets "on" so fills use the
+    # exchange tick from contract_specs.
+    "price_tick_rounding": "off",
+
+    # risk_parity recomputes every bar and deliberately has no turnover/rebalance
+    # control: reports expose risk_parity_rebalance_policy="every_bar",
+    # risk_parity_turnover_control="none", max_symbol_weight_observed, and a
+    # dropout/concentration caveat for missing active-symbol bars.
     "weighting": "fixed",                 # "fixed" (legacy 10/20/30 split) | "risk_parity"
     "corr_clusters": {                    # correlated symbol clusters for gross exposure cap
         "industrial_energy": ["RB888", "ZN888", "SC888"],
@@ -163,10 +188,10 @@ STRATEGY_CONFIG = {
     # 本项是从组合权益历史峰值起算、跨交易日不重置的持久性回撤熔断——用于防止
     # daily_loss_limit_pct 挡不住的"每天各亏一点、累计慢性失血"场景。设为 0~1
     # 之间的小数（如 0.10）以启用：一旦当前权益相对历史峰值回撤达到该比例，
-    # PortfolioLedger 会强平并阻断后续新开仓（同 A90 的 daily_loss_limit 机制），
-    # 且不会随交易日切换自动解除。仅在 sizing_model="risk" 且 portfolio_risk="on"
-    # 的联合回放路径（PortfolioLedger）生效；PortfolioCoordinator 的
-    # weight-based 路径暂未接入。
+    # PortfolioCoordinator 的 weight-based replay 路径会记录触发、写入簿记型
+    # flat_events 并阻断后续新开仓；sizing_model="risk" 且 portfolio_risk="on"
+    # 的联合回放路径（PortfolioLedger）会执行真实 Position 强平并阻断新开仓。
+    # 两条路径都不会随交易日切换自动解除。
     "max_drawdown_breaker_pct": None,
     "risk_parity_lookback": 60,           # trade-period bars used for per-symbol volatility estimate
 
@@ -181,6 +206,9 @@ STRATEGY_CONFIG = {
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
         # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.
+        # Risk reports expose margin_model_caveat: exchange-minimum margin rates
+        # are used for research bookkeeping only; maintenance margin, broker
+        # add-ons, margin calls, and broker forced liquidation are not modeled.
         # Sourced 2026-07-11 from the exchanges' own published contract rules.
         "AP888": {"multiplier": 10,   "tick": 1.0, "margin_rate": 0.07},
         # source: CZCE 苹果期货合约规则 (czce.com.cn/cn/rootfiles/2021/09/09/1605597612939463-1605597612959828.pdf)
@@ -203,6 +231,11 @@ BACKTEST_CONFIG = {
     "commission_rate": 0.0001,   # 万一手续费（期货实际成本）
     "slippage": 0.0005,          # 0.05%滑点
 }
+
+# Cost model disclosure for formal reports:
+# transaction_cost_model = round_trip_commission_plus_single_side_slippage
+# slippage_application = single-side per round-trip
+# round_trip_cost_formula = 2 * commission_rate + slippage
 
 # 信号版本
 SIGNAL_VERSION = "V260615"

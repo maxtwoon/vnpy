@@ -109,6 +109,55 @@ def test_daily_loss_limit_flattens_and_blocks_then_resets_next_day():
     assert coord.allow_open("S1", "二买多头", _dt(3, 10), 95.0) is True
 
 
+def test_drawdown_breaker_flattens_blocks_and_persists_across_days():
+    """Persistent drawdown breaker uses peak-to-current equity and does not reset daily."""
+    STRATEGY_CONFIG.update({
+        "portfolio_risk": "on",
+        "weighting": "fixed",
+        "corr_clusters": {},
+        "cluster_gross_cap": 1.0,
+        "daily_loss_limit_pct": 1.0,
+        "max_drawdown_breaker_pct": 0.10,
+    })
+    coord = PortfolioCoordinator(["S1"], 1_000_000, STRATEGY_CONFIG)
+
+    coord.on_bar(_dt(1, 9), {"S1": 100.0}, portfolio_equity=1_000_000)
+    coord.on_bar(_dt(1, 10), {"S1": 110.0}, portfolio_equity=1_100_000)
+    coord.record_open("S1", "一买多头", _dt(1, 10), 110.0)
+
+    coord.on_bar(_dt(1, 11), {"S1": 98.0}, portfolio_equity=980_000)
+
+    assert coord.drawdown_breaker_active is True
+    assert len(coord.drawdown_breaker_triggers) == 1
+    assert coord.drawdown_breaker_triggers[0]["drawdown_pct"] == pytest.approx(-120_000 / 1_100_000)
+    assert len(coord.flat_events) == 1
+    assert coord.flat_events[0]["reason"] == "drawdown_breaker_flatten"
+    assert coord.allow_open("S1", "二买多头", _dt(1, 12), 98.0) is False
+
+    coord.on_bar(_dt(2, 9), {"S1": 99.0}, portfolio_equity=990_000)
+    assert coord.drawdown_breaker_active is True
+    assert coord.allow_open("S1", "二买多头", _dt(2, 10), 99.0) is False
+
+
+def test_drawdown_breaker_disabled_by_default_in_portfolio_coordinator():
+    STRATEGY_CONFIG.update({
+        "portfolio_risk": "on",
+        "weighting": "fixed",
+        "corr_clusters": {},
+        "cluster_gross_cap": 1.0,
+        "daily_loss_limit_pct": 1.0,
+        "max_drawdown_breaker_pct": None,
+    })
+    coord = PortfolioCoordinator(["S1"], 1_000_000, STRATEGY_CONFIG)
+
+    coord.on_bar(_dt(1, 9), {"S1": 100.0}, portfolio_equity=1_000_000)
+    coord.on_bar(_dt(1, 10), {"S1": 110.0}, portfolio_equity=1_100_000)
+    coord.on_bar(_dt(1, 11), {"S1": 80.0}, portfolio_equity=800_000)
+
+    assert coord.drawdown_breaker_active is False
+    assert coord.drawdown_breaker_triggers == []
+
+
 def test_risk_parity_weights_inverse_to_volatility():
     """Higher-volatility symbol receives smaller risk-parity weight."""
     STRATEGY_CONFIG.update({
@@ -218,6 +267,55 @@ def test_no_lookahead_volatility_ignores_future_bars():
     assert weights_history[-1]["QUIET"] > weights_history[-1]["NOISY"]
     # After the extreme bar becomes current, NOISY vol spikes and its weight drops further.
     assert coord.symbol_weights["NOISY"] < coord.symbol_weights["QUIET"]
+
+
+def test_risk_parity_report_discloses_rebalance_turnover_and_concentration():
+    """Risk-parity reporting names the every-bar/no-turnover-control caveat."""
+    STRATEGY_CONFIG.update({
+        "portfolio_risk": "on",
+        "weighting": "risk_parity",
+        "corr_clusters": {},
+        "cluster_gross_cap": 1.0,
+        "daily_loss_limit_pct": 1.0,
+        "risk_parity_lookback": 2,
+    })
+    d1 = _dt(2, 9)
+    d2 = _dt(2, 10)
+    d3 = _dt(2, 11)
+    engine = PortfolioEngine(["LOWVOL", "HIGHVOL"], start_date="2024-01-01", end_date="2024-01-02")
+    symbol_results = {
+        "LOWVOL": {
+            "engine": _make_fake_engine(
+                "LOWVOL",
+                [
+                    {"dt": d1, "price": 100.0, "equity": 1_000_000.0},
+                    {"dt": d2, "price": 101.0, "equity": 1_000_000.0},
+                    {"dt": d3, "price": 100.0, "equity": 1_000_000.0},
+                ],
+                [],
+            ),
+            "report": {},
+        },
+        "HIGHVOL": {
+            "engine": _make_fake_engine(
+                "HIGHVOL",
+                [
+                    {"dt": d1, "price": 100.0, "equity": 1_000_000.0},
+                    {"dt": d3, "price": 90.0, "equity": 1_000_000.0},
+                ],
+                [],
+            ),
+            "report": {},
+        },
+    }
+
+    report = engine._build_on_report(symbol_results)
+
+    assert report["risk_parity_rebalance_policy"] == "every_bar"
+    assert report["risk_parity_turnover_control"] == "none"
+    assert report["max_symbol_weight_observed"] >= 0
+    assert "dropout" in report["risk_parity_concentration_caveat"]
+    assert "turnover" in report["risk_parity_concentration_caveat"]
 
 
 def test_no_lookahead_daily_loss_uses_only_cumulated_pnl():
@@ -472,3 +570,50 @@ def test_daily_loss_limit_flatten_pair_is_net_of_cost():
     gross_pnl = (94.0 - 100.0) / 100.0  # long: +1 for sign
     expected_net_pnl = gross_pnl - (2 * commission_rate + slippage)
     assert pair["pnl_pct"] == pytest.approx(expected_net_pnl)
+
+
+def test_weight_based_portfolio_report_discloses_slippage_cost_model():
+    """The weight-based portfolio report must disclose its round-trip cost model."""
+    STRATEGY_CONFIG.update({
+        "portfolio_risk": "on",
+        "weighting": "fixed",
+        "corr_clusters": {},
+        "cluster_gross_cap": 1.0,
+        "daily_loss_limit_pct": 0.05,
+    })
+
+    symbol = "S1"
+    dt = datetime(2024, 1, 1, 15, 0)
+    equity_curve = [{"dt": dt, "price": 100.0, "equity": 1_000_000.0}]
+
+    engine = PortfolioEngine([symbol], start_date="2024-01-01", end_date="2024-01-02")
+    symbol_results = {
+        symbol: {"engine": _make_fake_engine(symbol, equity_curve, []), "report": {}},
+    }
+    report = engine._build_on_report(symbol_results)
+
+    assert report["transaction_cost_model"] == "round_trip_commission_plus_single_side_slippage"
+    assert report["round_trip_cost_formula"] == "2 * commission_rate + slippage"
+    assert report["slippage_application"] == "single_side_per_round_trip"
+
+
+def test_portfolio_risk_off_report_discloses_slippage_cost_model():
+    """The independent aggregation report must carry the same cost disclosure."""
+    STRATEGY_CONFIG.update({
+        "portfolio_risk": "off",
+        "weighting": "fixed",
+    })
+
+    symbol = "S1"
+    dt = datetime(2024, 1, 1, 15, 0)
+    equity_curve = [{"dt": dt, "price": 100.0, "equity": 1_000_000.0}]
+
+    engine = PortfolioEngine([symbol], start_date="2024-01-01", end_date="2024-01-02")
+    symbol_results = {
+        symbol: {"engine": _make_fake_engine(symbol, equity_curve, []), "report": {}},
+    }
+    report = engine._build_off_report(symbol_results)
+
+    assert report["transaction_cost_model"] == "round_trip_commission_plus_single_side_slippage"
+    assert report["round_trip_cost_formula"] == "2 * commission_rate + slippage"
+    assert report["slippage_application"] == "single_side_per_round_trip"

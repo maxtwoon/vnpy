@@ -116,9 +116,9 @@ def _macd_divergence_power(enter_bi, leave_bi, czsc_obj) -> tuple[float, float]:
 
     Reads only confirmed bars available on ``czsc_obj.bars_raw``.
     """
-    fast = STRATEGY_CONFIG.get("macd_fast", 12)
-    slow = STRATEGY_CONFIG.get("macd_slow", 26)
-    signal = STRATEGY_CONFIG.get("macd_signal", 9)
+    fast = STRATEGY_CONFIG["macd_fast"]
+    slow = STRATEGY_CONFIG["macd_slow"]
+    signal = STRATEGY_CONFIG["macd_signal"]
     all_bars = list(getattr(czsc_obj, "bars_raw", []) or [])
 
     enter_power = _macd_power_for_segment(
@@ -132,7 +132,7 @@ def _macd_divergence_power(enter_bi, leave_bi, czsc_obj) -> tuple[float, float]:
 
 def _divergence_power(enter_bi, leave_bi, czsc_obj) -> tuple[float, float]:
     """Return (enter_power, leave_power) according to the active divergence_model."""
-    model = STRATEGY_CONFIG.get("divergence_model", "amplitude")
+    model = STRATEGY_CONFIG["divergence_model"]
     if model == "macd":
         return _macd_divergence_power(enter_bi, leave_bi, czsc_obj)
     return _bi_power(enter_bi), _bi_power(leave_bi)
@@ -381,8 +381,14 @@ def signal_zs_confirmation(c: CZSC, freq: str = "30分钟") -> dict:
 
     判定逻辑:
     - 中枢至少由3笔构成才为"已确认"
-    - 中枢正在构建中（不足3笔重叠）为"未确认"
+    - 中枢正在构建中（2笔但尚不满足3笔重叠）为"未确认"，score=30
+    - 中枢对象存在但 n_bis < 3 时为兼容旧结构的防御性"未确认"，score=40；
+      当前 build_zhongshu_from_bis 只返回已由至少3笔构成的中枢，该分支预计不可达
     - 无中枢时返回"无中枢"
+
+    术语出处与信号稳定性假设:
+    - 缠论术语以 skill_build/reference/缠论术语表.md 为本工作区唯一映射出处
+    - 本信号没有预期换手目标；稳定性假设依赖已确认笔、T+1 open 执行和无重绘验证
     """
     k1 = freq
     k2 = "D1ZS"
@@ -945,7 +951,7 @@ def get_legacy_signals(c: CZSC, freq: str = "30分钟", buy1_anchor: dict = None
     signals.update(signal_second_buy(c, freq, buy1_anchor=buy1_anchor))
     signals.update(signal_third_buy(c, freq))
     signals.update(signal_risk_control(c, freq))
-    if STRATEGY_CONFIG.get("exit_event_semantics") == "restructured":
+    if STRATEGY_CONFIG["exit_event_semantics"] == "restructured":
         signals.update(signal_risk_control_recent(c, freq))
     return signals
 

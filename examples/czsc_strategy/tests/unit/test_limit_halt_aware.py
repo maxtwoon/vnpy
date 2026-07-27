@@ -274,6 +274,25 @@ def test_daily_prev_close_map_uses_trading_day_not_calendar_date():
     assert prev_map[trading_day_3] == (100.0, trading_day_2)
 
 
+def test_daily_prev_close_map_prefers_previous_settlement_when_available():
+    """Exchange limit bands use previous settlement; close is only a fallback."""
+    class Bar:
+        def __init__(self, dt: datetime, close: float, settlement: float | None = None):
+            self.dt = dt
+            self.close = close
+            if settlement is not None:
+                self.settlement = settlement
+
+    bars = [
+        Bar(datetime(2024, 1, 2, 15, 0), close=100.0, settlement=98.0),
+        Bar(datetime(2024, 1, 3, 9, 0), close=101.0),
+    ]
+
+    prev_map = _daily_prev_close_map(bars)
+
+    assert prev_map[date(2024, 1, 3)] == (98.0, date(2024, 1, 2))
+
+
 def test_temporary_widening_windows_override_steady_state():
     """Registered widening windows override the steady-state limit percentage."""
     assert _limit_pct_for_date("AP888", date(2026, 5, 5)) == 0.05

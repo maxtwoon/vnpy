@@ -54,6 +54,8 @@
 > 2. **中枢结构状态"已确认"**：指中枢已由 ≥3 笔重叠构成（`signal_zs_confirmation`），与买卖点确认是两回事。
 > 3. **"次级别确认"**：曾在 `confirm_freq` 配置项与部分函数 docstring 中提及，但从未被任何代码实际消费——不存在跨级别协同确认的实现。相关死配置已删除（见上文"周期映射"）。
 
+> **术语与稳定性假设（2026-07-26 审核后补充）**：缠论术语以 `skill_build/reference/缠论术语表.md` 作为本工作区的唯一映射出处；策略代码里的"笔 / 中枢 / 背驰 / 一买 / 二买 / 三买"应按该表和 `chan_strategy/` 信号命名解释，不从历史 A 股脚本回流定义。本策略没有显式预期换手目标或再平衡频率约束；稳定性假设是"已确认笔 + T+1 open 执行 + 增量一致性/无重绘验证"共同约束信号不依赖未确认末笔。`signal_zs_confirmation` 中的"未确认"有两种分数：`score=30` 表示 2 笔构建中的可达状态；`score=40` 是兼容旧中枢对象的防御性分支，在当前 `build_zhongshu_from_bis` 返回规则下预计不可达。
+
 ### 仓位管理
 
 默认采用固定分层仓位（`sizing_model="research"` 为基线）：
@@ -95,6 +97,7 @@
 | ZN888（锌） | 5 | 5.0 | 5% |
 
 > 上述保证金率为交易所公布的最低标准，仅用于研究回测，不是实际券商/期货公司保证金。
+> `sizing_model="risk"` 报告会输出 `margin_model_caveat`：保证金数字使用 `contract_specs` 的 exchange-minimum margin rates，仅为 research bookkeeping；maintenance margin、broker add-ons、margin call 与 broker forced liquidation 均未建模。
 
 ### 回测配置
 
@@ -107,6 +110,11 @@
 | `initial_capital` | 1,000,000 | 初始资金 |
 | `commission_rate` | 0.0001 | 手续费（万一） |
 | `slippage` | 0.0005 | 滑点（0.05%） |
+
+Cost model disclosure: `transaction_cost_model=round_trip_commission_plus_single_side_slippage`;
+`slippage_application=single-side per round-trip`; round-trip net PnL deducts
+`2 * commission_rate + slippage`. This is a transparent research assumption,
+not broker-grade execution modeling.
 
 回测数据源为 SQLite 期货 1 分钟 K 线数据库（路径由 `SQLITE_DB_PATH` 指定，可通过环境变量 `CHAN_SQLITE_DB_PATH` 覆盖）。
 
@@ -162,16 +170,19 @@ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
 `chan_strategy/config.py` 的 `STRATEGY_CONFIG` 中叠加了大量研究-only 的可选开关（默认均为与历史基线字节一致的值），例如：
 
 - `exit_model`: `"legacy" | "structural_atr"`
-- `limit_halt_model`: `"off" | "aware" | "enforce"`
+- `limit_halt_model`: `"off" | "aware" | "enforce"`（涨跌停带宽按 previous settlement 计算；如果历史 bar 没有 settlement / settle / settlement_price / settle_price 字段，则 fallback 到 previous close；执行口径是 conservative high/low touch-based model，即 bar 区间触及方向相关涨跌停带即标记/拒单；当 `rollover_open_gating="on"` 且当前 bar 落在连续合约 splice exclusion window 内时，会 suppress limit-halt 标记/拒单并在报告字段 `limit_halt_rollover_suppressed_bars` 计数）。`temporary_widening_windows` 仅作为 research-only 临时扩板覆盖表；当前 AP888/RB888 临时窗口为 `manual_confirmation_required`，尚未 `not independently verified` against a `primary exchange notice`，人工确认前不得视为权威交易所规则。
 - `sizing_model`: `"research" | "risk"`
 - `divergence_model`: `"amplitude" | "macd"`
 - `resonance_filter`: `"off" | "daily" | "daily_4h"`
 - `second_buy_mode`: `"baseline" | "gated" | "off"`
 - `portfolio_risk`: `"off" | "on"`
-- `weighting`: `"fixed" | "risk_parity"`
-- `regime_model`: `"independent"（默认）| "router"`（"router" 时由日线市况路由器统一选择当日允许开仓的多空方向；默认 `"independent"` 为多空各自独立按自身信号门控，不做市况路由）
+- `rollover_open_gating`: `"off" | "on"`（formal 开启时会用 full-window ex-post rollover transition detection 生成换月排除窗；该门控是 protective open gating，仅阻断新开仓，不影响已有持仓退出，因此 formal 回测相对真实 point-in-time 发现换月可能轻微偏乐观）
+- `max_unparseable_row_rate`: `None`（默认，legacy 只计数披露）| `0~1` 之间的小数；formal evaluation 设为 `0.001`，当 datetime 无法解析并被跳过的行数比例超过阈值时 fail-closed
+- `price_tick_rounding`: `"off"`（默认，保留 legacy baseline）| `"on"`；formal evaluation 设为 `"on"`，成交价会按 `contract_specs` 中的 `tick` round 到交易所最小变动价位
+- `weighting`: `"fixed" | "risk_parity"`（`risk_parity` 的报告字段会写出 `risk_parity_rebalance_policy="every_bar"` 与 `risk_parity_turnover_control="none"`：权重每根交易周期 bar 按滚动波动率重算，没有显式 turnover 或 rebalance 约束；若某标的出现 data dropout / 缺 bar，活跃标的权重归一化可能临时推高 concentration，报告字段 `max_symbol_weight_observed` 与 `risk_parity_concentration_caveat` 会披露该口径）
+- `regime_model`: `"independent"（默认）| "router"`（"router" 时由日线市况路由器统一选择当日允许开仓的多空方向；默认 `"independent"` 为多空各自独立按自身信号门控，不做市况路由）。`long_short_overlap_policy=independent_long_short_substrategies`：当 `enable_short=True` 且 `regime_model="independent"` 时，同一标的的多头/空头子策略可能同时持仓，报告用 `both_long_short_bars` 审计该研究简化。
 - `atr_chop_filter`: `"off"（默认，legacy 行为）| "on"`（基于 ATR 的震荡市过滤器；开启后在低波动/无趋势环境下会 gate 掉新开仓；实现见 `positions.py`）
-- `max_drawdown_breaker_pct`: `None`（默认，禁用）| `0~1` 之间的小数（2026-07-26 审核后新增）——组合权益相对历史峰值的持久性回撤熔断，跨交易日不重置（区别于每日重置的 `daily_loss_limit_pct`）；仅在 `sizing_model="risk"` 且 `portfolio_risk="on"` 的联合回放路径（`PortfolioLedger`）生效，触发后强平并阻断新开仓，直到该次回放结束
+- `max_drawdown_breaker_pct`: `None`（默认，禁用）| `0~1` 之间的小数（2026-07-26 审核后新增）——组合权益相对历史峰值的持久性回撤熔断，跨交易日不重置（区别于每日重置的 `daily_loss_limit_pct`）；`PortfolioCoordinator` 的 weight-based replay 路径会记录 `drawdown_breaker_triggers`、写入簿记型 `flat_events` 并阻断新开仓，`sizing_model="risk"` + `portfolio_risk="on"` 的联合回放路径（`PortfolioLedger`）会执行真实 Position 强平并阻断新开仓，直到该次回放结束
 
 完整列表与默认值请以 `chan_strategy/config.py` 为准，README 不再逐一复制，以避免再次出现文档漂移。
 

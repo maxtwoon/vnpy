@@ -1085,7 +1085,7 @@ def run_full_validation(symbol: str = "AP888", freq: str = "1",
     signal_history_full = engine.signal_history
     # 未来函数验证必须使用交易周期K线，与正式回测一致
     trade_bars = engine.trade_bars
-    trade_freq_name = STRATEGY_CONFIG.get("trade_freq", "30分钟")
+    trade_freq_name = STRATEGY_CONFIG["trade_freq"]
     warmup_bars = 100
 
     # 获取回测报告

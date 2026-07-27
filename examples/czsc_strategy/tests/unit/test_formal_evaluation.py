@@ -38,6 +38,7 @@ def test_formal_evaluation_config_sets_risk_enforce_and_rollover_gating():
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
     STRATEGY_CONFIG["stop_execution_model"] = "close"
     STRATEGY_CONFIG["daily_agg"] = "natural"
+    STRATEGY_CONFIG["price_tick_rounding"] = "off"
 
     with formal_evaluation_config():
         assert STRATEGY_CONFIG["sizing_model"] == "risk"
@@ -45,6 +46,7 @@ def test_formal_evaluation_config_sets_risk_enforce_and_rollover_gating():
         assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
         assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
         assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
+        assert STRATEGY_CONFIG["price_tick_rounding"] == "on"
 
 
 def test_formal_evaluation_config_restores_original_values_on_success():
@@ -53,6 +55,7 @@ def test_formal_evaluation_config_restores_original_values_on_success():
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
     STRATEGY_CONFIG["stop_execution_model"] = "close"
     STRATEGY_CONFIG["daily_agg"] = "natural"
+    STRATEGY_CONFIG["price_tick_rounding"] = "off"
 
     with formal_evaluation_config():
         pass
@@ -62,6 +65,7 @@ def test_formal_evaluation_config_restores_original_values_on_success():
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
     assert STRATEGY_CONFIG["stop_execution_model"] == "close"
     assert STRATEGY_CONFIG["daily_agg"] == "natural"
+    assert STRATEGY_CONFIG["price_tick_rounding"] == "off"
 
 
 def test_formal_evaluation_config_restores_original_values_on_exception():
@@ -70,6 +74,7 @@ def test_formal_evaluation_config_restores_original_values_on_exception():
     STRATEGY_CONFIG["rollover_open_gating"] = "off"
     STRATEGY_CONFIG["stop_execution_model"] = "close"
     STRATEGY_CONFIG["daily_agg"] = "natural"
+    STRATEGY_CONFIG["price_tick_rounding"] = "off"
 
     class CustomError(Exception):
         pass
@@ -81,6 +86,7 @@ def test_formal_evaluation_config_restores_original_values_on_exception():
             assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
             assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
             assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
+            assert STRATEGY_CONFIG["price_tick_rounding"] == "on"
             raise CustomError("boom")
 
     assert STRATEGY_CONFIG["sizing_model"] == "research"
@@ -88,6 +94,7 @@ def test_formal_evaluation_config_restores_original_values_on_exception():
     assert STRATEGY_CONFIG["rollover_open_gating"] == "off"
     assert STRATEGY_CONFIG["stop_execution_model"] == "close"
     assert STRATEGY_CONFIG["daily_agg"] == "natural"
+    assert STRATEGY_CONFIG["price_tick_rounding"] == "off"
 
 
 def test_formal_evaluation_config_restores_non_default_original_values():
@@ -97,6 +104,7 @@ def test_formal_evaluation_config_restores_non_default_original_values():
     STRATEGY_CONFIG["rollover_open_gating"] = "on"
     STRATEGY_CONFIG["stop_execution_model"] = "intrabar"
     STRATEGY_CONFIG["daily_agg"] = "trading_calendar"
+    STRATEGY_CONFIG["price_tick_rounding"] = "off"
 
     with formal_evaluation_config():
         assert STRATEGY_CONFIG["sizing_model"] == "risk"
@@ -104,12 +112,14 @@ def test_formal_evaluation_config_restores_non_default_original_values():
         assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
         assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
         assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
+        assert STRATEGY_CONFIG["price_tick_rounding"] == "on"
 
     assert STRATEGY_CONFIG["sizing_model"] == "risk"
     assert STRATEGY_CONFIG["limit_halt_model"] == "aware"
     assert STRATEGY_CONFIG["rollover_open_gating"] == "on"
     assert STRATEGY_CONFIG["stop_execution_model"] == "intrabar"
     assert STRATEGY_CONFIG["daily_agg"] == "trading_calendar"
+    assert STRATEGY_CONFIG["price_tick_rounding"] == "off"
 
 
 def test_formal_evaluation_config_overrides_and_restores_daily_agg():
@@ -206,9 +216,191 @@ def test_run_formal_evaluation_mode_label_is_non_baseline(monkeypatch):
     assert report["sizing_model"] == "risk"
     assert report["limit_halt_model"] == "enforce"
     assert report["stop_execution_model"] == "intrabar"
+    assert report["price_tick_rounding"] == "on"
     assert report["mode_label"] == (
         "PARTIAL_PRODUCTION_FEATURES(sizing_model=risk,limit_halt_model=enforce,rollover_open_gating=on)"
     )
+
+
+def test_formal_report_discloses_limit_halt_touch_based_methodology(monkeypatch):
+    """Formal reports must disclose the conservative high/low touch-based limit-halt model."""
+    from datetime import datetime
+
+    monkeypatch.setattr(BacktestEngine, "run", lambda self: {"ok": True})
+    monkeypatch.setattr(BacktestEngine, "print_report", lambda self, report=None: None)
+
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.bars = []
+    engine.equity_curve = [
+        {"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0},
+    ]
+
+    class FakeStrategy:
+        positions = []
+
+        def evaluate_all(self):
+            return {"fake": {"total_trades": 0, "win_rate": 0, "profit_factor": 0}}
+
+        def get_combined_trades(self):
+            return []
+
+    engine.strategy = FakeStrategy()
+
+    with formal_evaluation_config():
+        report = engine.generate_report()
+
+    methodology = report["limit_halt_methodology"]
+    assert "high/low" in methodology
+    assert "touch" in methodology
+    assert "conservative" in methodology
+
+
+def test_formal_report_discloses_limit_halt_temporary_window_verification_status(monkeypatch):
+    """Formal reports must disclose that temporary widening windows need human verification."""
+    from datetime import datetime
+
+    monkeypatch.setattr(BacktestEngine, "run", lambda self: {"ok": True})
+    monkeypatch.setattr(BacktestEngine, "print_report", lambda self, report=None: None)
+
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.bars = []
+    engine.equity_curve = [
+        {"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0},
+    ]
+
+    class FakeStrategy:
+        positions = []
+
+        def evaluate_all(self):
+            return {"fake": {"total_trades": 0, "win_rate": 0, "profit_factor": 0}}
+
+        def get_combined_trades(self):
+            return []
+
+    engine.strategy = FakeStrategy()
+
+    with formal_evaluation_config():
+        report = engine.generate_report()
+
+    assert report["limit_halt_temporary_widening_status"] == "manual_confirmation_required"
+    assert "temporary_widening_windows" in report["limit_halt_rule_caveat"]
+    assert "not independently verified" in report["limit_halt_rule_caveat"]
+    assert "primary exchange notice" in report["limit_halt_rule_caveat"]
+
+
+def test_formal_report_discloses_margin_model_limitations(monkeypatch):
+    """Risk-mode reports must expose margin-source and no-maintenance-margin caveats."""
+    from datetime import datetime
+
+    monkeypatch.setattr(BacktestEngine, "run", lambda self: {"ok": True})
+    monkeypatch.setattr(BacktestEngine, "print_report", lambda self, report=None: None)
+
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.bars = []
+    engine.equity_curve = [
+        {
+            "dt": datetime(2024, 1, 1),
+            "equity": 1000,
+            "price": 1,
+            "positions": 0,
+            "total_open_margin": 0,
+            "margin_utilization_pct": 0,
+        },
+    ]
+
+    class FakeStrategy:
+        positions = []
+
+        def evaluate_all(self):
+            return {"fake": {"total_trades": 0, "win_rate": 0, "profit_factor": 0}}
+
+        def get_combined_trades(self):
+            return []
+
+    engine.strategy = FakeStrategy()
+
+    with formal_evaluation_config():
+        report = engine.generate_report()
+
+    assert report["margin_rate_source"] == "contract_specs.exchange_minimum_research"
+    assert report["maintenance_margin_model"] == "not_modeled"
+    assert report["broker_forced_liquidation_model"] == "not_modeled"
+    assert "maintenance" in report["margin_model_caveat"]
+    assert "broker" in report["margin_model_caveat"]
+
+
+def test_formal_report_discloses_single_side_slippage_cost_model(monkeypatch):
+    """Formal reports must expose that slippage is modeled once per round trip."""
+    from datetime import datetime
+
+    monkeypatch.setattr(BacktestEngine, "run", lambda self: {"ok": True})
+    monkeypatch.setattr(BacktestEngine, "print_report", lambda self, report=None: None)
+
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.bars = []
+    engine.equity_curve = [
+        {"dt": datetime(2024, 1, 1), "equity": 1000, "price": 1, "positions": 0},
+    ]
+
+    class FakeStrategy:
+        positions = []
+
+        def evaluate_all(self):
+            return {"fake": {"total_trades": 0, "win_rate": 0, "profit_factor": 0}}
+
+        def get_combined_trades(self):
+            return []
+
+    engine.strategy = FakeStrategy()
+
+    with formal_evaluation_config():
+        report = engine.generate_report()
+
+    assert report["transaction_cost_model"] == "round_trip_commission_plus_single_side_slippage"
+    assert report["round_trip_cost_formula"] == "2 * commission_rate + slippage"
+    assert report["slippage_application"] == "single_side_per_round_trip"
+    assert "single-side" in report["slippage_model_caveat"]
+    assert "round-trip" in report["slippage_model_caveat"]
+
+
+def test_formal_report_discloses_independent_long_short_overlap_policy(monkeypatch):
+    """Reports must disclose how simultaneous long/short exposure is audited."""
+    from datetime import datetime
+
+    monkeypatch.setattr(BacktestEngine, "run", lambda self: {"ok": True})
+    monkeypatch.setattr(BacktestEngine, "print_report", lambda self, report=None: None)
+
+    engine = BacktestEngine("T", initial_capital=1000)
+    engine.bars = []
+    engine.equity_curve = [
+        {
+            "dt": datetime(2024, 1, 1),
+            "equity": 1000,
+            "price": 1,
+            "positions": 0,
+            "both_long_short": True,
+        },
+    ]
+
+    class FakeStrategy:
+        positions = []
+
+        def evaluate_all(self):
+            return {"fake": {"total_trades": 0, "win_rate": 0, "profit_factor": 0}}
+
+        def get_combined_trades(self):
+            return []
+
+    engine.strategy = FakeStrategy()
+
+    with formal_evaluation_config():
+        report = engine.generate_report()
+
+    assert report["both_long_short_bars"] == 1
+    assert report["long_short_overlap_policy"] == "independent_long_short_substrategies"
+    assert report["long_short_overlap_metric"] == "both_long_short_bars"
+    assert "enable_short=True" in report["long_short_overlap_caveat"]
+    assert "regime_model=\"independent\"" in report["long_short_overlap_caveat"]
 
 
 # --------------------------------------------------------------- research-baseline guard

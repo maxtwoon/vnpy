@@ -5,6 +5,7 @@
 使用自定义轻量实现，兼容 czsc 框架的 dict 配置格式
 """
 from dataclasses import dataclass, field
+from decimal import Decimal, ROUND_HALF_UP
 from enum import Enum
 from datetime import datetime
 from math import floor
@@ -105,7 +106,7 @@ def _higher_level_filter_signals(direction: str = "long", strict: bool = True) -
     each sub-strategy.  ``"daily"`` requires strictly-positive daily structure.
     ``"daily_4h"`` additionally requires constructive 4H structure.
     """
-    resonance_filter = STRATEGY_CONFIG.get("resonance_filter", "off")
+    resonance_filter = STRATEGY_CONFIG["resonance_filter"]
     if resonance_filter == "off":
         return _daily_trend_filter_signals(direction=direction, strict=strict)
 
@@ -114,7 +115,7 @@ def _higher_level_filter_signals(direction: str = "long", strict: bool = True) -
         return daily
 
     # "daily_4h"
-    freq_4h = STRATEGY_CONFIG.get("resonance_freq_4h", "240分钟")
+    freq_4h = STRATEGY_CONFIG["resonance_freq_4h"]
     h4 = _resonance_filter_signals(direction=direction, level=freq_4h)
     return {
         "signals_all": daily["signals_all"] + h4["signals_all"],
@@ -137,9 +138,9 @@ def _resonance_holds(
     condition is enforced: daily level (and 4H when configured as ``daily_4h``).
     """
     if force_resonance:
-        resonance_filter = STRATEGY_CONFIG.get("resonance_filter", "off")
+        resonance_filter = STRATEGY_CONFIG["resonance_filter"]
         if resonance_filter == "daily_4h":
-            freq_4h = STRATEGY_CONFIG.get("resonance_freq_4h", "240分钟")
+            freq_4h = STRATEGY_CONFIG["resonance_freq_4h"]
             daily = _resonance_filter_signals(direction=direction, level="日线")
             h4 = _resonance_filter_signals(direction=direction, level=freq_4h)
             filters = {
@@ -166,7 +167,7 @@ def _atr_filter_signals(freq: str) -> dict:
     When ``atr_chop_filter`` is ``"off"`` (default) this returns empty lists,
     keeping the legacy behavior byte-identical.
     """
-    if STRATEGY_CONFIG.get("atr_chop_filter") != "on":
+    if STRATEGY_CONFIG["atr_chop_filter"] != "on":
         return {"signals_all": [], "signals_not": []}
     return {
         "signals_all": [f"{freq}_ATR_波动V260615_扩张_任意_任意_100"],
@@ -350,6 +351,22 @@ def _research_contract_spec(symbol: str) -> dict:
     return {"multiplier": 1, "tick": 0.01, "margin_rate": 0.0}
 
 
+def _round_price_to_tick(symbol: str, price: float) -> float:
+    """Round a research fill price to the configured exchange tick grid."""
+    if STRATEGY_CONFIG["price_tick_rounding"] != "on":
+        return float(price)
+
+    spec = _research_contract_spec(symbol)
+    tick = float(spec.get("tick", 0.0))
+    if tick <= 0:
+        return float(price)
+
+    price_decimal = Decimal(str(price))
+    tick_decimal = Decimal(str(tick))
+    ticks = (price_decimal / tick_decimal).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return float(ticks * tick_decimal)
+
+
 def _research_trailing_params(symbol: str) -> tuple[int, float]:
     """Return trailing params, optionally overridden per symbol for diagnostics."""
     overrides = STRATEGY_CONFIG.get("trailing_overrides") or {}
@@ -381,7 +398,7 @@ def _research_second_buy_allowed(
     - ``"gated"`` requires P4 MACD divergence, P5 resonance and ATR expansion.
     - ``"baseline"`` keeps the legacy behavior.
     """
-    mode = STRATEGY_CONFIG.get("second_buy_mode", "baseline")
+    mode = STRATEGY_CONFIG["second_buy_mode"]
 
     if mode == "off":
         return False
@@ -503,8 +520,8 @@ def _build_exit_events(
     full-close exits from partial-tp events so that profit-side scaling only
     occurs when the center-boundary / measured-target conditions are met.
     """
-    semantics = STRATEGY_CONFIG.get("exit_event_semantics", "legacy")
-    exit_model = STRATEGY_CONFIG.get("exit_model", "legacy")
+    semantics = STRATEGY_CONFIG["exit_event_semantics"]
+    exit_model = STRATEGY_CONFIG["exit_model"]
     events: list[Event] = []
 
     if semantics == "legacy":
@@ -732,7 +749,7 @@ class Position:
             # 更新最大盈利追踪（用实际价格，非成交价）
             self._update_trailing(price)
 
-            exit_model = STRATEGY_CONFIG.get("exit_model", "legacy")
+            exit_model = STRATEGY_CONFIG["exit_model"]
             if exit_model == "legacy":
                 # 历史基线路径：百分比回撤移动止损 > 固定止损 > 超时
                 # 信号平仓已在上面处理，保持最高优先级。
@@ -865,7 +882,7 @@ class Position:
         """检查是否触发 ATR 移动止损（structural_atr 模式）。"""
         if atr is None or atr <= 0 or self.cost == 0 or self.pos == 0:
             return False
-        mult = STRATEGY_CONFIG.get("atr_trail_mult", 3.0)
+        mult = STRATEGY_CONFIG["atr_trail_mult"]
         if self.pos > 0:
             trail = self._peak_price - mult * atr
             return price <= trail
@@ -893,7 +910,7 @@ class Position:
         - intrabar 模型：多头看当根 bar_low 是否触及止损位，空头看 bar_high。
           当 intrabar 被请求但缺少对应 bar 极值（旧调用方）时，安全回退到收盘价检查。
         """
-        if STRATEGY_CONFIG.get("stop_execution_model", "close") == "intrabar" and self.cost != 0:
+        if STRATEGY_CONFIG["stop_execution_model"] == "intrabar" and self.cost != 0:
             if self.pos > 0 and bar_low is not None:
                 return bar_low <= self.cost * (1 - self.stop_loss / 10000)
             if self.pos < 0 and bar_high is not None:
@@ -908,9 +925,9 @@ class Position:
         - intrabar 模型：多头 = min(触发位, 收盘价)，空头 = max(触发位, 收盘价)，
           再叠加 ``stop_penalty_bp`` 不利滑点。跳空穿透时 fill 退化为更差的收盘价。
         """
-        if STRATEGY_CONFIG.get("stop_execution_model", "close") != "intrabar" or self.cost == 0:
+        if STRATEGY_CONFIG["stop_execution_model"] != "intrabar" or self.cost == 0:
             return price
-        penalty = STRATEGY_CONFIG.get("stop_penalty_bp", 0) / 10000
+        penalty = STRATEGY_CONFIG["stop_penalty_bp"] / 10000
         if self.pos > 0 and bar_low is not None:
             trigger = self.cost * (1 - self.stop_loss / 10000)
             return min(trigger, price) * (1 - penalty)
@@ -929,8 +946,9 @@ class Position:
         """
         if self.pos == 0 or self.cost == 0 or self.volume <= 0:
             return
+        price = _round_price_to_tick(self.symbol, price)
 
-        partial_tp_frac = STRATEGY_CONFIG.get("partial_tp_frac", 0.5)
+        partial_tp_frac = STRATEGY_CONFIG["partial_tp_frac"]
         if partial_tp_frac <= 0 or partial_tp_frac >= 1:
             return
 
@@ -990,6 +1008,7 @@ class Position:
                    equity_at_entry: float | None = None,
                    total_open_margin: float | None = None,
                    entry_at_limit: bool | None = None):
+        price = _round_price_to_tick(self.symbol, price)
         if STRATEGY_CONFIG["sizing_model"] == "risk":
             self.volume, self.contract_multiplier = self._size_open(
                 price, equity_at_entry, total_open_margin
@@ -1030,7 +1049,7 @@ class Position:
         multiplier = int(spec.get("multiplier", 1))
         margin_rate = float(spec.get("margin_rate", 0.0))
 
-        equity_mode = STRATEGY_CONFIG.get("equity_mode", "fixed")
+        equity_mode = STRATEGY_CONFIG["equity_mode"]
         if equity_mode == "compound":
             raise NotImplementedError(
                 'equity_mode="compound" is documented but not yet implemented'
@@ -1069,6 +1088,7 @@ class Position:
         return volume, multiplier
 
     def _close_long(self, price: float, dt: datetime, reason: str = ""):
+        price = _round_price_to_tick(self.symbol, price)
         gross_pnl = (price - self.cost) / self.cost
         transaction_cost = 2 * self.commission_rate + self.slippage  # 开平两次手续费 + 滑点
         pnl = gross_pnl - transaction_cost
@@ -1118,6 +1138,7 @@ class Position:
                     equity_at_entry: float | None = None,
                     total_open_margin: float | None = None,
                     entry_at_limit: bool | None = None):
+        price = _round_price_to_tick(self.symbol, price)
         if STRATEGY_CONFIG["sizing_model"] == "risk":
             self.volume, self.contract_multiplier = self._size_open(
                 price, equity_at_entry, total_open_margin
@@ -1140,6 +1161,7 @@ class Position:
         self.trades.append(TradeRecord(dt=dt, operate=Operate.SO, price=price, volume=self.volume, reason=reason))
 
     def _close_short(self, price: float, dt: datetime, reason: str = ""):
+        price = _round_price_to_tick(self.symbol, price)
         gross_pnl = (self.cost - price) / self.cost
         transaction_cost = 2 * self.commission_rate + self.slippage
         pnl = gross_pnl - transaction_cost
@@ -1755,11 +1777,11 @@ class ChanTimingStrategy:
         self.symbol = symbol
         self.freq = freq
         self.enable_daily_filter = (
-            STRATEGY_CONFIG.get("filter_freq") == "日线"
+            STRATEGY_CONFIG["filter_freq"] == "日线"
             if enable_daily_filter is None else enable_daily_filter
         )
         self.enable_short = (
-            STRATEGY_CONFIG.get("enable_short", False)
+            STRATEGY_CONFIG["enable_short"]
             if enable_short is None else enable_short
         )
         if enable_short is None and self.enable_short:
@@ -1783,9 +1805,9 @@ class ChanTimingStrategy:
         # A45 ATR chop-filter state tracker (updated every trade-frequency bar).
         from chan_strategy.signals import AtrStateTracker
         self._atr_tracker = AtrStateTracker(
-            period=STRATEGY_CONFIG.get("atr_period", 14),
-            lookback=STRATEGY_CONFIG.get("atr_lookback", 100),
-            floor=STRATEGY_CONFIG.get("atr_percentile_floor", 0.30),
+            period=STRATEGY_CONFIG["atr_period"],
+            lookback=STRATEGY_CONFIG["atr_lookback"],
+            floor=STRATEGY_CONFIG["atr_percentile_floor"],
         )
 
     def get_last_buy1_anchor(self) -> dict | None:
@@ -1798,7 +1820,7 @@ class ChanTimingStrategy:
 
     def _log_daily_trend(self, signals_dict: dict, dt: datetime):
         """记录日线趋势状态（供调试与验证过滤是否生效）"""
-        if STRATEGY_CONFIG.get("filter_freq") != "日线":
+        if STRATEGY_CONFIG["filter_freq"] != "日线":
             return
 
         bi_key = "日线_D1BI_方向V260615"
@@ -2023,8 +2045,8 @@ class ChanTimingStrategy:
         )
         current_atr = atr_state.get("atr")
         inject_atr = (
-            STRATEGY_CONFIG.get("atr_chop_filter") == "on"
-            or STRATEGY_CONFIG.get("second_buy_mode") == "gated"
+            STRATEGY_CONFIG["atr_chop_filter"] == "on"
+            or STRATEGY_CONFIG["second_buy_mode"] == "gated"
         )
         if inject_atr:
             signals_dict = dict(signals_dict)
@@ -2033,7 +2055,7 @@ class ChanTimingStrategy:
         # A46: regime router decides which side is allowed to open NEW positions.
         # Existing positions always exit normally because opens_allowed only blocks
         # open events (pos == 0).
-        regime_model = STRATEGY_CONFIG.get("regime_model", "independent")
+        regime_model = STRATEGY_CONFIG["regime_model"]
         if regime_model == "router":
             regime = self._daily_regime(signals_dict)
             current_long = any(p.pos > 0 for p in self.positions)

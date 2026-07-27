@@ -2,6 +2,11 @@
 
 这个模块复用 signals.py 的基础分类与买点信号，并补充一卖、二卖、三卖
 以及空头结构风控。内部回测与验证统一从这里导入 get_all_signals。
+
+Terminology source note: ``skill_build/reference/缠论术语表.md`` is the
+workspace mapping between Chan-theory terms and code signal fields. It is a
+non-authoritative glossary for this repository, not a claim that this production
+signal path implements a single canonical Chan-theory definition.
 """
 from czsc import CZSC
 from czsc.objects import Direction
@@ -308,7 +313,7 @@ def get_all_signals(c: CZSC, freq: str = "30分钟",
     signals.update(signal_third_sell(c, freq))
     signals.update(signal_risk_control(c, freq))
     signals.update(signal_short_risk_control(c, freq))
-    if STRATEGY_CONFIG.get("exit_event_semantics") == "restructured":
+    if STRATEGY_CONFIG["exit_event_semantics"] == "restructured":
         signals.update(signal_risk_control_recent(c, freq))
         signals.update(signal_short_risk_control_recent(c, freq))
     return signals
