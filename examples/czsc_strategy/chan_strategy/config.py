@@ -170,6 +170,14 @@ STRATEGY_CONFIG = {
     "max_drawdown_breaker_pct": None,
     "risk_parity_lookback": 60,           # trade-period bars used for per-symbol volatility estimate
 
+    # HTML visual report toggle. Default False keeps existing report dicts byte-for-byte
+    # identical for callers/tests that do not opt in.
+    # html_report_dir="" means "use html_report.default_html_report_dir()"; kept as a
+    # simple literal (not a computed Path expression) so the project_version_freshness
+    # sync-check gate's restricted config-dict evaluator can fingerprint this file.
+    "html_report_enabled": False,
+    "html_report_dir": "",
+
     "contract_specs": {
         # Multiplier (合约乘数), tick (最小变动价位), margin_rate (交易所最低交易保证金率).
         # These are EXCHANGE-MINIMUM margin rates for research only, not production/broker rates.

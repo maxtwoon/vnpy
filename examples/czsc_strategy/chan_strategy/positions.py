@@ -1088,6 +1088,7 @@ class Position:
             "bars_held": self.bars_since_open,
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
+            "direction": "long",
         }
         limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
         if limit_halt_model in ("aware", "enforce"):
@@ -1158,6 +1159,7 @@ class Position:
             "bars_held": self.bars_since_open,
             "reason": reason,
             "reason_code": normalize_exit_reason(reason),
+            "direction": "short",
         }
         limit_halt_model = STRATEGY_CONFIG["limit_halt_model"]
         if limit_halt_model in ("aware", "enforce"):

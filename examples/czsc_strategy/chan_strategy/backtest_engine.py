@@ -16,7 +16,7 @@
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 import pandas as pd
@@ -45,6 +45,28 @@ from chan_strategy.rollover_config import (
 from chan_strategy.sell_signals import get_all_signals
 from chan_strategy.positions import ChanTimingStrategy
 from chan_strategy.positions import _research_symbol_key as _position_symbol_key
+
+
+def _render_html_report_if_enabled(engine: "BacktestEngine", report: dict[str, Any]) -> str | None:
+    """Render the HTML visual report when the opt-in toggle is enabled."""
+    if not STRATEGY_CONFIG.get("html_report_enabled"):
+        return None
+
+    report_dir_value = STRATEGY_CONFIG.get("html_report_dir") or ""
+    if not report_dir_value:
+        from chan_strategy.html_report import default_html_report_dir
+        report_dir = default_html_report_dir()
+    else:
+        report_dir = Path(report_dir_value)
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = report_dir / f"backtest_report_{engine.symbol}_{timestamp}.html"
+
+    from chan_strategy.html_report import build_symbol_chart_payload, render_backtest_html_report
+    payload = build_symbol_chart_payload(engine, report=report)
+    render_backtest_html_report({engine.symbol: payload}, out_path=out_path)
+    return str(out_path)
 
 
 def _research_symbol_key(symbol: str) -> str:
@@ -779,6 +801,7 @@ class BacktestEngine:
 
             # 保存CZSC对象供外部使用
             self.czsc_obj = czsc_trade
+            self.czsc_trade = czsc_trade
 
             # A52: post-loop rollover-window tagging only when explicitly enabled.
             # "off" skips this entirely, keeping the legacy path byte-identical.
@@ -1047,6 +1070,10 @@ class BacktestEngine:
             report["max_drawdown_pct"] = 0
             report["sharpe_ratio"] = 0
             report["final_equity"] = self.initial_capital
+
+        html_path = _render_html_report_if_enabled(self, report)
+        if html_path is not None:
+            report["html_report_path"] = html_path
 
         return report
 

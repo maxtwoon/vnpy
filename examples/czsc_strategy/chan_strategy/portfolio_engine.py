@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -29,6 +30,44 @@ from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG
 from chan_strategy.portfolio_ledger import PortfolioLedger
 from chan_strategy.positions import _research_symbol_key
+
+
+def _render_portfolio_html_report_if_enabled(
+    report: dict[str, Any],
+    symbol_engines: dict[str, BacktestEngine],
+    per_symbol_reports: dict[str, dict[str, Any]] | None = None,
+) -> str | None:
+    """Render a multi-tab HTML report for the portfolio when enabled."""
+    if not STRATEGY_CONFIG.get("html_report_enabled"):
+        return None
+
+    report_dir_value = STRATEGY_CONFIG.get("html_report_dir") or ""
+    if not report_dir_value:
+        from chan_strategy.html_report import default_html_report_dir
+        report_dir = default_html_report_dir()
+    else:
+        report_dir = Path(report_dir_value)
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    symbols = sorted(symbol_engines.keys())
+    symbol_label = "_".join(symbols[:3]) + ("_plus" if len(symbols) > 3 else "")
+    out_path = report_dir / f"portfolio_report_{symbol_label}_{timestamp}.html"
+
+    from chan_strategy.html_report import build_symbol_chart_payload, render_backtest_html_report
+    payloads: dict[str, Any] = {}
+    per_symbol_reports = per_symbol_reports or {}
+    for symbol, engine in symbol_engines.items():
+        symbol_report = per_symbol_reports.get(symbol) or engine.generate_report()
+        if "error" in symbol_report:
+            continue
+        payloads[symbol] = build_symbol_chart_payload(engine, report=symbol_report)
+
+    if not payloads:
+        return None
+
+    render_backtest_html_report(payloads, out_path=out_path)
+    return str(out_path)
 
 
 def _trading_day(
@@ -910,11 +949,39 @@ class PortfolioEngine:
         sizing_model = STRATEGY_CONFIG["sizing_model"]
         portfolio_risk = STRATEGY_CONFIG["portfolio_risk"]
         if sizing_model == "risk" and portfolio_risk == "on":
-            return self._build_joint_report()
+            report = self._build_joint_report()
+            if "error" not in report and STRATEGY_CONFIG.get("html_report_enabled"):
+                # Joint replay does not expose running per-symbol engines;
+                # re-run them only when the HTML toggle is explicitly enabled.
+                engines = {}
+                for symbol in report.get("symbols", []):
+                    engine = self._make_symbol_engine(symbol)
+                    engine.run()
+                    engines[symbol] = engine
+                html_path = _render_portfolio_html_report_if_enabled(
+                    report, engines, report.get("symbol_reports", {})
+                )
+                if html_path is not None:
+                    report["html_report_path"] = html_path
+            return report
         symbol_results = self._run_per_symbol()
         if portfolio_risk == "off":
-            return self._build_off_report(symbol_results)
-        return self._build_on_report(symbol_results)
+            report = self._build_off_report(symbol_results)
+        else:
+            report = self._build_on_report(symbol_results)
+        if "error" not in report:
+            engines = {
+                s: sr["engine"]
+                for s, sr in symbol_results.items()
+                if "error" not in sr.get("report", {})
+            }
+            per_symbol_reports = {
+                s: sr["report"] for s, sr in symbol_results.items() if "error" not in sr.get("report", {})
+            }
+            html_path = _render_portfolio_html_report_if_enabled(report, engines, per_symbol_reports)
+            if html_path is not None:
+                report["html_report_path"] = html_path
+        return report
 
 
 def run_portfolio_backtest(

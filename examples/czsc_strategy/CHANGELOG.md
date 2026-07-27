@@ -2,6 +2,25 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.45（2026-07-27）- A105 可复用 HTML 可视化回测报告模板
+
+- **新增 HTML 可视化回测报告**：新增 `chan_strategy/html_report.py`，为每次回测自动生成一份
+  交互式 HTML 报告（默认关闭， opt-in）。报告基于 `pyecharts` 的 `Tab()` 多标签页，每品种一页，
+  包含 K 线图、成交量、MACD、笔（bi）、中枢（zhongshu）markArea  overlay、多空买卖点标记、
+  成交订单清单 HTML 表格及单品种摘要统计卡。
+- **引擎集成**：`BacktestEngine.generate_report()` 在 `html_report_enabled=True` 时生成单品种
+  HTML 报告并写入 `report["html_report_path"]`；`PortfolioEngine.run()` 在组合模式下生成多标签
+  组合 HTML 报告。默认 `html_report_enabled=False` 时报告字典与改动前字节一致。
+- **数据结构扩展（纯附加）**：
+  - `BacktestEngine.run()` 额外保留 `self.czsc_trade`（交易周期 CZSC 对象），供报告模块读取笔/中枢。
+  - `Position._close_long` / `_close_short` 生成的 pair 字典增加 `"direction": "long"/"short"`，
+    用于买卖点标记区分多空；未删除/重命名任何已有字段。
+- **配置扩展**：`STRATEGY_CONFIG` 新增 `html_report_enabled`（默认 `False`）与 `html_report_dir`
+  （默认 `examples/czsc_strategy/diagnostics/`）。
+- **依赖声明**：`examples/czsc_strategy/requirements.txt` 新增 `pyecharts==2.1.0`。
+- **新增单测**：`tests/unit/test_html_report.py` 覆盖 payload 形状、bi/zs/bs 字段、HTML 渲染冒烟、
+  toggle 开关兼容性、pair 方向字段、组合报告集成；不依赖网络/SimNow/真实数据库。
+
 ## 0.2.44（2026-07-26）- Codex 独立复核 follow-up（关键风控单一真值与 handoff wrapper）
 
 - **关键风控参数单一真值补漏**：Codex review 复核 0.2.43 后发现
