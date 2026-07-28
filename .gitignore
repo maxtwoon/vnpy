@@ -78,6 +78,12 @@ examples/czsc_strategy/diagnostics/*.json
 !examples/czsc_strategy/diagnostics/simnow_risk_thresholds.json
 !examples/czsc_strategy/diagnostics/platform_base_block1buy_sc075_config.json
 !examples/czsc_strategy/diagnostics/platform_final_candidate_config.json
+
+# czsc 1.0 upgrade diagnostics (scripts + reports are committed; fixtures/HTML are generated)
+!examples/czsc_strategy/diagnostics/czsc_upgrade_bi_diff.py
+!examples/czsc_strategy/diagnostics/czsc_upgrade_diff_report.py
+!examples/czsc_strategy/diagnostics/czsc_upgrade_behavior_diff_report.md
+!examples/czsc_strategy/diagnostics/czsc_upgrade_failure_attribution.md
 examples/czsc_strategy/diagnostics/*.md
 !examples/czsc_strategy/diagnostics/AUTOMATION_PROMPT.md
 !examples/czsc_strategy/diagnostics/run_position_sizing_report.py
