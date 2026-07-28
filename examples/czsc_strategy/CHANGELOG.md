@@ -2,6 +2,38 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.55（2026-07-29）- 方案 C：集中度指标改滚动 60 日窗口 + 样本不足 informational
+
+- **根因**：`symbol_top1_abs_share` / `strategy_top1_abs_share` 此前按全回放历史累计，
+  指标随窗口延伸漂移——07-27→07-28 零新交易但 strategy_top1 从 0.5550 升到 0.5925，
+  越过 warning 线 0.5904，使 `valid_observation_reason = thresholds_not_pass` 成为
+  绑定否决项。固定线重校准（方案 B）无法消除该类漂移，被否。
+- **快照侧（`export_simnow_replay_snapshot.py`）**：新增
+  `_filter_trades_for_concentration`（按 `close_dt` 落在 `[day-59, day]` 的滚动 60
+  个日历日窗口过滤；`window_days<=0` 回退全历史）；`_risk_for_day` 返回新增
+  `concentration_sample`（`window_days`/`min_trades`/`trade_count`/`insufficient_sample`，
+  最少 5 笔）；`build_snapshot` meta 记录 `concentration_window_days` /
+  `concentration_min_trades`；CLI 新增 `--concentration-window-days` 与
+  `--concentration-min-trades`。
+- **监控侧（`simnow_daily_monitor.py`）**：`evaluate_thresholds` 新增 `informational`
+  参数——集合内指标行 `level="informational"` 且带 `"informational": True`，不参与
+  status 汇总；`make_record` 在选中的 risk payload 读到
+  `concentration_sample.insufficient_sample=True` 时，把两个集中度指标降级为
+  informational，不再否决 `valid_observation`。样本充足时 veto 行为不变。
+  阈值基线 json 不动；07-28 及更早的历史记录不重算。
+- **测试**：快照侧 +3（窗口边界过滤、窗口化集中度与样本元信息、样本充足标志），
+  监控侧 +3（informational 不参与 status、样本不足不否决、样本充足仍 veto）；
+  全量单测 972 passed, 23 skipped；realdb 4 passed；裸 PATH Preflight 324 passed。
+
+## 0.2.54（2026-07-28）- 新增缠论书摘 ⇄ 代码对照核查表（纯文档）
+
+- 新增 `docs/theory_code_crosscheck.md`：将带页码锚点的缠论书摘
+  （源笔记存档于 `docs/reference/chan_theory_book_notes.txt`）逐条对照项目现有实现，
+  按 ✅一致 / ⚠️部分 / ❌缺口 / ❓待验证 标注，区分信号计算层与报告/叙事层两套适用条款；
+  汇总缺口优先级（P0 报告层措辞整改 / P1 区间套与走势类型识别 / P2 多义性披露与 MACD 面积通道），
+  并列出对 `czsc==1.0.0rc8` 行为断言（ZS 默认笔中枢、倒1/倒2 信号键名）的待验证清单。
+- 纯文档改动：不涉及任何代码、参数、信号或回测行为；诊断边界不变。
+
 ## 0.2.53（2026-07-28）- risk-halt 决策门禁仅限 halt 日 + 解释器探测依赖补全
 
 - **门禁对齐（修复⑤）**：`run_next_work.ps1` 此前每次 LiveCapture 后无条件生成

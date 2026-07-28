@@ -11,7 +11,8 @@ if str(DIAG) not in sys.path:
     sys.path.insert(0, str(DIAG))
 
 import export_simnow_replay_snapshot as snapshot_mod  # noqa: E402
-from export_simnow_replay_snapshot import (  # noqa: E402
+from export_simnow_replay_snapshot import (
+    _filter_trades_for_concentration,  # noqa: E402
     _consecutive_loss_breakdown,
     _resolve_risk_start,
     _risk_for_day,
@@ -265,3 +266,70 @@ def test_build_snapshot_full_history_flag_ignores_config(monkeypatch):
     assert payload["meta"]["risk_window_start"] == ""
     assert payload["meta"]["risk_window_source"] == "full_history"
     assert payload["risk"]["drawdown_pct"] < -0.5
+
+
+def _trade(symbol, strategy, close_dt, pnl=0.01):
+    return {
+        "symbol": symbol,
+        "strategy": strategy,
+        "close_dt": close_dt,
+        "weighted_pnl_pct": pnl * 100 / 5,
+    }
+
+
+def test_filter_trades_for_concentration_respects_rolling_window():
+    day = date(2026, 7, 28)
+    trades = [
+        _trade("A888", "二买多头", datetime(2026, 7, 28, 15, 0)),     # day itself: in
+        _trade("A888", "二买多头", datetime(2026, 5, 30, 15, 0)),     # exactly 60 days back: in
+        _trade("RB888", "三买多头", datetime(2026, 5, 29, 15, 0)),    # 61 days back: out
+        _trade("RB888", "三买多头", None),                            # no close_dt: out
+        _trade("SC888", "一买多头", datetime(2026, 7, 29, 9, 0)),     # after day: out
+    ]
+
+    kept = _filter_trades_for_concentration(trades, day, 60)
+
+    assert [t["symbol"] for t in kept] == ["A888", "A888"]
+
+
+def test_risk_for_day_concentration_uses_rolling_window_and_marks_sample():
+    daily = _stale_segment_daily()
+    day = date(2026, 7, 28)
+    trades = [
+        _trade("A888", "二买多头", datetime(2026, 7, 20, 15, 0), pnl=0.03),
+        _trade("RB888", "三买多头", datetime(2026, 7, 21, 15, 0), pnl=-0.01),
+        _trade("SC888", "一买多头", datetime(2023, 6, 20, 15, 0), pnl=0.5),  # outside window
+    ]
+
+    risk = _risk_for_day(
+        daily, trades, day,
+        risk_start=date(2026, 7, 27),
+        concentration_window_days=60,
+        concentration_min_trades=5,
+    )
+
+    # Only the two in-window trades participate; the 2023 whale is excluded.
+    assert risk["symbol_concentration"]["top1_abs_share"] == pytest.approx(0.75, abs=1e-9)
+    assert {row["name"] for row in risk["strategy_concentration"]["rows"]} == {"二买多头", "三买多头"}
+    sample = risk["concentration_sample"]
+    assert sample["window_days"] == 60
+    assert sample["min_trades"] == 5
+    assert sample["trade_count"] == 2
+    assert sample["insufficient_sample"] is True
+
+
+def test_risk_for_day_concentration_sufficient_sample_flag():
+    daily = _stale_segment_daily()
+    day = date(2026, 7, 28)
+    trades = [
+        _trade("A888", "二买多头", datetime(2026, 7, 20, 15, 0)),
+        _trade("A888", "二买多头", datetime(2026, 7, 21, 15, 0)),
+        _trade("RB888", "三买多头", datetime(2026, 7, 22, 15, 0)),
+        _trade("SC888", "一买多头", datetime(2026, 7, 23, 15, 0)),
+        _trade("ZN888", "二买多头", datetime(2026, 7, 24, 15, 0)),
+    ]
+
+    risk = _risk_for_day(daily, trades, day, concentration_window_days=60, concentration_min_trades=5)
+
+    assert risk["concentration_sample"]["trade_count"] == 5
+    assert risk["concentration_sample"]["insufficient_sample"] is False

@@ -1792,3 +1792,80 @@ def test_20d_report_excludes_unverified_matched_record():
     assert summary["last_valid_observation_date"] == "2026-06-20"
     assert summary["ready_to_expand"] is False
     assert "consistency_not_fully_matched" in summary["promotion_blockers"]
+
+
+def test_evaluate_thresholds_marks_informational_metrics_out_of_status():
+    thresholds = build_thresholds(_baseline())
+    metrics = normalize_daily_metrics({
+        "daily_return_pct": -0.01,
+        "drawdown_pct": -0.1,
+        "gross_exposure": 0.10,
+        "net_exposure": 0.10,
+        "both_long_short_symbols": 0,
+        "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.01},
+        "symbol_concentration": {"top1_abs_share": 0.95},
+        "strategy_concentration": {"top1_abs_share": 0.98},
+    })
+
+    result = evaluate_thresholds(
+        metrics,
+        thresholds,
+        informational={"symbol_top1_abs_share", "strategy_top1_abs_share"},
+    )
+
+    # Values sit above the halt line, yet informational metrics never gate.
+    assert result["status"] == "pass"
+    rows = {row["metric"]: row for row in result["rows"]}
+    assert rows["symbol_top1_abs_share"]["level"] == "informational"
+    assert rows["symbol_top1_abs_share"]["informational"] is True
+    assert rows["strategy_top1_abs_share"]["level"] == "informational"
+    assert rows["gross_exposure"]["level"] == "pass"
+
+
+def test_make_record_informational_concentration_does_not_veto_thresholds():
+    risk = {
+        "daily_return_pct": -0.05,
+        "drawdown_pct": -0.2,
+        "gross_exposure": 0.1,
+        "net_exposure": 0.1,
+        "both_long_short_symbols": 0,
+        "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.0005},
+        "symbol_concentration": {"top1_abs_share": 0.62},
+        "strategy_concentration": {"top1_abs_share": 0.62},
+        "concentration_sample": {
+            "window_days": 60,
+            "min_trades": 5,
+            "trade_count": 2,
+            "insufficient_sample": True,
+        },
+    }
+
+    record = make_record("2026-07-28", _baseline(), risk=risk)
+
+    assert record["thresholds"]["status"] == "pass"
+    rows = {row["metric"]: row for row in record["thresholds"]["rows"]}
+    assert rows["strategy_top1_abs_share"]["level"] == "informational"
+
+
+def test_make_record_sufficient_concentration_sample_still_gates():
+    risk = {
+        "daily_return_pct": -0.05,
+        "drawdown_pct": -0.2,
+        "gross_exposure": 0.1,
+        "net_exposure": 0.1,
+        "both_long_short_symbols": 0,
+        "consecutive_loss": {"days": 1, "cumulative_return_pct": -0.0005},
+        "symbol_concentration": {"top1_abs_share": 0.40},
+        "strategy_concentration": {"top1_abs_share": 0.62},
+        "concentration_sample": {
+            "window_days": 60,
+            "min_trades": 5,
+            "trade_count": 9,
+            "insufficient_sample": False,
+        },
+    }
+
+    record = make_record("2026-07-28", _baseline(), risk=risk)
+
+    # 0.62 >= warning(0.594) with a sufficient sample: the gate stays armed.
+    assert record["thresholds"]["status"] == "warning"

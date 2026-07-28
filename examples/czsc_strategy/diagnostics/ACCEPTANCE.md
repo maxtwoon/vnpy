@@ -46,6 +46,19 @@ the full replay history. The snapshot meta records `risk_window_start` and
 for baseline/diagnostic comparisons. A window-reset decision therefore actually
 clears stale historical segments (e.g. 2023-06-19~06-28) from daily metrics.
 
+Concentration scope (since 0.2.55): `symbol_top1_abs_share` and
+`strategy_top1_abs_share` are measured over a rolling 60-calendar-day trade
+window ending on the observation day (closed trades by `close_dt`), not over
+the full replay history — cumulative concentration drifts with window length
+even on zero-trade days (07-27 → 07-28: +3.75pp with no new trades). The
+snapshot risk block records `concentration_sample` (`window_days`,
+`min_trades`, `trade_count`, `insufficient_sample`); when the window holds
+fewer than 5 closed trades the monitor reports both concentration rows as
+`informational` and they never gate `automation_status`. Snapshot meta records
+`concentration_window_days` / `concentration_min_trades`; CLI overrides are
+`--concentration-window-days` (<=0 restores full history) and
+`--concentration-min-trades`.
+
 Initial reference thresholds:
 
 - max single-day loss warning: around `-0.29%`

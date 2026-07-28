@@ -214,7 +214,9 @@ def evaluate_thresholds(
     metrics: dict[str, float],
     thresholds: dict[str, Threshold],
     risk_source: str = "",
+    informational: set[str] | None = None,
 ) -> dict[str, Any]:
+    informational = informational or set()
     rows = []
     status = "pass"
     for name, threshold in thresholds.items():
@@ -222,11 +224,9 @@ def evaluate_thresholds(
         level = "pass"
         if value > threshold.halt:
             level = "halt"
-            status = "halt"
-        elif value >= threshold.warning and status != "halt":
+        elif value >= threshold.warning:
             level = "warning"
-            status = "warning"
-        rows.append({
+        row = {
             "metric": name,
             "value": value,
             "warning": threshold.warning,
@@ -234,7 +234,17 @@ def evaluate_thresholds(
             "baseline": threshold.baseline,
             "level": level,
             "unit": threshold.unit,
-        })
+        }
+        if name in informational:
+            # Informational metrics are reported but never gate the daily status
+            # (e.g. concentration measured on an insufficient trade sample).
+            row["level"] = "informational"
+            row["informational"] = True
+        elif level == "halt":
+            status = "halt"
+        elif level == "warning" and status != "halt":
+            status = "warning"
+        rows.append(row)
     # A known-placeholder risk block must never produce an authoritative "pass"
     # on its own. Downgrade to "unproven" so make_record treats it as pending.
     if risk_source == "simnow_capture_placeholder":
@@ -495,8 +505,16 @@ def make_record(
         replay,
         mode=monitor_config.get("risk_priority", "replay_first"),
     )
+    # Concentration metrics measured on too small a trade sample are reported
+    # as informational rows instead of gating the daily status.
+    concentration_sample = metrics.get("concentration_sample") or {}
+    informational: set[str] = set()
+    if concentration_sample.get("insufficient_sample"):
+        informational = {"symbol_top1_abs_share", "strategy_top1_abs_share"}
     metrics = normalize_daily_metrics(metrics)
-    threshold_result = evaluate_thresholds(metrics, thresholds, risk_source=risk_source)
+    threshold_result = evaluate_thresholds(
+        metrics, thresholds, risk_source=risk_source, informational=informational
+    )
     skip_reason = _capture_skip_reason(simnow) if simnow else ""
     subscription = subscription_coverage(simnow) if simnow else {}
     safety = order_safety(simnow) if simnow else {}

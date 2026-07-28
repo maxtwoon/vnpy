@@ -9390,3 +9390,230 @@ would block on, so the 20-day count could never advance automatically.
 Resume formal `-LiveCapture` inside the next allowed window (`21:05` tonight).
 Non-halt days no longer create decision records, so the observation loop can
 run unattended; only genuine halt days will require a signed decision.
+
+## 2026-07-28 21:05 Formal SimNow Observation and UTF-8 Wrapper Fix
+
+### Goal
+
+Execute the formal 21:05 read-only SimNow observation for `2026-07-28`, finish
+the daily artifact chain, and update the observation ledger using
+`simnow_run_summary_2026-07-28.json` as the authoritative final result.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- `run_next_work.ps1 -Preflight` passed at the 21:05 window with `340 passed`
+  and `pending_historical_db_lag_days: 0`.
+- The initial formal `-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`
+  run completed the live capture side: it refreshed
+  `simnow_historical_db_update_2026-07-28.json`,
+  `simnow_kline_update_2026-07-28.json`,
+  `simnow_export_2026-07-28.json`, and
+  `simnow_replay_readiness_2026-07-28.json`, but the terminal tool returned a
+  non-zero/no-output result before the run summary was refreshed.
+- A first `-PostProcessOnly -RefreshReplay` continuation advanced replay,
+  record, ledger summary, promotion report, run summary, and daily brief, then
+  failed at the wrapper layer while reading the newly written run summary.
+- Root cause: `simnow_run_summary_2026-07-28.json` was valid UTF-8 JSON
+  (`python json.loads` succeeded), but `run_next_work.ps1` used
+  `Get-Content ... -Raw | ConvertFrom-Json` without `-Encoding UTF8`, so
+  Windows PowerShell 5.1 mis-decoded the UTF-8 Chinese fields and threw
+  `Invalid object passed in, ':' or '}' expected`.
+
+### Changes
+
+- Added a regression in
+  `examples/czsc_strategy/tests/unit/test_run_next_work_wrapper.py` that
+  requires the wrapper's three JSON-read sites feeding `ConvertFrom-Json` to
+  specify `-Encoding UTF8`.
+- Updated `examples/czsc_strategy/diagnostics/run_next_work.ps1` so
+  `Assert-NoPendingRiskHaltDecision`, replay-readiness placeholder generation,
+  and the post-summary automation-status read all use
+  `Get-Content -Encoding UTF8 -Raw | ConvertFrom-Json`.
+- Re-ran `run_next_work.ps1 -LiveCapture -PostProcessOnly -MinKlineBarsPerSymbol 30`
+  after the wrapper fix to finish the daily workflow without opening a second
+  SimNow live connection.
+
+### Verification
+
+Passed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q -k utf8_encoding
+python -m pytest .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -MinKlineBarsPerSymbol 30
+```
+
+Results:
+
+- Preflight passed with `340 passed`.
+- New regression test failed before the wrapper fix and passed after it.
+- Full wrapper test file passed: `108 passed`.
+- Final `-PostProcessOnly` passed with `341 passed`, `summary consistency: ok`,
+  and `Live capture workflow complete`.
+- The refreshed authoritative summary,
+  `simnow_run_summary_2026-07-28.json`, reports:
+  - `automation_status=failed`
+  - `automation_exit_code=40`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=missing critical artifact or unknown status`
+- Daily metrics from the same authoritative summary:
+  - formal observation: `2026-07-28` formal night session (`21:08:07+08:00`
+    to `23:01:01+08:00`)
+  - live capture / environment: `ticks=25286`, `contracts_count=16650`,
+    `accounts=1`, `positions=1`, `orders=0`, `trades=0`,
+    `subscribed_count=4`
+  - read-only safety: `environment_capture.read_only=true`,
+    `orders_sent_by_workflow=0`
+  - monitor / record: `record.status=pass`,
+    `record.valid_observation=false`,
+    `consistency_matched=true`,
+    `threshold_status=warning`
+  - formal readiness: `overall_ready=true`
+  - historical DB update: `status=passed`
+  - delayed replay: `available=true`, `status=pass`
+  - user action: `user_action_needed=true`
+
+### Next Action
+
+The workflow itself is now healthy for UTF-8 summary handling, but the
+authoritative automation layer still classifies this date as
+`failed/no_actionable_events_on_either_side` despite successful read-only
+capture, kline coverage, historical DB update, and delayed replay availability.
+The next follow-up should inspect the policy/monitor logic behind that final
+classification before the next formal observation window.
+
+## 2026-07-28 fix-divergence-status-zhongshu-selection Landed; Post-Fix Trade-Count Comparison Was Apples-to-Oranges
+
+### Goal
+
+Land the P4 divergence-signal zhongshu-selection fix (root-caused 2026-07-27/28, formalized in
+`docs/design/fix-divergence-status-zhongshu-selection.md`) through the design → dev → review pipeline, then
+verify with a real backtest that `divergence_status_zhongshu_mode="departure_leg"` actually unblocks short
+opens without silently changing long-side results.
+
+### Pipeline summary
+
+- design (claude-code): scoped the fix as an opt-in `STRATEGY_CONFIG["divergence_status_zhongshu_mode"]`
+  key, default `"legacy"` (byte-identical), matching this repo's established legacy-default convention.
+  Deliberately waited for the concurrent `czsc-1.0-upgrade` task to reach `done` first (single-file
+  `HANDOFF.md` mode, one task in flight at a time — see that task's own `交接历史` for the earlier
+  A105/czsc-1.0-upgrade collision this was avoiding a repeat of).
+- dev (kimi-code, round 1): implemented the fix — extracted `_select_zhongshu_for_departure_leg(bi_list,
+  zhongshu_list)`, wired it into `signal_divergence_status()`'s new mode branch and into
+  `signal_first_buy()`/`signal_third_buy()`. 8 new tests. Manual verification script
+  (`diagnostics/manual_verify_divergence_fix.py`) showed P4 pass count going from 0→212 (A888) and 0→560
+  (SC888) under `departure_leg`, with SC888 producing 3 real `二卖空头` short trades. Independently
+  reproduced these exact numbers before trusting them.
+- review (codex CLI, real quota restored this round — no longer a standing-in subagent): round 1 rejected
+  — `signal_first_sell()` (`sell_signals.py`) was left on its own still-correct inline expression instead of
+  also calling the new shared helper. Checked this against the design doc: the acceptance criterion only
+  required the *expression* to match (satisfied, proven by a dedicated equivalence test), and the design's
+  own dev notes explicitly called refactoring the already-correct siblings onto the helper optional
+  ("let each caller decide whether to use it") — so the reject's stated rationale was arguably stricter than
+  the design required. Complied anyway since the fix was trivial and harmless (further dedup, zero behavior
+  risk) rather than spending effort disputing the review's reasoning.
+- dev (kimi-code, round 2): `signal_first_sell()` now also calls the shared helper. Re-verified independently
+  (986 passed unit count unchanged, both sync_check gates PASS, ruff clean) before re-triggering review.
+- review (codex CLI, round 2): PASS. `HANDOFF: review(codex) -> done(codex)`. VERSION 0.2.53.
+
+### Post-fix full-year comparison: initial trade-count "regression" was a measurement artifact, not real
+
+After landing, re-ran the same full-year (2025-04-25~2026-04-24), 5-minute, `enable_short=True`,
+4-symbol (A888/RB888/SC888/ZN888) portfolio backtest with `divergence_status_zhongshu_mode="departure_leg"`
+and compared totals against the **pre-fix** numbers recorded earlier in this file
+(A888 69 / RB888 53 / SC888 131 / ZN888 74) — the new run showed A888 60 / RB888 44 / SC888 130 / ZN888 69,
+i.e. *fewer* long-dominated trades, which was surprising since `second_buy_mode` defaults to `"baseline"`
+and does not consume the P4 divergence signal at all, so long-side trade counts should have been unaffected.
+
+Investigated directly rather than speculating:
+
+1. Ran `BacktestEngine` for A888 alone (bypassing `PortfolioEngine`) under both `"legacy"` and
+   `"departure_leg"` modes and diffed each sub-strategy's trade `(open_dt, close_dt)` set. Result: **zero
+   difference** — 一买多头 31/31, 二买多头 16/16, 三买多头 13/13, all three short sub-strategies 0/0/0 in both
+   modes, for A888 specifically. This is exactly what the design predicted (baseline mode does not read the
+   P4 signal).
+2. Re-ran the full 4-symbol `PortfolioEngine` backtest with `divergence_status_zhongshu_mode="legacy"`
+   explicitly, on **current** (post-`czsc-1.0-upgrade`, post-fix) code: A888 60 / RB888 44 / SC888 130 /
+   ZN888 69 — **identical** to the `departure_leg` numbers, confirming the fix changes nothing for these four
+   symbols' long-side trade counts.
+
+**Root cause of the apparent discrepancy**: the "69/53/131/74" baseline used for the original comparison was
+measured *before* `czsc-1.0-upgrade` landed (old `czsc==0.9.51` Python bi-construction), while the
+`departure_leg` run was measured *after* (new `czsc==1.0.0rc8` Rust bi-construction) — the same
+apples-to-oranges trap this project's own `czsc_upgrade_behavior_diff_report.md` already documented (bi
+counts/boundaries differ between the two versions on identical price data). The initial "trade count
+dropped" claim reported to the user was corrected once same-code-version numbers were actually compared.
+
+### Verification
+
+```powershell
+# Single-symbol legacy vs departure_leg trade-set diff (A888, 5min, full year)
+python -c "... BacktestEngine('A888', ...) under both modes, diff pos.pairs per sub-strategy ..."
+# Full 4-symbol PortfolioEngine, legacy mode, current code
+python -c "... run_portfolio_backtest(['A888','RB888','SC888','ZN888'], ..., divergence_status_zhongshu_mode='legacy') ..."
+```
+
+Result: A888/RB888/SC888/ZN888 totals under `"legacy"` on current code (60/44/130/69) exactly match the
+`"departure_leg"` totals already reported — confirms the fix is behavior-neutral for these four symbols'
+long side, as designed.
+
+### Next Action
+
+None blocking. If a future task wants to actually use `divergence_status_zhongshu_mode="departure_leg"` for
+research/promotion decisions, remember any comparison must pin the `czsc` version (and any other concurrent
+dependency/library upgrade) identically across both sides of the comparison — this is now the second time in
+two days this exact class of error (comparing across an unnoticed dependency-version boundary) has produced a
+misleading "the strategy changed" conclusion in this repo.
+## 2026-07-29 Plan C: Rolling-Window Concentration + Insufficient-Sample Informational
+
+### Goal
+
+Implement the owner-approved Plan C: stop cumulative concentration drift from
+vetoing valid observation days by measuring `symbol_top1_abs_share` /
+`strategy_top1_abs_share` over a rolling trade window and degrading them to
+informational rows when the sample is too small.
+
+### Context
+
+- 07-27 -> 07-28 evidence: zero new trades, yet `strategy_top1_abs_share`
+  drifted 0.5550 -> 0.5925, crossing the warning line 0.5904 and making
+  `thresholds_not_pass` the binding veto (`valid_observation_reason`).
+- Plan B (fixed-line recalibration) was rejected on this evidence; the owner
+  chose Plan C.
+
+### Changes (0.2.55)
+
+- `export_simnow_replay_snapshot.py`: `_filter_trades_for_concentration`
+  (rolling 60 calendar days by `close_dt`; `window_days<=0` = full history);
+  `_risk_for_day` returns `concentration_sample` (`window_days`,
+  `min_trades`, `trade_count`, `insufficient_sample`, min 5 trades);
+  `build_snapshot` meta records `concentration_window_days` /
+  `concentration_min_trades`; new CLI flags `--concentration-window-days` and
+  `--concentration-min-trades`.
+- `simnow_daily_monitor.py`: `evaluate_thresholds(..., informational=None)`
+  marks listed metrics `level="informational"` with `"informational": True`
+  and excludes them from status aggregation; `make_record` degrades both
+  concentration metrics when the selected risk payload reports
+  `insufficient_sample=True`. Threshold baseline json unchanged; historical
+  records are not recomputed.
+- TDD: 6 new tests (3 snapshot-side, 3 monitor-side) written red first.
+
+### Verification
+
+- Target files: 75 passed.
+- Full unit suite: `PYTHONUTF8=1 pytest tests/unit -q -m "not realdb"`
+  -> 972 passed, 23 skipped, 4 deselected, 4 xfailed.
+- realdb gate (risk pipeline touched): `pytest tests/unit -m realdb -q`
+  -> 4 passed in 259s.
+- Bare-PATH Preflight from repo root: 324 passed, 23 skipped.
+
+### Notes
+
+- Version collision resolved: czsc-upgrade line had an uncommitted 0.2.54
+  bump in the working tree, so this change takes 0.2.55; the upgrade line
+  must renumber its pending entry.
+- `no_actionable_events_on_either_side` (strategy silence) remains a separate
+  constraint on valid-day accumulation; it is a product decision and was not
+  addressed here.

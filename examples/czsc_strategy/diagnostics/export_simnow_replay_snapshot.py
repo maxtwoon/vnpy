@@ -7,7 +7,7 @@ import io
 import json
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+
+DEFAULT_CONCENTRATION_WINDOW_DAYS = 60
+DEFAULT_CONCENTRATION_MIN_TRADES = 5
 
 from chan_strategy.backtest_engine import BacktestEngine  # noqa: E402
 from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG  # noqa: E402
@@ -250,11 +253,38 @@ def _consecutive_loss_breakdown(daily: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def _filter_trades_for_concentration(
+    trades: list[dict[str, Any]],
+    day: datetime.date,
+    window_days: int,
+) -> list[dict[str, Any]]:
+    """Keep trades closed inside the trailing ``window_days`` calendar window.
+
+    Concentration measured over the full cumulative replay history describes
+    the candidate's multi-year trade mix, not the portfolio's current risk;
+    it also drifts as the replay window extends (e.g. 0.5550 -> 0.5925 across
+    two observation days with zero new trades). A rolling window with a
+    minimum-sample guard makes the daily gate meaningful again.
+    """
+    if window_days <= 0:
+        return list(trades)
+    start = day - timedelta(days=window_days - 1)
+    kept = []
+    for trade in trades:
+        close_dt = trade.get("close_dt")
+        close_date = close_dt.date() if hasattr(close_dt, "date") else None
+        if close_date is not None and start <= close_date <= day:
+            kept.append(trade)
+    return kept
+
+
 def _risk_for_day(
     daily: pd.DataFrame,
     trades: list[dict[str, Any]],
     day: datetime.date,
     risk_start: datetime.date | None = None,
+    concentration_window_days: int = DEFAULT_CONCENTRATION_WINDOW_DAYS,
+    concentration_min_trades: int = DEFAULT_CONCENTRATION_MIN_TRADES,
 ) -> dict[str, Any]:
     if daily.empty or day not in daily.index:
         return {}
@@ -269,6 +299,7 @@ def _risk_for_day(
             # fall back to measuring just the day itself.
             upto = daily.loc[[day]]
     drawdown = _drawdown_stats(upto)
+    conc_trades = _filter_trades_for_concentration(trades, day, concentration_window_days)
     return {
         "daily_return_pct": float(day_row["daily_return"]) * 100,
         "drawdown_pct": drawdown["max_drawdown_pct"],
@@ -278,8 +309,14 @@ def _risk_for_day(
         "short_exposure": float(day_row.get("short_exposure", 0.0)),
         "both_long_short_symbols": int(day_row.get("both_long_short_symbols", 0)),
         "consecutive_loss": _consecutive_loss_breakdown(upto),
-        "symbol_concentration": _concentration(trades, "symbol"),
-        "strategy_concentration": _concentration(trades, "strategy"),
+        "symbol_concentration": _concentration(conc_trades, "symbol"),
+        "strategy_concentration": _concentration(conc_trades, "strategy"),
+        "concentration_sample": {
+            "window_days": concentration_window_days,
+            "min_trades": concentration_min_trades,
+            "trade_count": len(conc_trades),
+            "insufficient_sample": len(conc_trades) < concentration_min_trades,
+        },
     }
 
 
@@ -291,6 +328,8 @@ def build_snapshot(
     cost_factor: float,
     risk_start: str = "",
     full_history_risk: bool = False,
+    concentration_window_days: int = DEFAULT_CONCENTRATION_WINDOW_DAYS,
+    concentration_min_trades: int = DEFAULT_CONCENTRATION_MIN_TRADES,
 ) -> dict[str, Any]:
     day_obj = _parse_day(day)
     day_text = day_obj.isoformat()
@@ -315,7 +354,14 @@ def build_snapshot(
                 float(item.get("pnl_pct", 0.0)) * _strategy_weight(str(item.get("strategy")), row["symbol"]) * 100 / len(DEFAULT_SYMBOLS)
             )
             closed_trades.append(item)
-    risk = _risk_for_day(daily, closed_trades, day_obj, risk_start=risk_start_date)
+    risk = _risk_for_day(
+        daily,
+        closed_trades,
+        day_obj,
+        risk_start=risk_start_date,
+        concentration_window_days=concentration_window_days,
+        concentration_min_trades=concentration_min_trades,
+    )
     replay_available = bool(events["positions"]) and bool(risk)
     unavailable_reason = ""
     if not replay_available:
@@ -342,6 +388,8 @@ def build_snapshot(
             "table_ranges": table_ranges,
             "risk_window_start": risk_start_date.isoformat() if risk_start_date else "",
             "risk_window_source": risk_window_source,
+            "concentration_window_days": concentration_window_days,
+            "concentration_min_trades": concentration_min_trades,
         },
     }
 
@@ -364,6 +412,20 @@ def main() -> None:
         action="store_true",
         help="Measure risk metrics over the full replay history (legacy cumulative scan).",
     )
+    parser.add_argument(
+        "--concentration-window-days",
+        type=int,
+        default=DEFAULT_CONCENTRATION_WINDOW_DAYS,
+        help="Rolling calendar-day window for symbol/strategy concentration metrics. "
+        "Values <= 0 fall back to full replay history.",
+    )
+    parser.add_argument(
+        "--concentration-min-trades",
+        type=int,
+        default=DEFAULT_CONCENTRATION_MIN_TRADES,
+        help="Minimum closed trades inside the concentration window before the metrics "
+        "are treated as threshold-binding; below this they are informational only.",
+    )
     parser.add_argument("--out-json", type=Path, required=True)
     args = parser.parse_args()
 
@@ -375,6 +437,8 @@ def main() -> None:
         args.cost_factor,
         risk_start=args.risk_start,
         full_history_risk=args.full_history_risk,
+        concentration_window_days=args.concentration_window_days,
+        concentration_min_trades=args.concentration_min_trades,
     )
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
