@@ -15,7 +15,8 @@ param(
     [int]$HistoricalDbUpdateTimeoutSeconds = 14400,
     [string]$Date = "",
     [string]$OutDir = "",
-    [string]$KlineDbPath = ""
+    [string]$KlineDbPath = "",
+    [string]$PythonExe = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,51 @@ function Invoke-CheckedProcess {
     $process.WaitForExit()
     if ($process.ExitCode -ne 0) {
         throw "$Label failed with exit code $($process.ExitCode)"
+    }
+}
+
+function Test-PythonImports {
+    param([string]$Candidate, [string]$Modules)
+
+    # Probe a candidate interpreter without tripping the script-wide
+    # $ErrorActionPreference="Stop" (native stderr becomes NativeCommandError
+    # in Windows PowerShell 5.1 when EAP=Stop).
+    if (-not (Get-Command $Candidate -ErrorAction SilentlyContinue)) { return $false }
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    try {
+        & $Candidate -c "import $Modules" *>$null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $saved
+    }
+}
+
+function Resolve-PythonExe {
+    param([string]$Explicit)
+
+    # The workflow needs a Python with the project deps (pytest at minimum;
+    # vnpy_ctp for live capture). Bare "python" can resolve to an interpreter
+    # without these deps (e.g. sandboxed runtimes), so probe candidates
+    # explicitly. Override with -PythonExe or the SIMNOW_PYTHON env var.
+    $required = @()
+    if ($Explicit) { $required += $Explicit }
+    if ($env:SIMNOW_PYTHON) { $required += $env:SIMNOW_PYTHON }
+    foreach ($candidate in $required) {
+        if (Test-PythonImports -Candidate $candidate -Modules "pytest") { return $candidate }
+        throw "specified Python interpreter '$candidate' is not runnable or cannot import pytest; install the project deps or fix -PythonExe/SIMNOW_PYTHON"
+    }
+    foreach ($candidate in @("python", "C:\Python314\python.exe")) {
+        if (Test-PythonImports -Candidate $candidate -Modules "pytest") { return $candidate }
+    }
+    throw "no usable Python interpreter found (needs pytest); pass -PythonExe or set SIMNOW_PYTHON"
+}
+
+$Py = Resolve-PythonExe -Explicit $PythonExe
+Write-Step "Using Python interpreter: $Py"
+if ($LiveCapture) {
+    if (-not (Test-PythonImports -Candidate $Py -Modules "vnpy_ctp")) {
+        throw "resolved Python '$Py' cannot import vnpy_ctp; live SimNow capture requires the CTP gateway package - pass -PythonExe or set SIMNOW_PYTHON"
     }
 }
 
@@ -148,14 +194,14 @@ function Invoke-ReplaySnapshotRefresh {
     )
 
     Write-Step "Check replay DB readiness"
-    $ReplayReadinessOutput = & python ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py" --date $Date
+    $ReplayReadinessOutput = & $Py ".\examples\czsc_strategy\diagnostics\simnow_replay_readiness.py" --date $Date
     $ReplayReadinessExitCode = $LASTEXITCODE
     $ReplayReadinessOutput | Set-Content -LiteralPath $ReplayReadinessJson -Encoding UTF8
     $ReplayReady = $ReplayReadinessExitCode -eq 0
     if ($ReplayReady) {
         Invoke-CheckedProcess `
             -Label "Export same-day replay snapshot" `
-            -FilePath "python" `
+            -FilePath $Py `
             -Arguments @(
             ".\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py",
             "--end", "$Date",
@@ -597,7 +643,7 @@ New-Item -ItemType Directory -Path $PyCompileCache -Force | Out-Null
 try {
     $env:PYTHONPYCACHEPREFIX = $PyCompileCache
     Invoke-Checked "Compile SimNow capture script" @(
-        "python",
+        $Py,
         "-m",
         "py_compile",
         ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
@@ -631,7 +677,7 @@ try {
 }
 
 Invoke-Checked "Run SimNow workflow unit tests" @(
-    "python",
+    $Py,
     "-m",
     "pytest",
     ".\examples\czsc_strategy\tests\unit\test_simnow_connection_probe.py",
@@ -664,7 +710,7 @@ Invoke-Checked "Run SimNow workflow unit tests" @(
 )
 
 Invoke-Checked "Build pending replay backfill plan" @(
-    "python",
+    $Py,
     ".\examples\czsc_strategy\diagnostics\simnow_backfill_pending_replays.py"
 )
 
@@ -753,7 +799,7 @@ if ($LiveCapture) {
 
         Invoke-CheckedProcess `
             -Label "Run read-only SimNow capture" `
-            -FilePath "python" `
+            -FilePath $Py `
             -Arguments @(
             ".\examples\czsc_strategy\diagnostics\simnow_daily_capture.py",
             "--duration-seconds", "$DurationSeconds",
@@ -772,7 +818,7 @@ if ($LiveCapture) {
             if (-not [string]::IsNullOrWhiteSpace($KlineDbPath)) {
                 $KlineArgs += @("--db-path", "$KlineDbPath")
             }
-            & python @KlineArgs
+            & $Py @KlineArgs
             if ($LASTEXITCODE -ne 0) {
                 throw "SimNow kline update failed with exit code $LASTEXITCODE"
             }
@@ -787,7 +833,7 @@ if ($LiveCapture) {
         if (-not [string]::IsNullOrWhiteSpace($KlineDbPath)) {
             $StrategySurfaceArgs += @("--db-path", "$KlineDbPath")
         }
-        & python @StrategySurfaceArgs
+        & $Py @StrategySurfaceArgs
         if ($LASTEXITCODE -ne 0) {
             throw "Strategy surface enrichment failed with exit code $LASTEXITCODE"
         }
@@ -831,14 +877,14 @@ if ($LiveCapture) {
     if ((-not $SkipKlineUpdate) -and (Test-Path -LiteralPath $KlineSummaryJson)) {
         $AppendArgs += @("--kline-json", $KlineSummaryJson)
     }
-    & python @AppendArgs
+    & $Py @AppendArgs
     $MonitorExitCode = $LASTEXITCODE
     if (($MonitorExitCode -ne 0) -and ($MonitorExitCode -ne 2)) {
         throw "Daily monitor append failed with exit code $LASTEXITCODE"
     }
 
     Write-Step "Generate ledger summary"
-    & python ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py" `
+    & $Py ".\examples\czsc_strategy\diagnostics\simnow_ledger_summary.py" `
         --ledger $LedgerPath `
         --out-json $LedgerSummaryJson
     if ($LASTEXITCODE -ne 0) {
@@ -846,7 +892,7 @@ if ($LiveCapture) {
     }
 
     Write-Step "Generate promotion decision"
-    & python ".\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py" `
+    & $Py ".\examples\czsc_strategy\diagnostics\simnow_promotion_decision.py" `
         --ledger $LedgerPath `
         --report-md $PromotionMd
     if ($LASTEXITCODE -ne 0) {
@@ -863,7 +909,7 @@ if ($LiveCapture) {
         "--ledger-summary", $LedgerSummaryJson,
         "--historical-db-update", $HistoricalDbUpdateJson
     )
-    & python @SummaryArgs
+    & $Py @SummaryArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Run summary generation failed with exit code $LASTEXITCODE"
     }
@@ -875,7 +921,7 @@ if ($LiveCapture) {
         "--run-summary", $RunSummaryJson,
         "--out-md", $DailyBriefMd
     )
-    & python @BriefArgs
+    & $Py @BriefArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Daily brief generation failed with exit code $LASTEXITCODE"
     }
@@ -888,7 +934,7 @@ if ($LiveCapture) {
         "--out-json", $RiskHaltReviewJson,
         "--out-md", $RiskHaltReviewMd
     )
-    & python @RiskHaltReviewArgs
+    & $Py @RiskHaltReviewArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Risk halt review generation failed with exit code $LASTEXITCODE"
     }
@@ -901,7 +947,7 @@ if ($LiveCapture) {
         "--out-json", $RiskHaltDecisionJson,
         "--out-md", $RiskHaltDecisionMd
     )
-    & python @RiskHaltDecisionArgs
+    & $Py @RiskHaltDecisionArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Risk halt decision template generation failed with exit code $LASTEXITCODE"
     }
@@ -933,7 +979,7 @@ if ($LiveCapture) {
     if ((-not $SkipKlineUpdate) -and (Test-Path -LiteralPath $KlineSummaryJson)) {
         $ConsistencyArgs += @("--kline-json", $KlineSummaryJson)
     }
-    & python @ConsistencyArgs
+    & $Py @ConsistencyArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Summary consistency validation failed with exit code $LASTEXITCODE"
     }

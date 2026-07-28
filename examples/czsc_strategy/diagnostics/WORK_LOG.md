@@ -9132,3 +9132,122 @@ Result after the fix: decision record `{"valid": true, "errors": []}`; preflight
 ### Next Action
 
 Resume formal `-LiveCapture` runs inside the next allowed start window (`09:05`, `13:35`, or `21:05` Asia/Shanghai). Valid observation days now count starting `2026-07-27`; 20/20 valid days are required from this new start before promotion can be reconsidered.
+
+## 2026-07-28 Daily SimNow Observation Attempt (Blocked By Formal Window)
+
+### Goal
+
+Advance the daily SimNow observation ledger per `NEXT_WORK.md`/`ACCEPTANCE.md`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution, per workflow requirements.
+- `run_next_work.ps1 -Preflight` passed: script compiled, SimNow workflow unit suite reported `328 passed`, and pending replay backfill remained `0`.
+- No `simnow_export_2026-07-28.json`, `simnow_record_2026-07-28.json`, `simnow_report_2026-07-28.md`, or `simnow_run_summary_2026-07-28.json` existed before the live attempt.
+- A formal `-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb` invocation was attempted at `2026-07-28 09:57:51 +08:00`.
+- The wrapper rejected the run before any SimNow connection or historical DB update because automatic formal runs only allow the `09:05`, `13:35`, or `21:05` start windows with a 5-minute grace period.
+
+### Verification
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Result:
+
+- Preflight passed with `328 passed`.
+- Live capture exited non-zero with `Formal observation window rejected: automatic formal runs must start in one of [09:05, 13:35, 21:05] with a 5-minute grace window. Current local time is 2026-07-28 09:57:51 +08:00.`
+- No SimNow connection was started, no orders were sent, and no new `simnow_*_2026-07-28.*` formal observation artifacts were generated.
+
+### Next Action
+
+Re-run the formal read-only observation inside the next allowed start window (`2026-07-28 13:35 +08:00` or `2026-07-28 21:05 +08:00`). After a successful in-window run, use `simnow_run_summary_2026-07-28.json` as the authoritative source for the final automation status.
+
+## 2026-07-28 Risk Metric Windowing Fix (0.2.49): Breaking the Halt-Regeneration Loop
+
+### Goal
+
+Fix the structural root cause behind repeated SimNow observation "failures":
+`export_simnow_replay_snapshot.py::_risk_for_day` measured drawdown/consecutive
+loss with `upto = daily.loc[:day]` (cumulative scan from replay start), so the
+fixed 2023-06-19~06-28 losing segment re-triggered warning/halt on every
+observation day and regenerated pending risk-halt decisions (07-24, 07-27),
+blocking the 20-day observation loop via A38.
+
+### Changes
+
+- `export_simnow_replay_snapshot.py`: added `_resolve_risk_start`
+  (explicit `--risk-start` > `simnow_observation_window.json` > full history),
+  `--full-history-risk` CLI flag, `risk_start`/`full_history_risk` params on
+  `build_snapshot`, meta fields `risk_window_start`/`risk_window_source`, and a
+  single-day fallback when `risk_start` is after the observation day.
+  The replay itself still runs from `--start` (signal warmup); only risk
+  metrics are windowed.
+- `tests/unit/test_export_simnow_replay_snapshot.py`: 10 new tests covering
+  windowed/full-history/fallback metrics, resolver precedence, and meta
+  recording via a faked `build_snapshot`.
+- `diagnostics/ACCEPTANCE.md`: documented the windowed measurement scope.
+- `simnow_risk_halt_decision_2026-07-27.json/.md`: regenerated from the review
+  pack (the 09:55 hand-edit had flipped `decision_status=decided` with empty
+  required fields, which would have blocked the next in-window run as
+  "invalid decision"), then drafted with
+  `reset_observation_window_after_strategy_change` + rationale citing the
+  0.2.49 fix; only `operator_name` remains for human signature.
+
+### Verification
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_export_simnow_replay_snapshot.py -q
+python -m pytest .\examples\czsc_strategy\tests\unit -q -m "not realdb"
+python -m pytest .\examples\czsc_strategy\tests\unit -m realdb -q
+python .\examples\czsc_strategy\diagnostics\export_simnow_replay_snapshot.py --start 2026-06-01 --end 2026-07-27 --date 2026-07-27 --out-json .tmp\simnow_smoke.json
+python tools\sync_check.py --root examples\czsc_strategy
+```
+
+Result: snapshot suite `12 passed`; full unit suite `954 passed, 1 failed`
+(the failure is `test_handoff_tool.py::test_handoff_status_uses_authoritative_sync_check_engine`,
+a pre-existing GBK-locale subprocess decoding issue on Python 3.14 that passes
+with `PYTHONUTF8=1`; unrelated to this change); realdb `4 passed`; real-DB
+smoke shows `risk_window_start=2026-07-27 (observation_window_config)` with
+drawdown 0.0 and no consecutive-loss streak; sync_check PASS at 0.2.49.
+
+### Next Action
+
+Human: sign `simnow_risk_halt_decision_2026-07-27.json` (fill `operator_name`,
+validate), then move `simnow_observation_window.json` start to 2026-07-28 and
+resume formal `-LiveCapture` inside the `13:35`/`21:05` windows.
+
+## 2026-07-28 Wrapper Python Interpreter Pinning (0.2.50)
+
+### Goal
+
+Fix the environment hazard where `run_next_work.ps1` invoked bare `python` and
+failed at import time whenever PATH resolved to an interpreter without the
+project deps (observed live: Preflight died with `No module named pytest`
+when `python` was a sandboxed runtime).
+
+### Changes
+
+- `run_next_work.ps1`: added `-PythonExe` param and `SIMNOW_PYTHON` env
+  override; default probes `python` then `C:\Python314\python.exe` for the
+  first interpreter that can `import pytest`; logs
+  `Using Python interpreter: ...` as the first step; `-LiveCapture`
+  pre-validates `import vnpy_ctp` and fails fast with an actionable message.
+  All 16 python call sites now use the resolved `$Py`.
+
+### Verification
+
+- Bare-PATH Preflight (python = interpreter without pytest): auto-resolved
+  `C:\Python314\python.exe`, suite `315 passed, 23 skipped` (skips are the
+  wrapper tests' pre-existing Git-Bash PowerShell detection; `105 passed`
+  when PowerShell is visible).
+- `-PythonExe C:\nonexistent\python.exe` fails immediately with a clear
+  reason; `-LiveCapture` outside formal windows still rejects pre-connection
+  after interpreter resolution, confirming gate order.
+
+### Next Action
+
+Human: sign `simnow_risk_halt_decision_2026-07-27.json` (only `operator_name`
+missing), move `simnow_observation_window.json` start to 2026-07-28, then
+resume formal `-LiveCapture` inside the `13:35`/`21:05` windows.

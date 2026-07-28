@@ -2,6 +2,105 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.51（2026-07-28）- 执行 07-27 风险停机决策：签署、观察窗重置与 loader 绑定修复
+
+- **决策执行**：`simnow_risk_halt_decision_2026-07-27.json/.md` 由 hanabeatrisa 签署
+  （`reset_observation_window_after_strategy_change`，rationale 引用 0.2.49 根因修复），
+  `--validate` 通过；`simnow_observation_window.json` 的 `observation_start_date`
+  移至 2026-07-28，07-27 台账行保留为审计历史、不计入新 20 日窗口。
+- **缺陷修复**：`build_snapshot` 此前调用 `_resolve_risk_start` 未显式传 `loader`，
+  默认参数在 def 时绑定模块函数，monkeypatch 及运行期配置变更不生效；
+  现显式传 `loader=load_observation_start_date`（调用期查找模块全局）。
+- **测试**：`test_simnow_ledger_summary.py::test_cli_writes_summary_json` 夹具日期
+  随观察窗前移至 2026-07-28（该用例经 CLI 回退读取真实窗口配置）。
+- **验证**：全量单测 `955 passed, 23 skipped, 4 xfailed`（`PYTHONUTF8=1`）；
+  决策记录校验 `valid: true`；sync_check PASS。
+## 0.2.50（2026-07-28）- run_next_work.ps1 固定 Python 解释器探测
+
+- **环境隐患修复**：wrapper 此前全程调用裸 `python`，在 PATH 解析到无项目依赖的
+  解释器（如沙箱运行时、空 venv）时，Preflight 会在 import 阶段失败（实测：
+  `No module named pytest`），LiveCapture 则可能在 `import vnpy` / `import vnpy_ctp`
+  处崩溃。
+- **实现**：新增 `-PythonExe` 参数与 `SIMNOW_PYTHON` 环境变量覆盖；默认按
+  `python` → `C:\Python314\python.exe` 顺序探测首个可 `import pytest` 的解释器，
+  运行日志首行打印 `Using Python interpreter: ...`；`-LiveCapture` 前置校验
+  `vnpy_ctp` 可导入，失败即时报出可操作原因。探测用 `Test-PythonImports` 辅助函数，
+  局部降级 `ErrorActionPreference`，规避 Windows PowerShell 5.1 下 EAP=Stop 把
+  原生 stderr 变成 NativeCommandError 的坑。全部 16 个 python 调用点改用解析结果 `$Py`。
+- **验证**：裸 PATH（`python` 指向无 pytest 的解释器）下 Preflight 自动选对
+  `C:\Python314` 并通过（`315 passed, 23 skipped`，skip 为包装测试在 Git Bash
+  上下文探测不到 PowerShell 的既有环境行为；PowerShell 可见时 `105 passed`）；
+  显式指定坏解释器立即报 `not runnable or cannot import pytest`；`-LiveCapture`
+  在窗口外仍按原设计拒绝，且拒绝发生在解释器解析与 vnpy_ctp 校验之后，链路顺序正确。
+- **文档**：`diagnostics/AUTOMATION_PROMPT.md` 预检步骤补充解释器解析说明。
+## 0.2.49（2026-07-28）- SimNow 回放风险指标限定在观察窗内（打断 halt 再生循环）
+
+- **根因修复**：`diagnostics/export_simnow_replay_snapshot.py` 的 `_risk_for_day` 此前用
+  `upto = daily.loc[:day]` 对全回放历史做累计扫描，max drawdown / max consecutive loss
+  永远命中 2023-06-19~06-28 固定历史亏损段，导致每个观察日重复触发 warning/halt 并再生成
+  pending 风险停机决策记录（07-24、07-27 两次同源），A38 拦截使 20 日有效观察无法累积。
+- **方案 A 实现**：新增 `_resolve_risk_start`（优先级：显式 `--risk-start` 参数 >
+  `simnow_observation_window.json` 的 `observation_start_date` > 全历史）与 `--full-history-risk`
+  开关；`build_snapshot` 新增 `risk_start` / `full_history_risk` 参数并在 meta 记录
+  `risk_window_start` / `risk_window_source`；`risk_start` 晚于观察日时回退为单日测量，
+  避免配置错误被伪装成"零风险"。回放本身仍从 `--start` 跑全量历史（信号 warmup 需要），
+  仅风险指标计算被窗口化。
+- **验证**：新增 10 个单测（窗口化/全历史/回退/参数解析/meta 记录）；全量单测
+  `954 passed`（`test_handoff_tool.py::test_handoff_status_uses_authoritative_sync_check_engine`
+  在 GBK locale 下的既有编码环境问题，`PYTHONUTF8=1` 即通过，与本次改动无关）；
+  realdb 门禁 `4 passed`；真实 DB 冒烟（`--start 2026-06-01 --date 2026-07-27`）确认
+  meta 记录 `risk_window_start=2026-07-27 / source=observation_window_config`，
+  drawdown/consecutive_loss 不再包含 2023-06 陈旧段。
+- **文档**：`diagnostics/ACCEPTANCE.md` 风险门禁一节补充指标测量口径说明。
+## 0.2.48（2026-07-28）- czsc 1.0.0rc8 升级 review 修复与补充披露
+
+- **行为差异报告强化**：
+  - 重新生成 `diagnostics/czsc_upgrade_fixtures/`，设置 `CZSC_MAX_BI_NUM=10000`，
+    确认本次真实数据集上的笔数未触顶；报告新增"`max_bi_num` 截断披露"章节。
+  - 信号对比从终端快照改为**逐 bar 回放**，输出每个信号键的转态次数与时间点差异。
+  - 补充 ZN888 分型数量 4.8 倍差异的根因说明：1.0.0rc8 的 `fx_list` 暴露大量候选分型，
+    按笔端点确认的口径统计后各品种差异不大；ZN888 的高波动产生了更多被否决的候选。
+- **research-mode 基准位移披露**：在 `diagnostics/czsc_upgrade_behavior_diff_report.md`
+  中显式列出 `test_position_sizing_research_equivalence.snapshot.json` 刷新前后的
+  SC888/RB888 Bucket-B 指标（SC888 total_return_pct 3.794%→0.646%、sharpe 0.809→0.242、
+  三买多头 4 笔→1 笔等），并新增 `diagnostics/czsc_upgrade_failure_attribution.md`
+  逐条说明被修改测试夹具的归因（笔算法差异 vs 其他）。
+- **HTML 报告两项附加功能补录决策记录**：
+  - B/S 买卖点序号标注（`_build_bs_payload` 的 `label` 字段 + `_bs_label_series`）
+    与 echarts.min.js 内联去 CDN 化（`chan_strategy/vendor/echarts.min.js`）并非 czsc
+    升级原设计范围；本次选择保留并补录 HANDOFF.md 决策记录与 CHANGELOG 条目，
+    理由是两者直接提升报告可读性与离线可用性，且已有配套单测与样例报告。
+  - 评估内联 1.1MB JS 对 `diagnostics/` 目录的膨胀影响：当前 `diagnostics/` 已包含
+    大量历史报告与 fixture，单份 HTML +1MB 在可接受范围内，但后续批量归档时应考虑
+    将大体积 sample report 移入 `diagnostics/archive/` 并保留最新一份。
+- **Phase 4 依赖环境记录**：`czsc==1.0.0rc8` 新增运行时依赖 `polars`、`scipy`、
+  `statsmodels`、`wbt>=0.2.1`、`typer` 经验证均可正常导入（`python -m pip check` 干净），
+  其中 `wbt` 为 PyPI 包 `wbt`（weighted-biv-explorer）0.6.0；与本仓库既有依赖无冲突。
+
+## 0.2.47（2026-07-28）- czsc 库升级至 1.0.0rc8（Rust 重写）
+
+- **依赖升级**：`requirements.txt` 中 `czsc` 从 `0.9.51` 精确 pin 到 `1.0.0rc8`。
+- **导入路径迁移**：`czsc.objects` / `czsc.enum` / `czsc.utils.echarts_plot` /
+  `czsc.utils.bar_generator` 等已删除路径全部改为从顶层 `czsc` 导入或本地 vendored 实现；
+  `CZSC(bars=...)` 关键字调用改为 `CZSC(bars_raw=...)`。
+- **kline_pro 本地 vendoring**：由于 `czsc.utils.echarts_plot` 在 1.0 中被删除，
+  将原 `kline_pro` 图表函数与所需 `SMA`/`MACD` 辅助函数 vendored 到
+  `chan_strategy/vendor/echarts_plot.py`，保证 HTML 回测报告渲染行为不变。
+- **240 分钟周期映射**：`backtest_engine.py` / `data_adapter.py` / `czsc_adapter.py`
+  的周期映射表在 czsc 1.0（提供 `Freq.F240`）时映射到真实 `F240`，在 0.9.x 回退到 `F120`，
+  保持与旧版本兼容。
+- **行为差异披露**：新增 `diagnostics/czsc_upgrade_bi_diff.py` 与
+  `diagnostics/czsc_upgrade_diff_report.py`，在 5 个期货连续合约真实历史数据上量化
+  0.9.51 与 1.0.0rc8 的笔/中枢/买卖点信号差异；完整报告见
+  `diagnostics/czsc_upgrade_behavior_diff_report.md`（RESEARCH-ONLY）。
+- **测试适配**：针对 1.0 中 `RawBar`/`FakeBI` 变为 Rust 不可变对象、
+  `FX` 行为语义变化等情况，调整相关单元测试夹具，避免原地属性修改或实例化原生类型。
+- **纪律重申**：本次升级会改变同一历史数据上的笔边界与部分信号输出；在通过正式 SimNow
+  前瞻观察之前，不应视为"已验证可用"。
+- **回滚路径**：`requirements.txt` 中 `czsc==1.0.0rc8` 为单行独立改动，可单独 revert；
+  若需回退到 `0.9.51`，同时恢复 `chan_strategy/vendor/` 的使用（即改回
+  `from czsc.utils.echarts_plot import kline_pro`）即可。
+
 ## 0.2.46（2026-07-27）- 风险/成本/数据质量披露强化与配置漂移防护
 
 - **数据质量 fail-closed 门禁**：`BacktestEngine.run()` 计算 `unparseable_row_rate`，

@@ -208,7 +208,7 @@ def test_cli_writes_summary_json(tmp_path):
     # This CLI invocation does not pass --start-date, so it falls back to the
     # repo's default simnow_observation_window.json. The record date must stay
     # on/after that config's observation_start_date or it gets filtered out.
-    _write_jsonl(ledger_path, [_pending_record("2026-07-27", "historical_db_lag")])
+    _write_jsonl(ledger_path, [_pending_record("2026-07-28", "historical_db_lag")])
     out_path = tmp_path / "simnow_ledger_summary.json"
 
     result = subprocess.run(

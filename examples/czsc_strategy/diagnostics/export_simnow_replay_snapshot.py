@@ -27,6 +27,7 @@ from diagnostics.backtest_matrix_report import DEFAULT_SYMBOLS, _dominant_symbol
 from diagnostics.platform_final_candidate import final_candidate_params  # noqa: E402
 from diagnostics.platform_final_robustness_check import BASE_ENGINE_COMMISSION_RATE, BASE_ENGINE_SLIPPAGE  # noqa: E402
 from diagnostics.portfolio_goal_evaluator import _json_safe, _strategy_weight  # noqa: E402
+from diagnostics.simnow_observation_window import load_observation_start_date  # noqa: E402
 from diagnostics.simnow_precheck_risk_report import _concentration, _drawdown_stats, _max_consecutive_losses  # noqa: E402
 
 
@@ -182,6 +183,35 @@ def _portfolio_daily(rows: list[dict[str, Any]]) -> pd.DataFrame:
     return out
 
 
+def _resolve_risk_start(
+    risk_start_arg: str,
+    full_history: bool,
+    loader: Any = load_observation_start_date,
+) -> tuple[datetime.date | None, str]:
+    """Resolve the inclusive start date for observation risk metrics.
+
+    Precedence: explicit CLI/argument value > ``simnow_observation_window.json``
+    > full replay history. ``full_history=True`` forces the legacy cumulative
+    scan regardless of config.
+
+    Why this exists: cumulative-to-date scans (``daily.loc[:day]``) keep
+    re-surfacing fixed historical losing segments (e.g. 2023-06-19~06-28) as
+    max drawdown / max consecutive loss on every observation day, which
+    regenerates risk-halt decisions and blocks the 20-day observation loop.
+    Bounding metrics to the observation window makes a window-reset decision
+    actually take effect.
+    """
+    if full_history:
+        return None, "full_history"
+    explicit = str(risk_start_arg or "").strip()
+    if explicit:
+        return _parse_day(explicit), "argument"
+    configured = str(loader() or "").strip()
+    if configured:
+        return _parse_day(configured), "observation_window_config"
+    return None, "full_history"
+
+
 def _consecutive_loss_breakdown(daily: pd.DataFrame) -> dict[str, Any]:
     """Return the max loss streak with the daily rows that compose it."""
     base = _max_consecutive_losses(daily)
@@ -220,11 +250,24 @@ def _consecutive_loss_breakdown(daily: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def _risk_for_day(daily: pd.DataFrame, trades: list[dict[str, Any]], day: datetime.date) -> dict[str, Any]:
+def _risk_for_day(
+    daily: pd.DataFrame,
+    trades: list[dict[str, Any]],
+    day: datetime.date,
+    risk_start: datetime.date | None = None,
+) -> dict[str, Any]:
     if daily.empty or day not in daily.index:
         return {}
     day_row = daily.loc[day]
-    upto = daily.loc[:day]
+    if risk_start is None:
+        upto = daily.loc[:day]
+    else:
+        upto = daily.loc[risk_start:day]
+        if upto.empty:
+            # A risk window that starts after the replay day is a config
+            # error; reporting zeroed metrics would fake a clean day, so
+            # fall back to measuring just the day itself.
+            upto = daily.loc[[day]]
     drawdown = _drawdown_stats(upto)
     return {
         "daily_return_pct": float(day_row["daily_return"]) * 100,
@@ -240,9 +283,20 @@ def _risk_for_day(daily: pd.DataFrame, trades: list[dict[str, Any]], day: dateti
     }
 
 
-def build_snapshot(db_path: Path, start: str, end: str, day: str, cost_factor: float) -> dict[str, Any]:
+def build_snapshot(
+    db_path: Path,
+    start: str,
+    end: str,
+    day: str,
+    cost_factor: float,
+    risk_start: str = "",
+    full_history_risk: bool = False,
+) -> dict[str, Any]:
     day_obj = _parse_day(day)
     day_text = day_obj.isoformat()
+    risk_start_date, risk_window_source = _resolve_risk_start(
+        risk_start, full_history_risk, loader=load_observation_start_date
+    )
     table_ranges = _db_table_ranges(db_path, DEFAULT_SYMBOLS)
     latest_db_date = _latest_db_date(table_ranges)
     rows = [_run_symbol(db_path, symbol, start, end, cost_factor) for symbol in DEFAULT_SYMBOLS]
@@ -261,7 +315,7 @@ def build_snapshot(db_path: Path, start: str, end: str, day: str, cost_factor: f
                 float(item.get("pnl_pct", 0.0)) * _strategy_weight(str(item.get("strategy")), row["symbol"]) * 100 / len(DEFAULT_SYMBOLS)
             )
             closed_trades.append(item)
-    risk = _risk_for_day(daily, closed_trades, day_obj)
+    risk = _risk_for_day(daily, closed_trades, day_obj, risk_start=risk_start_date)
     replay_available = bool(events["positions"]) and bool(risk)
     unavailable_reason = ""
     if not replay_available:
@@ -286,6 +340,8 @@ def build_snapshot(db_path: Path, start: str, end: str, day: str, cost_factor: f
             "replay_unavailable_reason": unavailable_reason,
             "latest_db_date": latest_db_date,
             "table_ranges": table_ranges,
+            "risk_window_start": risk_start_date.isoformat() if risk_start_date else "",
+            "risk_window_source": risk_window_source,
         },
     }
 
@@ -297,10 +353,29 @@ def main() -> None:
     parser.add_argument("--end", required=True, help="Replay end date, normally the trading day under review.")
     parser.add_argument("--date", required=True, help="Trading day to export, YYYY-MM-DD.")
     parser.add_argument("--cost-factor", type=float, default=1.0)
+    parser.add_argument(
+        "--risk-start",
+        default="",
+        help="Inclusive start date (YYYY-MM-DD) for drawdown/consecutive-loss risk metrics. "
+        "Defaults to simnow_observation_window.json's observation_start_date.",
+    )
+    parser.add_argument(
+        "--full-history-risk",
+        action="store_true",
+        help="Measure risk metrics over the full replay history (legacy cumulative scan).",
+    )
     parser.add_argument("--out-json", type=Path, required=True)
     args = parser.parse_args()
 
-    payload = build_snapshot(args.db_path, args.start, args.end, args.date, args.cost_factor)
+    payload = build_snapshot(
+        args.db_path,
+        args.start,
+        args.end,
+        args.date,
+        args.cost_factor,
+        risk_start=args.risk_start,
+        full_history_risk=args.full_history_risk,
+    )
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote {args.out_json}")

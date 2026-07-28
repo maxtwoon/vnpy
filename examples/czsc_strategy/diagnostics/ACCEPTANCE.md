@@ -38,6 +38,14 @@ A valid daily observation requires:
 Use `simnow_risk_thresholds.json` as the single source for SimNow observation warning/halt lines.
 The file is derived from the latest accepted historical/precheck report and must be reviewed whenever the candidate changes.
 
+Measurement scope (since 0.2.49): drawdown and consecutive-loss metrics in
+`simnow_replay_YYYY-MM-DD.json` are measured inside the active observation
+window (`simnow_observation_window.json` → `observation_start_date`), not over
+the full replay history. The snapshot meta records `risk_window_start` and
+`risk_window_source`; `--full-history-risk` restores the legacy cumulative scan
+for baseline/diagnostic comparisons. A window-reset decision therefore actually
+clears stale historical segments (e.g. 2023-06-19~06-28) from daily metrics.
+
 Initial reference thresholds:
 
 - max single-day loss warning: around `-0.29%`

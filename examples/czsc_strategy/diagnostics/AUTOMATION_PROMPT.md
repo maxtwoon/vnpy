@@ -33,6 +33,12 @@
    powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
    ```
 
+   解释器说明（0.2.50 起）：wrapper 会自动探测带项目依赖的 Python
+   （`-PythonExe` 参数 > `SIMNOW_PYTHON` 环境变量 > `python` > `C:\Python314\python.exe`），
+   并在运行日志首行打印 `Using Python interpreter: ...`；`-LiveCapture` 还会前置校验
+   `vnpy_ctp` 可导入。若自动化环境的 `python` 指向无依赖的解释器，无需改 PATH，
+   预检也会自动选对；显式指定时若校验失败会立刻报出原因。
+
 3. 如果预检通过，运行正式只读观察采集：
 
    ```powershell
