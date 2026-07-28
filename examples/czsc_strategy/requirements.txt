@@ -1,4 +1,4 @@
 # Version guard for chan_strategy signal semantics.
 # _get_confirmed_bi_list depends on CZSC exposing finished_bis / last_bi_extend.
-czsc==0.9.51
+czsc==1.0.0rc8
 pyecharts==2.1.0
