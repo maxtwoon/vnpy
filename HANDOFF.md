@@ -1,7 +1,7 @@
 ---
 task: czsc-1.0-upgrade - Upgrade czsc dependency to 1.0 (Rust core rewrite)
 version: 4.4.0
-stage: review
+stage: done
 owner: codex
 updated: 2026-07-28
 deliverables:
@@ -11,10 +11,10 @@ deliverables:
   - examples/czsc_strategy/diagnostics/czsc_upgrade_failure_attribution.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: kimi-code
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: kimi-code
+last_transition_actor: codex
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: codex
 last_transition_to_owner: codex
 ---
 
@@ -53,74 +53,127 @@ last_transition_to_owner: codex
 
 ## 给下一棒的说明
 
-本轮为 review 打回后的修复轮次，已处理第 2 轮 review 的阻塞项 ④ 与 N1/N3/N4，并同步校准
-CHANGELOG/HANDOFF 中的文档指向。请按以下清单验收：
+第 3 轮 review 结论：**PASS**。第 2 轮的唯一阻塞项（`_baseline_displacement()` 静默失败 /
+自我抵消，以及基准位移数字只存在于 CHANGELOG 而不在报告正文）已被真正修复，并通过
+"主动破坏"式验证而非仅阅读代码确认。以下为逐项证据。
 
-### 本轮修复摘要
+审核环境：独立 worktree `.claude/worktrees/agent-a6111ba4f3fca4dac`，`git reset --hard e3e5ae6e0`
+（干净检出，`git status` 无改动），与 dev 的共享主工作树完全隔离。
 
-1. **基准回归披露机制修复**：`diagnostics/czsc_upgrade_diff_report.py` 的
-   `_baseline_displacement()` 不再使用 `git show HEAD:<snapshot>`（会在 snapshot 刷新后
-   自我抵消）也不再依赖相对 CWD 的路径。改为读取落盘的固定 golden fixture
-   `tests/unit/test_position_sizing_research_equivalence.snapshot.pre_czsc10.json`
-   （仅含 SC888/RB888 必要字段，约 1KB），缺失或损坏时直接抛错（fail-loud），章节
-   不可能再被静默丢弃。
-2. **行为差异报告补全**：重新生成 `diagnostics/czsc_upgrade_behavior_diff_report.md`，
-   现在真正包含 "research-mode 基准位移" 章节，列出 SC888/RB888 Bucket-B 指标
-   （SC888 total_return_pct 3.794%→0.646%、sharpe 0.809→0.242、三买多头 4 笔→1 笔等）。
-3. **文档指向校准**：`diagnostics/czsc_upgrade_failure_attribution.md`、CHANGELOG.md 0.2.48 <!-- synccheck:ignore -->
-   与 HANDOFF.md 验收标准第 4 条中对不存在章节的引用，现已与报告实际内容一致。
-   CHANGELOG 新增 0.2.52 条目说明上述修复；VERSION bump 至 0.2.52。 <!-- synccheck:ignore -->
-4. **N1 处理**：`diagnostics/czsc_upgrade_fixtures/`（约 20MB）与
-   `diagnostics/czsc_upgrade_sample_report.html`（约 5MB）为可再生生成产物，本次不加入
-   版本跟踪；报告内保留重新生成命令，review 可独立复跑验证。HANDOFF.md 中不存在将这两项
-   列为"关键入口"或交付物的条目。
+### ① 第 2 轮阻塞项 —— 已修复（对抗性验证）
 
-### 验证入口
+`_baseline_displacement()`（`examples/czsc_strategy/diagnostics/czsc_upgrade_diff_report.py:153`）
+现在从落盘的 golden fixture
+`examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.pre_czsc10.json`
+读取旧基准，路径由 `Path(__file__).resolve().parents[1]` 解析。实测：
 
-```bash
-# 根级门禁
-python tools/sync_check.py
+| 破坏方式 | 实际行为 | 判定 |
+|---|---|---|
+| 删除 golden fixture | `FileNotFoundError: Pre-upgrade baseline fixture missing: ...` | fail-loud ✔ |
+| golden fixture 写入非法 JSON | `json.JSONDecodeError` 直接抛出 | fail-loud ✔ |
+| golden fixture 内容置为 `{}` | 不抛错，但章节仍渲染，旧值全部显示为 `null`（可见退化，非静默丢失） | 可接受，见"残留瑕疵" |
+| golden fixture 内容改成与新 snapshot 完全相同（模拟"自我抵消"） | 章节照常渲染，新旧两列数值相同 —— 不会静默消失 | ✔ |
+| 从仓库根目录（而非 `examples/czsc_strategy/`）执行 | 正常返回同样结果 | CWD 无关 ✔ |
 
-# 子项目门禁
-python tools/sync_check.py --root examples/czsc_strategy
+代码中已无 `subprocess` / `git show HEAD:` / 裸 `except Exception: return {}`。
 
-# 重新生成行为差异报告（需已安装 czsc==1.0.0rc8 并可访问真实 SQLite 历史库） <!-- synccheck:ignore -->
-cd examples/czsc_strategy
-set CZSC_MAX_BI_NUM=10000
-python diagnostics/czsc_upgrade_bi_diff.py
-python diagnostics/czsc_upgrade_diff_report.py
+golden fixture 的**真实性**已独立核验（不是编造的）：把
+`git show 2ab6f93ab^:examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.json`
+（升级前的真 snapshot，2.1MB）与 fixture 逐字段比对，SC888/RB888 的
+`total_trades`/`total_return_pct`/`sharpe_ratio`/`profit_factor`/`max_drawdown_pct`
+及三个子策略的 `total_trades`/`win_rate` **全部浮点级完全相等**（MATCH=True）。
+fixture 已被 git 跟踪，且 `git check-ignore` 无命中，不会被 `.gitignore` 吞掉。
 
-# 单元测试（not-realdb）
-pytest tests/unit -q -m "not realdb"
+### ② 行为差异报告正文 —— 已包含真实数字
 
-# 单元测试（realdb）
-pytest tests/unit -q -m realdb
-```
+`diagnostics/czsc_upgrade_behavior_diff_report.md`（300 行）第 "research-mode 基准位移
+(真实策略级影响)" 节内联给出 SC888/RB888 两张指标表 + 两张子策略表：
 
-### 已知未处理项
+- SC888：成交对数 27→25，total_return_pct 3.794100761153718→0.64648542541208，
+  sharpe 0.8091974663759458→0.24200229290842856，profit_factor 1.85494→1.60322，
+  max_drawdown 3.20274→2.66376；三买多头 4 笔/0.5 胜率 → 1 笔/0.0 胜率。
+- RB888：成交对数 10→11，total_return_pct -1.69850→-0.07971，sharpe -1.20955→-0.07926，
+  profit_factor 0.48599→0.94701，max_drawdown 2.49149→1.65413。
 
-- **N2（SimNow 测试收集失败）**：`diagnostics/simnow_*.py` 模块被 `.gitignore` 排除但对应
-  `tests/unit/test_simnow_*.py` 已入库，导致干净检出下 24 个 collection error。该问题属于
-  SimNow 工作流卫生问题，超出本次 czsc 升级范围；`--continue-on-collection-errors` 下
-  760 passed、5 failed 全部归因于该模块缺失，无 czsc 升级相关失败。
-- **① 的残留瑕疵（历史提交卫生）**：czsc 的 CHANGELOG 0.2.47/0.2.48 条目落在 SimNow 提交 <!-- synccheck:ignore -->
-  `239570e67` 中，无法在不重写历史的前提下"挪回"czsc 提交。本次以新增 0.2.52 条目 <!-- synccheck:ignore -->
-  （落在本轮 czsc 修复提交中）的方式恢复纪律；若必须严格隔离历史，需额外一次 rebase
-  （未执行，因与"不擅自 git rebase"的安全约束冲突）。
-- **② 的瑕疵（`OLD_UNBOUNDED_BI_COUNTS` 硬编码）**：作为可选改进保留。当前报告已明确标注
-  该列为"独立探索性运行"，属于诚实披露，不阻塞 review。
+这些数值与我直接从两个 JSON 文件算出的 `_baseline_displacement()` 返回值逐位一致；
+报告文本的表头、列序、字段命名与脚本 `main()` 中 427-465 行的渲染逻辑逐行吻合，
+可确认为脚本生成而非手工誊抄。
 
-### Manual verification
+### ③ CHANGELOG / 提交范围 —— 已修复
 
-| 门禁 | 结果 |
+`c5cc1977f` 只触及 7 个文件：HANDOFF.md、czsc_strategy/CHANGELOG.md、VERSION、
+czsc_upgrade_behavior_diff_report.md、czsc_upgrade_diff_report.py、
+czsc_upgrade_failure_attribution.md、新增的 golden fixture —— **零 SimNow 文件**，
+不再重演第 2 轮"版本号搭 SimNow 提交便车"的问题。VERSION=0.2.52，CHANGELOG 0.2.52 条目齐备。 <!-- synccheck:ignore -->
+额外加分：历史上的 0.2.48 条目没有被悄悄改写，而是就地标注为 <!-- synccheck:ignore -->
+"（生成机制存在缺陷，实际正确落地见 0.2.52）"——保留了错误记录，属诚实披露。 <!-- synccheck:ignore -->
+
+### ④ 独立复跑的门禁（全部现场重跑，未沿用往轮数字）
+
+| 门禁 | 本轮 review 实测 |
 |---|---|
-| `python tools/sync_check.py` | PASS (4.4.0) |
-| `python tools/sync_check.py --root examples/czsc_strategy` | PASS (0.2.52) | <!-- synccheck:ignore -->
-| `pytest tests/unit -q -m "not realdb"` | 978 passed, 4 deselected, 4 xfailed |
-| `pytest tests/unit -q -m "not realdb" --continue-on-collection-errors` | N/A（直接运行已收集成功） |
-| `pytest tests/unit -q -m realdb` | 4 passed, 982 deselected |
-| `diagnostics/czsc_upgrade_behavior_diff_report.md` 含 "research-mode 基准位移" | PASS |
-| `_baseline_displacement()` 缺失 fixture 时抛错 | PASS（已手动验证删除 fixture 后报错） |
+| `python tools/sync_check.py` | PASS（4.4.0），exit 0 |
+| `python tools/sync_check.py --root examples/czsc_strategy` | PASS（0.2.52），exit 0 | <!-- synccheck:ignore -->
+| `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` | **干净检出下无法收集**：24 collection errors（见下 N2） |
+| 同上 `--continue-on-collection-errors` | 760 passed, 5 failed, 4 deselected, 4 xfailed, 24 errors |
+| `pytest examples/czsc_strategy/tests/unit -q -m realdb` | **4 passed**, 769 deselected（256s） |
+| 已删除导入路径（objects/enum/core/signals/svc/bar_generator/echarts_plot）真实 import | **0 处**（仅剩 docstring/注释中的历史引用） |
+| `requirements.txt` | `czsc==1.0.0rc8`，精确 pin | <!-- synccheck:ignore -->
+| 回滚隔离 | `a0d2e08e1` 仅改 `requirements.txt` 一行，可独立 revert ✔ |
+| 第 2 轮以来是否删弱 RESEARCH-ONLY / fail-closed / 披露机制 | 无（`git diff 0f7109300 HEAD` 中无相关删除行） |
+
+5 个 failed 全部为 SimNow 测试（`test_run_next_work_wrapper`、
+`test_simnow_daily_brief_policy_sharing` ×2、`test_simnow_helper_boundaries` ×2），
+**无一条与 czsc 升级相关**，与 dev 的归因一致。
+
+### ⑤ 968 → 978 的调查结论：与 czsc 无关，且不可从提交状态复现
+
+dev 把失败归因文档里的 `968 passed` 直接改成了 `978 passed`，未作解释。实测结论：
+
+- `git diff 0f7109300 e3e5ae6e0 -- examples/czsc_strategy/tests/` 只有新增的 golden
+  fixture JSON，**零个测试文件变动**；`grep -c "^def test_"` 在第 2 轮与第 3 轮提交状态下
+  同为 **929**。
+- 我把第 2 轮的 `tests/` + `diagnostics/` 检出到本 worktree 重跑，得到
+  **760 passed, 5 failed, 24 errors**，与第 3 轮 HEAD 的结果**完全相同**。
+- 因此 +10 完全来自 dev 所在共享主工作树中**未提交的并发 SimNow 改动**
+  （`diagnostics/simnow_*.py` 中 12 个未跟踪模块 + 一批 ` M ` 状态的修改），
+  与本次 czsc 升级毫无关系。
+
+判定：**非缺陷，但属未披露的口径漂移**。978 这个数字本身不可复现，不应作为验收证据；
+可复现的等价结论是"czsc 相关测试零失败，两轮提交状态测试面完全相同"。已在此记录，
+避免该数字被后续文档继续引用。
+
+### ⑥ N2（干净检出无法收集测试）—— 仍未解决，维持非阻塞
+
+24 个 collection error 源自 12 个**从未提交**的 SimNow 辅助模块（`simnow_artifact_loader`、
+`simnow_automation_policy`、`simnow_structured_access`、`simnow_20d_aggregate`、
+`simnow_contract_map_meta`、`simnow_backfill_pending_kline`、`simnow_daily_brief_schema`、
+`simnow_daily_brief_sections`、`simnow_daily_brief_default_summary`、
+`simnow_ledger_summary_schema`、`simnow_risk_halt_decision`、`simnow_risk_halt_review`）。
+更正第 2 轮 review 的措辞：这**不是 `.gitignore` 例外缺失**——`git check-ignore` 对这些路径
+无命中，它们只是被 SimNow 会话创建后一直未 `git add`。属 SimNow 工作流卫生问题，
+czsc 侧无法也不应在本任务内修复。dev 已在"已知未处理项"中如实披露，数字与我实测一致。
+**建议作为独立任务处理**：把这 12 个模块提交，或给对应测试加 skip 保护。
+
+### ⑦ 残留瑕疵（均不阻塞）
+
+1. `czsc_upgrade_diff_report.py:428` 的 `if baseline_delta:` 守卫现已形同虚设（函数要么抛错、
+   要么返回带键的字典）。唯一残留窗口：若 golden fixture 被替换成 `{}` 或缺 SC888/RB888 键，
+   章节会以 `null → 数值` 渲染而不抛错。可见但不理想，建议后续加一条键完整性断言。
+2. `OLD_UNBOUNDED_BI_COUNTS` 仍为硬编码常量（已在报告中标注为"独立探索性运行"，属诚实披露）。
+3. `diagnostics/czsc_upgrade_fixtures/`（约 20MB）与 `czsc_upgrade_sample_report.html`（约 5MB）
+   未纳入版本跟踪，review 无法在没有真实 SQLite 历史库和两个 venv 的情况下整体重生成报告；
+   本轮改以"核对报告数值 vs 已提交 JSON + 核对渲染逻辑"的方式独立验证了最关键的基准位移章节。
+4. 交接历史表缺少第 2 轮的 dev→review 与 review→dev 两行（front-matter 有记录，表格无）。
+   属流水线记账瑕疵，本次 `handoff.py next` 会补上本轮行。
+
+### 结论
+
+第 2 轮的阻塞缺陷已被**根治**而非表面修补：披露机制现在既不会静默消失，也不会因 snapshot
+刷新而自我抵消，且 golden fixture 的数值经与升级前真 snapshot 逐字段比对确认真实。
+两处 sync_check 通过，realdb 4 passed，czsc 相关测试零失败，已删除导入路径清零，
+requirements 精确 pin，回滚提交独立可 revert，无任何披露机制被削弱。
+10 项原始问题中的第 10 项至此关闭。转 done。
 
 ## 决策记录
 
@@ -164,3 +217,4 @@ pytest tests/unit -q -m realdb
 | 2026-07-28 | kimi-code → codex | dev → review | czsc upgrade dev completed: import paths migrated to top-level czsc namespace, kline_pro vendored into chan_strategy/vendor, requirements pinned to target RC, real-data behavior diff report generated, unit tests pass (968 not-realdb + 4 realdb) with refreshed research-mode baseline, both sync_check gates pass |
 | 2026-07-28 | codex → kimi-code | review → dev | 打回: czsc upgrade rejected: dev produced zero commits (rollback-isolation criterion unverifiable, work inseparable from concurrent SimNow tree changes incl. 29 deleted observation files); Phase 3 report omits the largest real-data delta (research-mode baseline: SC888 return 3.794%->0.646%, sharpe 0.809->0.242, 三买多头 4->1 trades) and its bi comparison is masked by the max_bi_num=50 cap; signal diff is a terminal snapshot not per-bar trigger statistics; no per-test failure attribution record; undesigned B/S labels + 1.1MB echarts inlining landed with no Decision Log entry |
 | 2026-07-28 | kimi-code → codex | dev → review | czsc-1.0-upgrade review fixes: baseline displacement now uses committed golden fixture with fail-loud, behavior diff report includes SC888/RB888 strategy-level delta, VERSION/CHANGELOG updated for this dev round, both sync_check gates pass, unit tests 978 passed/4 xfailed (not-realdb) and 4 passed (realdb) |
+| 2026-07-28 | codex → codex | review → done | Round-3 review PASS: the round-2 blocker is genuinely fixed. _baseline_displacement() now reads a committed, git-tracked golden fixture resolved from __file__ (CWD-independent) and fails loud; verified adversarially rather than by reading - deleting the fixture raises FileNotFoundError, corrupting it raises JSONDecodeError, and an old==new fixture still renders the section instead of vanishing; no bare except and no 'git show HEAD:' remain. The fixture's values were confirmed float-exact against the true pre-upgrade snapshot recovered from history (not fabricated). The behavior diff report now carries the SC888/RB888 strategy-level deltas inline (return 3.794 pct -> 0.646 pct, sharpe 0.809 -> 0.242, sanmai long 4 -> 1 trades), matching the script's render logic line for line. VERSION and CHANGELOG for this round land in a czsc-only seven-file commit with zero SimNow files, and the earlier false disclosure claim was annotated in place rather than silently rewritten. Gates re-run fresh in an isolated clean worktree: both sync_check gates PASS, realdb 4 passed, deleted czsc import paths zero, requirements pin exact, the rollback commit is a single isolated line, and no RESEARCH-ONLY or fail-closed mechanism was weakened. Investigated the not-realdb count drift: zero test-file changes between rounds and 929 test defs in both, and checking out the previous round's tests reproduces an identical 760 passed / 5 failed / 24 errors, so the increase comes solely from uncommitted concurrent SimNow work in the shared tree - a non-defect but an undisclosed metric drift, now recorded. N2 carries over unresolved and non-blocking: the 24 collection errors trace to 12 SimNow helper modules that were never git-added (not a gitignore gap - check-ignore is clean), and all 5 failures are SimNow-only with zero czsc-related failures. |
