@@ -1,0 +1,44 @@
+{
+  "SC888": {
+    "total_trades": 27,
+    "total_return_pct": 3.794100761153718,
+    "sharpe_ratio": 0.8091974663759458,
+    "profit_factor": 1.85494276133606,
+    "max_drawdown_pct": 3.2027434205249117,
+    "sub_strategies": {
+      "一买多头": {
+        "total_trades": 18,
+        "win_rate": 0.6111111111111112
+      },
+      "二买多头": {
+        "total_trades": 5,
+        "win_rate": 0.4
+      },
+      "三买多头": {
+        "total_trades": 4,
+        "win_rate": 0.5
+      }
+    }
+  },
+  "RB888": {
+    "total_trades": 10,
+    "total_return_pct": -1.6985019456343342,
+    "sharpe_ratio": -1.2095543381823868,
+    "profit_factor": 0.48598834953265724,
+    "max_drawdown_pct": 2.491487381882943,
+    "sub_strategies": {
+      "一买多头": {
+        "total_trades": 8,
+        "win_rate": 0.375
+      },
+      "二买多头": {
+        "total_trades": 2,
+        "win_rate": 0.0
+      },
+      "三买多头": {
+        "total_trades": 0,
+        "win_rate": 0
+      }
+    }
+  }
+}

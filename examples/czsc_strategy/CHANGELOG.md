@@ -2,6 +2,24 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.52（2026-07-28）- czsc 1.0.0rc8 升级 review 修复：基准位移披露机制与文档指向
+
+- **修复 `_baseline_displacement()` 静默失败缺陷**：
+  `diagnostics/czsc_upgrade_diff_report.py` 原实现从 `git show HEAD:snapshot` 读取旧基准、
+  用相对 CWD 的路径读取新基准，外覆两个裸 `except`，导致从 `examples/czsc_strategy/` 目录
+  重新生成报告时"research-mode 基准位移"章节被静默丢弃；且 snapshot 刷新提交后
+  `git show HEAD` 会取到新值，可能输出"位移为零"的错误结论。现改为读取落盘的固定
+  golden fixture（`tests/unit/test_position_sizing_research_equivalence.snapshot.pre_czsc10.json`），
+  缺失 fixture 或 snapshot 时直接抛错（fail-loud），章节不再可能静默丢失。
+- **补全行为差异报告**：`diagnostics/czsc_upgrade_behavior_diff_report.md` 现在真正包含
+  "research-mode 基准位移"章节，列出 SC888/RB888 Bucket-B 指标（SC888 total_return_pct
+  3.794%→0.646%、sharpe 0.809→0.242、三买多头 4 笔→1 笔等）。
+- **修正文档指向**：`diagnostics/czsc_upgrade_failure_attribution.md`、CHANGELOG.md 0.2.48
+  与 HANDOFF.md 验收标准第 4 条对不存在章节的引用，现已与报告实际内容一致。
+- **N1 处理**：`diagnostics/czsc_upgrade_fixtures/`（约 20MB）与
+  `diagnostics/czsc_upgrade_sample_report.html`（约 5MB）为可再生生成产物，本次不加入
+  版本跟踪；报告内保留重新生成命令，review 可独立复跑验证。
+
 ## 0.2.51（2026-07-28）- 执行 07-27 风险停机决策：签署、观察窗重置与 loader 绑定修复
 
 - **决策执行**：`simnow_risk_halt_decision_2026-07-27.json/.md` 由 hanabeatrisa 签署
@@ -60,9 +78,10 @@
   - 信号对比从终端快照改为**逐 bar 回放**，输出每个信号键的转态次数与时间点差异。
   - 补充 ZN888 分型数量 4.8 倍差异的根因说明：1.0.0rc8 的 `fx_list` 暴露大量候选分型，
     按笔端点确认的口径统计后各品种差异不大；ZN888 的高波动产生了更多被否决的候选。
-- **research-mode 基准位移披露**：在 `diagnostics/czsc_upgrade_behavior_diff_report.md`
-  中显式列出 `test_position_sizing_research_equivalence.snapshot.json` 刷新前后的
-  SC888/RB888 Bucket-B 指标（SC888 total_return_pct 3.794%→0.646%、sharpe 0.809→0.242、
+- **research-mode 基准位移披露（生成机制存在缺陷，实际正确落地见 0.2.52）**：
+  计划在 `diagnostics/czsc_upgrade_behavior_diff_report.md` 中显式列出
+  `test_position_sizing_research_equivalence.snapshot.json` 刷新前后的 SC888/RB888
+  Bucket-B 指标（SC888 total_return_pct 3.794%→0.646%、sharpe 0.809→0.242、
   三买多头 4 笔→1 笔等），并新增 `diagnostics/czsc_upgrade_failure_attribution.md`
   逐条说明被修改测试夹具的归因（笔算法差异 vs 其他）。
 - **HTML 报告两项附加功能补录决策记录**：

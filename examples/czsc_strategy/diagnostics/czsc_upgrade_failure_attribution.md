@@ -8,7 +8,7 @@
 
 ## 总体结论
 
-- **没有测试失败被掩盖**：升级后全量单测结果为 `968 passed, 4 deselected, 4 xfailed`
+- **没有测试失败被掩盖**：升级后全量单测结果为 `978 passed, 4 deselected, 4 xfailed`
   （not-realdb）与 `4 passed`（realdb）。任何数值变化都被显式归因并记录。
 - **唯一需要刷新金标准（snapshot）的测试**：
   `tests/unit/test_position_sizing_research_equivalence.snapshot.json`。

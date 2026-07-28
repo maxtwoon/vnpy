@@ -151,26 +151,28 @@ def _summarize_signal_changes(all_signal_diffs: dict[str, dict[str, Any]]) -> di
 
 
 def _baseline_displacement() -> dict[str, dict[str, Any]]:
-    """Compare the refreshed research-mode baseline against the dev-branch baseline.
+    """Compare the refreshed research-mode baseline against the pre-upgrade baseline.
 
-    The old baseline is read from HEAD; the new baseline is the working-tree
-    file.  This is the largest real-data strategy-level delta caused by the
-    czsc 1.0.0rc8 bi-algorithm change.
+    The old baseline is read from a committed golden fixture
+    (``*.snapshot.pre_czsc10.json``) so it cannot be silently lost or self-cancel
+    after the refreshed snapshot is committed.  The new baseline is read from the
+    current snapshot file.  Both paths are resolved relative to this script, not
+    to CWD.  Any missing/malformed file raises an exception (fail-loud) instead of
+    returning an empty dict, because this is the largest real-data strategy-level
+    delta caused by the czsc 1.0.0rc8 bi-algorithm change and must never be
+    silently omitted from the report.
     """
-    import subprocess
+    tests_dir = Path(__file__).resolve().parents[1] / "tests" / "unit"
+    old_path = tests_dir / "test_position_sizing_research_equivalence.snapshot.pre_czsc10.json"
+    new_path = tests_dir / "test_position_sizing_research_equivalence.snapshot.json"
 
-    path = "examples/czsc_strategy/tests/unit/test_position_sizing_research_equivalence.snapshot.json"
-    try:
-        old_bytes = subprocess.check_output(
-            ["git", "show", f"HEAD:{path}"], cwd=Path(__file__).resolve().parents[2], stderr=subprocess.DEVNULL
-        )
-    except Exception:  # noqa: BLE001
-        return {}
-    try:
-        old = json.loads(old_bytes.decode("utf-8"))
-        new = json.loads(Path(path).read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return {}
+    if not old_path.exists():
+        raise FileNotFoundError(f"Pre-upgrade baseline fixture missing: {old_path}")
+    if not new_path.exists():
+        raise FileNotFoundError(f"Current baseline snapshot missing: {new_path}")
+
+    old = json.loads(old_path.read_text(encoding="utf-8"))
+    new = json.loads(new_path.read_text(encoding="utf-8"))
 
     result: dict[str, dict[str, Any]] = {}
     fields = [
@@ -181,7 +183,7 @@ def _baseline_displacement() -> dict[str, dict[str, Any]]:
         "max_drawdown_pct",
     ]
     for symbol in ("SC888", "RB888"):
-        old_report = old.get(symbol, {}).get("report", {})
+        old_report = old.get(symbol, {})
         new_report = new.get(symbol, {}).get("report", {})
         result[symbol] = {f: {"old": old_report.get(f), "new": new_report.get(f)} for f in fields}
         # Sub-strategy trade counts / win rates (Chinese keys are preserved as-is).
@@ -482,6 +484,13 @@ def main() -> None:
     lines.append("# 1.0.0rc8")
     lines.append("CZSC_MAX_BI_NUM=10000 python diagnostics/czsc_upgrade_bi_diff.py")
     lines.append("```")
+    lines.append("")
+    lines.append(
+        "说明：上述 fixture 目录与 `diagnostics/czsc_upgrade_sample_report.html` "
+        "为可再生的生成产物,合计约 25MB,未纳入版本跟踪。review 可直接执行上述命令 "
+        "在本地复现;若无需重新生成,当前 `czsc_upgrade_behavior_diff_report.md` "
+        "正文已包含全部量化结论。"
+    )
     lines.append("")
 
     lines.append("## 结论与纪律")
