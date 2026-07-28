@@ -2,6 +2,50 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+
+## 0.2.58（2026-07-29）- 新增缠论书摘 ⇄ 代码对照核查表（纯文档）
+
+- 新增 `docs/theory_code_crosscheck.md`：将带页码锚点的缠论书摘
+  （源笔记存档于 `docs/reference/chan_theory_book_notes.txt`）逐条对照项目现有实现，
+  按 ✅一致 / ⚠️部分 / ❌缺口 / ❓待验证 标注，区分信号计算层与报告/叙事层两套适用条款；
+  汇总缺口优先级（P0 报告层措辞整改 / P1 区间套与走势类型识别 / P2 多义性披露与 MACD 面积通道），
+  并列出对 `czsc==1.0.0rc8` 行为断言（ZS 默认笔中枢、倒1/倒2 信号键名）的待验证清单。
+- 纯文档改动：不涉及任何代码、参数、信号或回测行为；诊断边界不变。
+
+## 0.2.57（2026-07-29）- run_next_work.ps1 读取 JSON artifact 统一 UTF-8 编码
+
+- **根因**：wrapper 用 `Get-Content -Raw`（Windows PowerShell 默认按系统 ANSI/GBK 解码）
+  读取 Python 侧以 UTF-8 写出的 JSON artifact，含中文 reason 时 `ConvertFrom-Json`
+  解析失败或读出乱码，07-28 21:05 实跑的 LiveCapture 后段因此中断过一次。
+- **修复**：三处读取统一加 `-Encoding UTF8`——`Assert-NoPendingRiskHaltDecision`
+  的决策文件、`Invoke-ReplaySnapshotRefresh` 的 replay readiness、LiveCapture 收尾的
+  run summary。
+- **测试**：新增包装测试 `test_wrapper_reads_json_artifacts_with_utf8_encoding`；
+  修复后 21:05 窗口实跑完整跑通（见 WORK_LOG "2026-07-28 21:05" 条目）。
+- 同步刷新 `simnow_20d_promotion_decision.md` 观察台账至 07-28 窗口重置后的状态
+  （observed 1/20、promotion_blockers 仅剩 need_20_more_valid_observation_days）。
+
+## 0.2.56（2026-07-29）- 修复 P4 背驰信号中枢选择缺陷（空头开仓几乎永远无法触发）
+
+- **根因**：`chan_strategy/signals.py::signal_divergence_status()` 原来直接取
+  `zhongshu_list[-1]`；在默认 `mode="recent"` 下该中枢几乎必然没有后续笔，导致
+  `{freq}_D1BI_背驰V260615` 几乎永远输出 `"无"`，进而使 `_research_short_open_allowed()`
+  的 P4 门控对空头几乎永远通不过（A888/SC888 全年实证：99.99% 以上调用返回 `"无"`）。
+- **修复方案**：新增 `STRATEGY_CONFIG["divergence_status_zhongshu_mode"]` 配置开关：
+  - `"legacy"`（默认）：保留原 `zhongshu_list[-1]` 行为，默认配置回测结果字节不变；
+  - `"departure_leg"`：与同文件的 `signal_first_buy` / `sell_signals.py` 的
+    `signal_first_sell` 保持一致，向后搜索最近一个后面确实存在离开段的中枢。
+- **实现**：提取纯函数 `_select_zhongshu_for_departure_leg(bi_list, zhongshu_list)`，
+  `signal_divergence_status()`、`signal_first_buy()`、`signal_first_sell()` 统一复用，
+  避免同一逻辑三处复制； helper 不耦合 `STRATEGY_CONFIG`，由调用方决定是否启用。
+  （review 修正：`signal_first_sell()` 在 0.2.53 后续提交中才实际接入 helper；`signal_third_buy()`
+  也复用了 helper，行为与原先内联表达式完全一致。）
+- **验证**：新增 8 个单元测试，证明同一 fixture 下 `legacy` 返回 `"无"`、
+  `departure_leg` 返回 `"疑似"`；全量 not-realdb 单测 986 passed（+8），realdb 4 passed，
+  SimNow `-Preflight` 338 passed；手动回测验证见 `HANDOFF.md` 的 `## Manual Verification`。
+- **默认行为不变**：`formal_evaluation_config()` 未设置该新键；默认 `"legacy"` 路径
+  与修复前字节一致，不扰动任何现有基线或晋升决策证据。
+
 ## 0.2.55（2026-07-29）- 方案 C：集中度指标改滚动 60 日窗口 + 样本不足 informational
 
 - **根因**：`symbol_top1_abs_share` / `strategy_top1_abs_share` 此前按全回放历史累计，
@@ -25,15 +69,6 @@
   监控侧 +3（informational 不参与 status、样本不足不否决、样本充足仍 veto）；
   全量单测 972 passed, 23 skipped；realdb 4 passed；裸 PATH Preflight 324 passed。
 
-## 0.2.54（2026-07-28）- 新增缠论书摘 ⇄ 代码对照核查表（纯文档）
-
-- 新增 `docs/theory_code_crosscheck.md`：将带页码锚点的缠论书摘
-  （源笔记存档于 `docs/reference/chan_theory_book_notes.txt`）逐条对照项目现有实现，
-  按 ✅一致 / ⚠️部分 / ❌缺口 / ❓待验证 标注，区分信号计算层与报告/叙事层两套适用条款；
-  汇总缺口优先级（P0 报告层措辞整改 / P1 区间套与走势类型识别 / P2 多义性披露与 MACD 面积通道），
-  并列出对 `czsc==1.0.0rc8` 行为断言（ZS 默认笔中枢、倒1/倒2 信号键名）的待验证清单。
-- 纯文档改动：不涉及任何代码、参数、信号或回测行为；诊断边界不变。
-
 ## 0.2.53（2026-07-28）- risk-halt 决策门禁仅限 halt 日 + 解释器探测依赖补全
 
 - **门禁对齐（修复⑤）**：`run_next_work.ps1` 此前每次 LiveCapture 后无条件生成
@@ -48,26 +83,6 @@
 - **测试**：新增 `test_risk_halt_review_and_decision_generation_gated_on_halt_status` 与
   `test_python_probe_requires_full_project_deps`；包装套件 107 passed；
   全量单测 965 passed；裸 PATH Preflight 自动选对 C:\Python314 并通过。
-## 0.2.53（2026-07-28）- 修复 P4 背驰信号中枢选择缺陷（空头开仓几乎永远无法触发）
-
-- **根因**：`chan_strategy/signals.py::signal_divergence_status()` 原来直接取
-  `zhongshu_list[-1]`；在默认 `mode="recent"` 下该中枢几乎必然没有后续笔，导致
-  `{freq}_D1BI_背驰V260615` 几乎永远输出 `"无"`，进而使 `_research_short_open_allowed()`
-  的 P4 门控对空头几乎永远通不过（A888/SC888 全年实证：99.99% 以上调用返回 `"无"`）。
-- **修复方案**：新增 `STRATEGY_CONFIG["divergence_status_zhongshu_mode"]` 配置开关：
-  - `"legacy"`（默认）：保留原 `zhongshu_list[-1]` 行为，默认配置回测结果字节不变；
-  - `"departure_leg"`：与同文件的 `signal_first_buy` / `sell_signals.py` 的
-    `signal_first_sell` 保持一致，向后搜索最近一个后面确实存在离开段的中枢。
-- **实现**：提取纯函数 `_select_zhongshu_for_departure_leg(bi_list, zhongshu_list)`，
-  `signal_divergence_status()`、`signal_first_buy()`、`signal_first_sell()` 统一复用，
-  避免同一逻辑三处复制； helper 不耦合 `STRATEGY_CONFIG`，由调用方决定是否启用。
-  （review 修正：`signal_first_sell()` 在 0.2.53 后续提交中才实际接入 helper；`signal_third_buy()`
-  也复用了 helper，行为与原先内联表达式完全一致。）
-- **验证**：新增 8 个单元测试，证明同一 fixture 下 `legacy` 返回 `"无"`、
-  `departure_leg` 返回 `"疑似"`；全量 not-realdb 单测 986 passed（+8），realdb 4 passed，
-  SimNow `-Preflight` 338 passed；手动回测验证见 `HANDOFF.md` 的 `## Manual Verification`。
-- **默认行为不变**：`formal_evaluation_config()` 未设置该新键；默认 `"legacy"` 路径
-  与修复前字节一致，不扰动任何现有基线或晋升决策证据。
 
 ## 0.2.52（2026-07-28）- czsc 1.0.0rc8 升级 review 修复：基准位移披露机制与文档指向
 
@@ -100,6 +115,7 @@
   随观察窗前移至 2026-07-28（该用例经 CLI 回退读取真实窗口配置）。
 - **验证**：全量单测 `955 passed, 23 skipped, 4 xfailed`（`PYTHONUTF8=1`）；
   决策记录校验 `valid: true`；sync_check PASS。
+
 ## 0.2.50（2026-07-28）- run_next_work.ps1 固定 Python 解释器探测
 
 - **环境隐患修复**：wrapper 此前全程调用裸 `python`，在 PATH 解析到无项目依赖的
@@ -118,6 +134,7 @@
   显式指定坏解释器立即报 `not runnable or cannot import pytest`；`-LiveCapture`
   在窗口外仍按原设计拒绝，且拒绝发生在解释器解析与 vnpy_ctp 校验之后，链路顺序正确。
 - **文档**：`diagnostics/AUTOMATION_PROMPT.md` 预检步骤补充解释器解析说明。
+
 ## 0.2.49（2026-07-28）- SimNow 回放风险指标限定在观察窗内（打断 halt 再生循环）
 
 - **根因修复**：`diagnostics/export_simnow_replay_snapshot.py` 的 `_risk_for_day` 此前用
@@ -137,6 +154,7 @@
   meta 记录 `risk_window_start=2026-07-27 / source=observation_window_config`，
   drawdown/consecutive_loss 不再包含 2023-06 陈旧段。
 - **文档**：`diagnostics/ACCEPTANCE.md` 风险门禁一节补充指标测量口径说明。
+
 ## 0.2.48（2026-07-28）- czsc 1.0.0rc8 升级 review 修复与补充披露
 
 - **行为差异报告强化**：
@@ -317,6 +335,7 @@
   - 单测通过 780 → 780（not-realdb，**数量不变**——纯注释/banner/token 读取/wrapper
     修复，未增删测试）；`-m realdb` 等价门禁不变通过；双侧 sync_check、Preflight、
     ruff 均通过（见 HANDOFF.md Manual Verification）。RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.41（2026-07-22）- A103 修复同义反复测试断言 + 删除死代码 utils.py
   （第四次全面 re-audit L-NEW-9、L-NEW-10，两处小而独立的修复）：
   - **L-NEW-9（测试断言修复）**：`tests/unit/test_more_coverage.py`
@@ -492,6 +511,7 @@
   - 未改任何函数逻辑/签名/返回值，未触碰 `sell_signals.py`、未触碰任何测试；单测通过数不变
     （761 not-realdb），`-m realdb` 等价门禁逐字节一致，双侧 sync_check、Preflight、ruff 均通过。
     RESEARCH-ONLY，不构成交易建议。
+
 ## 0.2.33（2026-07-21）
 - A95 文档化 `risk_per_trade_pct` 为名义风险预算而非硬亏损上限（audit M1；纯注释/docstring，无行为变化）：
   - `chan_strategy/config.py:87` 内联注释改为明确说明该参数是**名义**单笔风险预算（权益的 0.5%），

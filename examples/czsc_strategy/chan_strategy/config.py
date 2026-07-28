@@ -104,6 +104,13 @@ STRATEGY_CONFIG = {
     # A43 MACD-area divergence (P4). "amplitude" is the legacy byte-identical default;
     # "macd" compares leaving vs entering segment MACD magnitude (|hist| area).
     "divergence_model": "amplitude",      # "amplitude" (legacy, default) | "macd"
+
+    # P4 zhongshu selection fix. "legacy" keeps the naive zhongshu_list[-1] behavior
+    # that made the P4 divergence signal structurally unreachable for shorts;
+    # "departure_leg" selects the most recent zhongshu that actually has BIs after it,
+    # matching signal_first_buy/signal_first_sell. Default "legacy" preserves all
+    # existing default-config backtest results byte-for-byte.
+    "divergence_status_zhongshu_mode": "legacy",  # "legacy" (default) | "departure_leg"
     "macd_fast": 12,                      # MACD fast EMA period (standard, NOT tuned)
     "macd_slow": 26,                      # MACD slow EMA period (standard, NOT tuned)
     "macd_signal": 9,                     # MACD signal EMA period (standard, NOT tuned)

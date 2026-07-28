@@ -17,6 +17,7 @@ from chan_strategy.signals import (
     _divergence_power,
     _get_confirmed_bi_list,
     _get_confirming_bi,
+    _select_zhongshu_for_departure_leg,
     signal_bi_direction,
     signal_data_sufficiency,
     signal_divergence_status,
@@ -82,7 +83,7 @@ def signal_third_buy(c: CZSC, freq: str = "30分钟") -> dict:
     if not zhongshu_list or len(bi_list) < 5:
         return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
-    last_zs = next((zs for zs in reversed(zhongshu_list) if bi_list[zs["end_idx"] + 1:]), zhongshu_list[-1])
+    last_zs = _select_zhongshu_for_departure_leg(bi_list, zhongshu_list)
     zg = last_zs["zg"]
     after_zs_bis = bi_list[last_zs["end_idx"] + 1:]
     leave_idx, retrace_idx = None, None
@@ -123,7 +124,8 @@ def signal_first_sell(c: CZSC, freq: str = "30分钟") -> dict:
     if not zhongshu_list or len(bi_list) < 5:
         return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
 
-    last_zs = next((zs for zs in reversed(zhongshu_list) if bi_list[zs["end_idx"] + 1:]), zhongshu_list[-1])
+    # 复用 signals.py 的 departure-leg 选择 helper，与 signal_first_buy / signal_divergence_status 保持一致。
+    last_zs = _select_zhongshu_for_departure_leg(bi_list, zhongshu_list)
     up_leave_bis = [
         bi for bi in bi_list[last_zs["end_idx"] + 1:]
         if bi.direction == Direction.Up

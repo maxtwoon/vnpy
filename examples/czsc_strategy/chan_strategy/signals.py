@@ -250,6 +250,30 @@ def signal_zs_position(c: CZSC, freq: str = "30分钟") -> dict:
     return {key: value}
 
 
+def _select_zhongshu_for_departure_leg(bi_list: list, zhongshu_list: list) -> dict:
+    """
+    Select the most recent zhongshu that has at least one confirmed BI after it.
+
+    This is the same selection rule already used by ``signal_first_buy`` and
+    ``signal_first_sell``: search backward through ``zhongshu_list`` and pick
+    the first candidate whose ``end_idx`` is followed by at least one BI. If no
+    such candidate exists, fall back to the last zhongshu in the list.
+
+    Parameters
+    ----------
+    bi_list:
+        Confirmed BI list.
+    zhongshu_list:
+        Zhongshu candidates produced by ``build_zhongshu_from_bis``.
+
+    Returns
+    -------
+    dict
+        The selected zhongshu dictionary.
+    """
+    return next((zs for zs in reversed(zhongshu_list) if bi_list[zs["end_idx"] + 1:]), zhongshu_list[-1])
+
+
 def signal_data_sufficiency(c: CZSC, freq: str = "30分钟", min_bi_count: int = 5) -> dict:
     """
     数据充分度信号
@@ -331,7 +355,12 @@ def signal_divergence_status(c: CZSC, freq: str = "30分钟") -> dict:
         v1 = "无"
         score = 0
     else:
-        last_zs = zhongshu_list[-1]
+        mode = STRATEGY_CONFIG.get("divergence_status_zhongshu_mode", "legacy")
+        if mode == "departure_leg":
+            last_zs = _select_zhongshu_for_departure_leg(bi_list, zhongshu_list)
+        else:
+            # "legacy" (default): naive last-candidate pick, byte-identical to pre-fix behavior.
+            last_zs = zhongshu_list[-1]
         zd = last_zs["zd"]
         zg = last_zs["zg"]
         zs_end_idx = last_zs["end_idx"]
@@ -460,7 +489,7 @@ def signal_first_buy(c: CZSC, freq: str = "30分钟") -> dict:
 
     # recent 模式会返回重叠候选窗口；取最近一个后面已有离开段的中枢，
     # 与一卖/三买/三卖保持同一口径，避免选到尾部无后续笔的展示中枢。
-    last_zs = next((zs for zs in reversed(zhongshu_list) if bi_list[zs["end_idx"] + 1:]), zhongshu_list[-1])
+    last_zs = _select_zhongshu_for_departure_leg(bi_list, zhongshu_list)
     zd = last_zs["zd"]
     zs_end_idx = last_zs["end_idx"]
     zs_start_idx = last_zs["start_idx"]

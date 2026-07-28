@@ -137,7 +137,7 @@ function Assert-NoPendingRiskHaltDecision {
     $DecisionFiles = Get-ChildItem -LiteralPath $OutDir -Filter "simnow_risk_halt_decision_*.json" -File -ErrorAction SilentlyContinue |
         Sort-Object Name
     foreach ($DecisionFile in $DecisionFiles) {
-        $Decision = Get-Content -LiteralPath $DecisionFile.FullName -Raw | ConvertFrom-Json
+        $Decision = Get-Content -LiteralPath $DecisionFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
         $DecisionStatus = [string]$Decision.decision_status
         $NextAllowed = $false
         if ($Decision.PSObject.Properties.Name -contains "next_formal_observation_allowed") {
@@ -212,7 +212,7 @@ function Invoke-ReplaySnapshotRefresh {
             -TimeoutSeconds $ReplayTimeoutSeconds
     } else {
         Write-Host "Replay DB is not ready for $Date; skipping expensive replay export."
-        $Readiness = Get-Content -LiteralPath $ReplayReadinessJson -Raw | ConvertFrom-Json
+        $Readiness = Get-Content -LiteralPath $ReplayReadinessJson -Raw -Encoding UTF8 | ConvertFrom-Json
         $ReplayPlaceholder = [ordered]@{
             signals = @()
             trades = @()
@@ -927,7 +927,7 @@ if ($LiveCapture) {
         throw "Daily brief generation failed with exit code $LASTEXITCODE"
     }
 
-    $RunSummaryPayload = Get-Content -LiteralPath $RunSummaryJson -Raw | ConvertFrom-Json
+    $RunSummaryPayload = Get-Content -LiteralPath $RunSummaryJson -Raw -Encoding UTF8 | ConvertFrom-Json
     $AutomationStatus = [string]$RunSummaryPayload.automation_status
     if ($AutomationStatus -eq "halt") {
         Write-Step "Generate risk halt review pack"

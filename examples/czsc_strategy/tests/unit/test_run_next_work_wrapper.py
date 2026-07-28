@@ -267,6 +267,14 @@ def test_formal_window_validation_allows_night_when_formal_sessions_missing():
     assert "default-night-window-finished" in output
 
 
+def test_wrapper_reads_json_artifacts_with_utf8_encoding():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert 'Get-Content -LiteralPath $DecisionFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json' in script_text
+    assert 'Get-Content -LiteralPath $ReplayReadinessJson -Raw -Encoding UTF8 | ConvertFrom-Json' in script_text
+    assert 'Get-Content -LiteralPath $RunSummaryJson -Raw -Encoding UTF8 | ConvertFrom-Json' in script_text
+
+
 def test_formal_capture_plan_day_open_window_uses_1130_close():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     get_formal_plan = _extract_function(script_text, "Get-FormalCapturePlan")
