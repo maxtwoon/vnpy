@@ -8,6 +8,10 @@ so it can be unit-tested with small synthetic fixtures.
 The ``xd`` (线段 / duan) payload key is reserved and intentionally left empty
 this task; see ``docs/design/a105-html-backtest-visual-report.md`` Background
 item 1 for the scope decision.
+
+The chart base is rendered by a vendored copy of czsc 0.9.51's ``kline_pro``
+(see ``chan_strategy.vendor.echarts_plot``), because upstream removed both
+``czsc.enum`` and ``czsc.utils.echarts_plot`` in czsc 1.0.0rc8.
 """
 from __future__ import annotations
 
@@ -17,11 +21,17 @@ from pathlib import Path
 from typing import Any
 
 from czsc import CZSC
-from czsc.enum import Mark, Operate
-from czsc.utils.echarts_plot import kline_pro
+from czsc import Mark, Operate
+
+from chan_strategy.vendor.echarts_plot import kline_pro
 from pyecharts.charts import Tab
 
 from chan_strategy.zhongshu import build_zhongshu_from_bis
+
+
+# Vendored copy of echarts.min.js (Apache-2.0), so generated reports render
+# without depending on the pyecharts CDN at view time. See _inline_echarts_js.
+_VENDORED_ECHARTS_JS_PATH = Path(__file__).resolve().parent / "vendor" / "echarts.min.js"
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +101,7 @@ def render_backtest_html_report(
     html = _inject_head_style(html)
     html = _inject_report_extras(html, extras)
     html = _inject_tab_sync_script(html)
+    html = _inline_echarts_js(html)
 
     out_path.write_text(html, encoding="utf-8")
     tmp_path.unlink(missing_ok=True)
@@ -179,16 +190,18 @@ def _build_zs_payload(czsc_trade: CZSC) -> list[dict[str, Any]]:
 
 
 def _build_bs_payload(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return buy/sell marker payload from closed trade pairs."""
+    """Return buy/sell marker payload from closed trade pairs.
+
+    Each marker also carries a ``label`` field (``"B1"``, ``"S1"``, ``"B2"``, ...)
+    so the chart can annotate buy/sell points with a chronological sequence
+    number. ``B`` = a buy-side fill (open long / close short); ``S`` = a
+    sell-side fill (close long / open short). Buy and sell sequences are
+    numbered independently, in chronological order of ``dt``.
+    """
     bs: list[dict[str, Any]] = []
     for pair in pairs:
         direction = pair.get("direction")
-        if direction == "long":
-            open_op = Operate.LO
-            close_op = Operate.LE
-            open_desc = "开多"
-            close_desc = "平多"
-        elif direction == "short":
+        if direction == "short":
             open_op = Operate.SO
             close_op = Operate.SE
             open_desc = "开空"
@@ -216,6 +229,18 @@ def _build_bs_payload(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "op_desc": close_desc,
             }
         )
+
+    bs.sort(key=lambda row: row["dt"])
+    buy_ops = {Operate.LO, Operate.SE}
+    b_count = 0
+    s_count = 0
+    for row in bs:
+        if row["op"] in buy_ops:
+            b_count += 1
+            row["label"] = f"B{b_count}"
+        else:
+            s_count += 1
+            row["label"] = f"S{s_count}"
     return bs
 
 
@@ -258,6 +283,10 @@ def _build_symbol_grid_chart(payload: dict[str, Any], title: str) -> Any:
         markarea_series = _zhongshu_markarea_series(zs, dts)
         grid_chart.options["series"].append(markarea_series)
 
+    if bs:
+        label_series = _bs_label_series(bs)
+        grid_chart.options["series"].append(label_series)
+
     return grid_chart
 
 
@@ -294,6 +323,58 @@ def _zhongshu_markarea_series(zs_payload: list[dict[str, Any]], _dts: list[Any])
 # ---------------------------------------------------------------------------
 # HTML builders / post-render injection
 # ---------------------------------------------------------------------------
+
+
+def _bs_label_series(bs_payload: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build an overlay series showing B/S sequence numbers via ``markPoint``.
+
+    ``kline_pro``'s own long/short markers render as colored diamond/triangle
+    icons with tooltip-only detail (no visible on-chart text). This attaches
+    ECharts' ``markPoint`` feature — the standard, well-supported mechanism
+    for annotating specific points on a chart with a label — to an empty
+    dummy series, mirroring how ``_zhongshu_markarea_series`` attaches
+    ``markArea`` to an empty ``"line"`` series rather than a real data series.
+
+    An earlier version used a synthetic scatter series with ``symbol: "none"``
+    to draw label-only text at each (dt, price) point. That silently failed
+    in the vendored echarts build: the point still rendered as a default
+    circle marker (colored per direction, so buy/sell dots were visible) but
+    the attached label text never appeared — a known ECharts compatibility
+    gap between "no symbol" and "label anchored to that symbol". ``markPoint``
+    with an explicit ``pin`` symbol does not depend on that mechanism.
+    """
+    buy_ops = {Operate.LO, Operate.SE}
+    mark_data = []
+    for row in bs_payload:
+        is_buy = row["op"] in buy_ops
+        label = row.get("label", "")
+        mark_data.append(
+            {
+                "name": label,
+                "coord": [row["dt"], row["price"]],
+                "value": label,
+                "symbol": "pin",
+                "symbolSize": 32,
+                "itemStyle": {"color": "#ff461f" if is_buy else "#00aa3b"},
+                "label": {
+                    "show": True,
+                    "color": "#fff",
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                },
+            }
+        )
+    return {
+        "name": "BS_LABEL",
+        "type": "line",
+        "xAxisIndex": 0,
+        "yAxisIndex": 0,
+        "data": [],
+        "markPoint": {
+            "silent": True,
+            "data": mark_data,
+        },
+    }
 
 
 def _build_symbol_extra_html(symbol: str, payload: dict[str, Any]) -> str:
@@ -376,6 +457,35 @@ def _trades_table_html(trades_table: list[dict[str, Any]]) -> str:
     </table>
 </div>
 """
+
+
+def _inline_echarts_js(html: str) -> str:
+    """Replace pyecharts' CDN <script src="...echarts.min.js"> with an inline copy.
+
+    pyecharts renders a <script src="https://assets.pyecharts.org/..."> tag by
+    default, so the chart never draws when the viewer has no route to that CDN
+    (offline, corporate proxy, GFW-adjacent networks, etc.) — only the
+    plain-HTML summary card/trade table would render. Inlining a vendored copy
+    makes each report a genuinely self-contained file. Falls back to leaving
+    the CDN tag untouched (with a one-line comment) if the vendored asset is
+    missing, rather than failing report generation outright.
+    """
+    if not _VENDORED_ECHARTS_JS_PATH.exists():
+        return html.replace(
+            "</head>",
+            "<!-- vendored echarts.min.js not found; falling back to CDN script tag -->\n</head>",
+            1,
+        )
+    js_content = _VENDORED_ECHARTS_JS_PATH.read_text(encoding="utf-8")
+    # Use a callable replacement, not an f-string: a plain string replacement
+    # would have re.sub reinterpret literal backslash sequences inside the
+    # minified JS (e.g. "\d") as regex backreferences and raise re.error.
+    return re.sub(
+        r'<script[^>]*src="[^"]*echarts\.min\.js"[^>]*></script>',
+        lambda _match: f"<script>{js_content}</script>",
+        html,
+        count=1,
+    )
 
 
 def _inject_head_style(html: str) -> str:
