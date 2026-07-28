@@ -5,7 +5,7 @@ Mirrors ``test_daily_no_lookahead.py`` for the 240-minute CZSC level.
 from datetime import datetime
 
 import pytest
-from czsc.objects import Freq
+from czsc import Freq
 
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.data_adapter import resample_bars

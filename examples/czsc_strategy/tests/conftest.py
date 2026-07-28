@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from czsc.objects import Direction, Freq, RawBar
+from czsc import Direction, Freq, RawBar
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,12 +58,13 @@ def strict_czsc_factory():
     return _factory
 
 
-def make_raw_bar(i, dt, open_=100.0, close=None, high=None, low=None, freq=Freq.F1):
+def make_raw_bar(i, dt, open_=100.0, close=None, high=None, low=None, freq=Freq.F1, vol=None, symbol="TEST"):
     close = open_ if close is None else close
     high = max(open_, close) + 1 if high is None else high
     low = min(open_, close) - 1 if low is None else low
+    vol = (100 + i) if vol is None else vol
     return RawBar(
-        symbol="TEST",
+        symbol=symbol,
         id=i,
         dt=dt,
         freq=freq,
@@ -71,8 +72,8 @@ def make_raw_bar(i, dt, open_=100.0, close=None, high=None, low=None, freq=Freq.
         high=high,
         low=low,
         close=close,
-        vol=100 + i,
-        amount=(100 + i) * close,
+        vol=vol,
+        amount=vol * close,
     )
 
 

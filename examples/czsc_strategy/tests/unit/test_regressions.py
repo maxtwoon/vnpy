@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from czsc import CZSC
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.positions import ChanTimingStrategy, create_first_buy_position, create_second_buy_position
 from chan_strategy.signals import _get_confirmed_bi_list, signal_first_buy

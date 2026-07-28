@@ -15,7 +15,7 @@ from typing import List, Optional
 
 import pytest
 from czsc import CZSC
-from czsc.objects import RawBar, Freq
+from czsc import RawBar, Freq
 
 from chan_strategy.signals import get_legacy_signals
 from chan_strategy.positions import ChanTimingStrategy

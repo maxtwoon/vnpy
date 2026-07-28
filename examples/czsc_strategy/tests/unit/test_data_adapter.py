@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from czsc.objects import Freq, RawBar
+from czsc import Freq, RawBar
 
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
 from conftest import make_raw_bar

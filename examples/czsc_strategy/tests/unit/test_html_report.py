@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from czsc.enum import Direction, Mark, Operate
+from czsc import Direction, Mark, Operate
 
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import STRATEGY_CONFIG
@@ -213,6 +213,32 @@ def test_build_symbol_chart_payload_bs_operate_values():
     assert long_opens[0]["price"] == 100.0
 
 
+def test_build_symbol_chart_payload_bs_labels_chronological():
+    """B/S sequence numbers are assigned independently, in chronological order."""
+    engine = _make_fake_engine()
+    payload = build_symbol_chart_payload(engine)
+    bs = payload["bs"]
+    by_op = {(b["op"], b["dt"]): b["label"] for b in bs}
+
+    long_pair, short_pair = engine.strategy.pairs
+    assert by_op[(Operate.LO, long_pair["open_dt"])] == "B1"
+    assert by_op[(Operate.LE, long_pair["close_dt"])] == "S1"
+    assert by_op[(Operate.SO, short_pair["open_dt"])] == "S2"
+    assert by_op[(Operate.SE, short_pair["close_dt"])] == "B2"
+
+
+def test_render_backtest_html_report_shows_bs_labels(tmp_path: Path):
+    engine = _make_fake_engine()
+    payload = build_symbol_chart_payload(engine)
+    out_path = tmp_path / "report.html"
+    render_backtest_html_report({"TEST": payload}, out_path=out_path, title="Test Report")
+
+    html = out_path.read_text(encoding="utf-8")
+    assert "BS_LABEL" in html
+    assert '\\"B1\\"' in html or '"B1"' in html
+    assert '\\"S1\\"' in html or '"S1"' in html
+
+
 def test_build_symbol_chart_payload_empty_bi_list():
     engine = _make_fake_engine()
     engine.czsc_trade.bi_list = []
@@ -240,6 +266,20 @@ def test_render_backtest_html_report_smoke(tmp_path: Path):
     assert "总交易次数" in html
     assert "1.50" in html or "1.5" in html
     assert '<div class="report-extra"' in html
+
+
+def test_render_backtest_html_report_embeds_echarts_js_no_cdn(tmp_path: Path):
+    """Reports must not depend on the pyecharts CDN to render offline."""
+    engine_a = _make_fake_engine("A888")
+    payloads = {"A888": build_symbol_chart_payload(engine_a)}
+    out_path = tmp_path / "report.html"
+    render_backtest_html_report(payloads, out_path=out_path, title="Test Report")
+
+    html = out_path.read_text(encoding="utf-8")
+    assert "assets.pyecharts.org" not in html
+    assert "<script>" in html and "echarts" in html.lower()
+    # The vendored bundle is ~1MB; a report with it inlined should be well past that.
+    assert len(html.encode("utf-8")) > 500_000
 
 
 def test_render_backtest_html_report_single_symbol(tmp_path: Path):

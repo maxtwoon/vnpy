@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
-from czsc.objects import Direction, Freq
+from czsc import Direction, Freq
 
 import chan_strategy.positions as positions_module
 import chan_strategy.backtest_engine as backtest_module

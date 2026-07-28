@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.sell_signals import signal_first_sell
@@ -23,7 +23,7 @@ from chan_strategy.signals import (
 
 
 def _raw_bar(dt, close, high=None, low=None):
-    from czsc.objects import RawBar, Freq
+    from czsc import RawBar, Freq
     high = high if high is not None else close + 0.5
     low = low if low is not None else close - 0.5
     return RawBar(

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.data_adapter import SqliteDataAdapter

@@ -1,22 +1,34 @@
 """Regression test for the second-buy anchor-time filter bug."""
 from datetime import datetime, timedelta
-from czsc.objects import Direction, FakeBI
+from types import SimpleNamespace
+
+from czsc import Direction
 
 from chan_strategy.signals import signal_second_buy
 from chan_strategy.positions import ChanTimingStrategy
 
 
-def make_bi(direction, low, high, sdt, edt):
-    """Create a minimal BI-like object for signal_second_buy."""
-    return FakeBI(
+def _make_bi(direction, low, high, sdt, edt):
+    """Create a minimal BI-like object for signal_second_buy.
+
+    czsc 1.0.0rc8 exposes ``FakeBI`` as a Rust type that cannot be instantiated
+    from Python, so tests use a local SimpleNamespace stand-in with the same
+    attribute surface.
+    """
+    return SimpleNamespace(
         symbol="TEST",
+        direction=direction,
+        low=low,
+        high=high,
         sdt=sdt,
         edt=edt,
-        direction=direction,
-        high=high,
-        low=low,
         power=abs(high - low),
     )
+
+
+def make_bi(direction, low, high, sdt, edt):
+    """Create a minimal BI-like object for signal_second_buy."""
+    return _make_bi(direction, low, high, sdt, edt)
 
 
 def build_mock_bis(base):

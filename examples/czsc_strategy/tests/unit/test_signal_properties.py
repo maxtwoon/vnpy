@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from czsc.objects import Direction, RawBar
+from czsc import Direction, RawBar
 
 from chan_strategy.sell_signals import get_all_signals, signal_third_buy, signal_third_sell
 

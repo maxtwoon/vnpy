@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.zhongshu import _make_zhongshu, build_zhongshu_from_bis
 

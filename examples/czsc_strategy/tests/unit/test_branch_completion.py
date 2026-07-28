@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, timedelta
 
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 import chan_strategy.backtest_engine as be
 from chan_strategy.backtest_engine import BacktestEngine, run_batch_backtest

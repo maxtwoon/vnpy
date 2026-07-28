@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.positions import _research_first_buy_allowed, Position

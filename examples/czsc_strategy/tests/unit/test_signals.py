@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.signals import (
     _get_confirmed_bi_list,

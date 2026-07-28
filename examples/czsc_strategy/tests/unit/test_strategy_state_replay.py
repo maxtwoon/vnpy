@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.positions import ChanTimingStrategy
 

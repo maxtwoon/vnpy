@@ -59,8 +59,7 @@ def test_zero_volume_near_unavailable_and_true():
     ]
     assert report._zero_volume_near(bars, 0) is False
 
-    zero_bar = make_raw_bar(2, datetime(2024, 1, 2, 11, 0), open_=100.0, close=100.0)
-    zero_bar.vol = 0
+    zero_bar = make_raw_bar(2, datetime(2024, 1, 2, 11, 0), open_=100.0, close=100.0, vol=0)
     bars_with_zero = bars + [zero_bar]
     assert report._zero_volume_near(bars_with_zero, 2) is True
 

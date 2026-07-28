@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 import chan_strategy.signals as base_signals
 from chan_strategy.positions import ChanTimingStrategy, _daily_trend_filter_signals

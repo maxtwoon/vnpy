@@ -1,6 +1,6 @@
 """Regression test for BacktestEngine.run() idempotency."""
 from datetime import datetime, timedelta
-from czsc.objects import RawBar, Freq
+from czsc import RawBar, Freq
 
 from chan_strategy.backtest_engine import BacktestEngine
 

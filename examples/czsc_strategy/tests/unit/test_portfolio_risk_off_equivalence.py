@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from czsc import RawBar
+
 from chan_strategy import backtest_engine as backtest_module
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import STRATEGY_CONFIG
@@ -130,11 +132,29 @@ def _serialize_report(report: dict) -> dict:
     }
 
 
+def _with_symbol(bar: RawBar, symbol: str) -> RawBar:
+    """Return a new RawBar identical to ``bar`` but with the given symbol.
+
+    czsc 1.0.0rc8's RawBar is a Rust-backed immutable object, so we must create
+    a new instance instead of mutating the attribute in place.
+    """
+    return RawBar(
+        symbol=symbol,
+        dt=bar.dt,
+        freq=bar.freq,
+        open=bar.open,
+        close=bar.close,
+        high=bar.high,
+        low=bar.low,
+        vol=bar.vol,
+        amount=bar.amount,
+        id=bar.id,
+    )
+
+
 def _make_bars_for_symbol(synthetic_1m_bars, symbol: str, days: int, per_day: int, start: datetime):
     bars = synthetic_1m_bars(days=days, per_day=per_day, start=start)
-    for bar in bars:
-        bar.symbol = symbol
-    return bars
+    return [_with_symbol(bar, symbol) for bar in bars]
 
 
 def test_portfolio_risk_off_full_engine_equivalence(synthetic_1m_bars, monkeypatch):

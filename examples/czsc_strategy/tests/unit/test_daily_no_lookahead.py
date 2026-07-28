@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
-from czsc.objects import Freq
+from czsc import Freq
 
 from chan_strategy.data_adapter import resample_bars
 

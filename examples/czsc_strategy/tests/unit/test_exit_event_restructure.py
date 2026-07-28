@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.backtest_engine import BacktestEngine
 from chan_strategy.config import STRATEGY_CONFIG
