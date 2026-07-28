@@ -94,21 +94,22 @@ function Test-PythonImports {
 function Resolve-PythonExe {
     param([string]$Explicit)
 
-    # The workflow needs a Python with the project deps (pytest at minimum;
-    # vnpy_ctp for live capture). Bare "python" can resolve to an interpreter
-    # without these deps (e.g. sandboxed runtimes), so probe candidates
-    # explicitly. Override with -PythonExe or the SIMNOW_PYTHON env var.
+    # The workflow needs a Python with the project deps (pytest, pandas, czsc
+    # for offline steps; vnpy_ctp for live capture). Bare "python" can resolve
+    # to an interpreter without these deps (e.g. sandboxed runtimes that have
+    # pytest but not czsc), so probe candidates explicitly. Override with
+    # -PythonExe or the SIMNOW_PYTHON env var.
     $required = @()
     if ($Explicit) { $required += $Explicit }
     if ($env:SIMNOW_PYTHON) { $required += $env:SIMNOW_PYTHON }
     foreach ($candidate in $required) {
-        if (Test-PythonImports -Candidate $candidate -Modules "pytest") { return $candidate }
-        throw "specified Python interpreter '$candidate' is not runnable or cannot import pytest; install the project deps or fix -PythonExe/SIMNOW_PYTHON"
+        if (Test-PythonImports -Candidate $candidate -Modules "pytest, pandas, czsc") { return $candidate }
+        throw "specified Python interpreter '$candidate' is not runnable or cannot import the project deps (pytest, pandas, czsc); install the project deps or fix -PythonExe/SIMNOW_PYTHON"
     }
     foreach ($candidate in @("python", "C:\Python314\python.exe")) {
-        if (Test-PythonImports -Candidate $candidate -Modules "pytest") { return $candidate }
+        if (Test-PythonImports -Candidate $candidate -Modules "pytest, pandas, czsc") { return $candidate }
     }
-    throw "no usable Python interpreter found (needs pytest); pass -PythonExe or set SIMNOW_PYTHON"
+    throw "no usable Python interpreter found (needs pytest, pandas, czsc); pass -PythonExe or set SIMNOW_PYTHON"
 }
 
 $Py = Resolve-PythonExe -Explicit $PythonExe
@@ -926,30 +927,36 @@ if ($LiveCapture) {
         throw "Daily brief generation failed with exit code $LASTEXITCODE"
     }
 
-    Write-Step "Generate risk halt review pack"
-    $RiskHaltReviewArgs = @(
-        ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_review.py",
-        "--date", $Date,
-        "--run-summary", $RunSummaryJson,
-        "--out-json", $RiskHaltReviewJson,
-        "--out-md", $RiskHaltReviewMd
-    )
-    & $Py @RiskHaltReviewArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Risk halt review generation failed with exit code $LASTEXITCODE"
-    }
+    $RunSummaryPayload = Get-Content -LiteralPath $RunSummaryJson -Raw | ConvertFrom-Json
+    $AutomationStatus = [string]$RunSummaryPayload.automation_status
+    if ($AutomationStatus -eq "halt") {
+        Write-Step "Generate risk halt review pack"
+        $RiskHaltReviewArgs = @(
+            ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_review.py",
+            "--date", $Date,
+            "--run-summary", $RunSummaryJson,
+            "--out-json", $RiskHaltReviewJson,
+            "--out-md", $RiskHaltReviewMd
+        )
+        & $Py @RiskHaltReviewArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Risk halt review generation failed with exit code $LASTEXITCODE"
+        }
 
-    Write-Step "Generate risk halt decision template"
-    $RiskHaltDecisionArgs = @(
-        ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py",
-        "--date", $Date,
-        "--review-json", $RiskHaltReviewJson,
-        "--out-json", $RiskHaltDecisionJson,
-        "--out-md", $RiskHaltDecisionMd
-    )
-    & $Py @RiskHaltDecisionArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Risk halt decision template generation failed with exit code $LASTEXITCODE"
+        Write-Step "Generate risk halt decision template"
+        $RiskHaltDecisionArgs = @(
+            ".\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py",
+            "--date", $Date,
+            "--review-json", $RiskHaltReviewJson,
+            "--out-json", $RiskHaltDecisionJson,
+            "--out-md", $RiskHaltDecisionMd
+        )
+        & $Py @RiskHaltDecisionArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Risk halt decision template generation failed with exit code $LASTEXITCODE"
+        }
+    } else {
+        Write-Step "Skip risk halt review/decision generation (automation_status=$AutomationStatus; per ACCEPTANCE.md the decision gate applies to halt days only)"
     }
 
     Write-Step "Mirror session-scoped artifacts"

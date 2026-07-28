@@ -2,6 +2,41 @@
 
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
+## 0.2.53（2026-07-28）- risk-halt 决策门禁仅限 halt 日 + 解释器探测依赖补全
+
+- **门禁对齐（修复⑤）**：`run_next_work.ps1` 此前每次 LiveCapture 后无条件生成
+  risk-halt review pack 与 pending 决策记录，与 ACCEPTANCE.md "仅 automation_status=halt
+  时生成"的设计不符；非 halt 日（如 no_actionable_events_on_either_side）留下的 pending
+  记录会被 A38 拦截，20 日观察无法自动推进。现改为从 run summary 读取
+  `automation_status`，仅 `halt` 时生成 review/decision，其他状态打印 Skip 说明。
+  已删除 07-28（非 halt 日）误生成的 pending 决策记录，review pack 保留作审计。
+- **探测依赖补全**：0.2.50 的解释器探测仅校验 `import pytest`，实测某沙箱运行时
+  装有 pytest 但无 czsc，导致选中后 conftest 收集失败（exit 4）。探测升级为
+  `import pytest, pandas, czsc`，报错文案同步更新。
+- **测试**：新增 `test_risk_halt_review_and_decision_generation_gated_on_halt_status` 与
+  `test_python_probe_requires_full_project_deps`；包装套件 107 passed；
+  全量单测 965 passed；裸 PATH Preflight 自动选对 C:\Python314 并通过。
+## 0.2.53（2026-07-28）- 修复 P4 背驰信号中枢选择缺陷（空头开仓几乎永远无法触发）
+
+- **根因**：`chan_strategy/signals.py::signal_divergence_status()` 原来直接取
+  `zhongshu_list[-1]`；在默认 `mode="recent"` 下该中枢几乎必然没有后续笔，导致
+  `{freq}_D1BI_背驰V260615` 几乎永远输出 `"无"`，进而使 `_research_short_open_allowed()`
+  的 P4 门控对空头几乎永远通不过（A888/SC888 全年实证：99.99% 以上调用返回 `"无"`）。
+- **修复方案**：新增 `STRATEGY_CONFIG["divergence_status_zhongshu_mode"]` 配置开关：
+  - `"legacy"`（默认）：保留原 `zhongshu_list[-1]` 行为，默认配置回测结果字节不变；
+  - `"departure_leg"`：与同文件的 `signal_first_buy` / `sell_signals.py` 的
+    `signal_first_sell` 保持一致，向后搜索最近一个后面确实存在离开段的中枢。
+- **实现**：提取纯函数 `_select_zhongshu_for_departure_leg(bi_list, zhongshu_list)`，
+  `signal_divergence_status()`、`signal_first_buy()`、`signal_first_sell()` 统一复用，
+  避免同一逻辑三处复制； helper 不耦合 `STRATEGY_CONFIG`，由调用方决定是否启用。
+  （review 修正：`signal_first_sell()` 在 0.2.53 后续提交中才实际接入 helper；`signal_third_buy()`
+  也复用了 helper，行为与原先内联表达式完全一致。）
+- **验证**：新增 8 个单元测试，证明同一 fixture 下 `legacy` 返回 `"无"`、
+  `departure_leg` 返回 `"疑似"`；全量 not-realdb 单测 986 passed（+8），realdb 4 passed，
+  SimNow `-Preflight` 338 passed；手动回测验证见 `HANDOFF.md` 的 `## Manual Verification`。
+- **默认行为不变**：`formal_evaluation_config()` 未设置该新键；默认 `"legacy"` 路径
+  与修复前字节一致，不扰动任何现有基线或晋升决策证据。
+
 ## 0.2.52（2026-07-28）- czsc 1.0.0rc8 升级 review 修复：基准位移披露机制与文档指向
 
 - **修复 `_baseline_displacement()` 静默失败缺陷**：

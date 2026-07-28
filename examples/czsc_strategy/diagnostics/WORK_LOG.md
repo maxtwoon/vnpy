@@ -9251,3 +9251,142 @@ when `python` was a sandboxed runtime).
 Human: sign `simnow_risk_halt_decision_2026-07-27.json` (only `operator_name`
 missing), move `simnow_observation_window.json` start to 2026-07-28, then
 resume formal `-LiveCapture` inside the `13:35`/`21:05` windows.
+
+## 2026-07-28 13:35 Formal SimNow Observation (Resumed After Replay Timeout)
+
+### Goal
+
+Advance the formal SimNow observation ledger for `2026-07-28` inside the
+allowed `13:35` start window and produce the full daily artifact set, using
+`simnow_run_summary_2026-07-28.json` as the authoritative machine-readable
+result.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- `run_next_work.ps1 -Preflight` passed at `2026-07-28 13:36 +08:00` with
+  `338 passed`; pending replay backfill remained `0`.
+- The first in-window `-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`
+  attempt failed before SimNow connection because
+  `simnow_risk_halt_decision_2026-07-27.json` contained a PowerShell-incompatible
+  `rationale` string. Python validation still succeeded, but
+  `Get-Content ... | ConvertFrom-Json` failed inside
+  `Assert-NoPendingRiskHaltDecision`.
+- Rewrote only the damaged local decision artifact to preserve the same
+  `decided/reset_observation_window_after_strategy_change/next_formal_observation_allowed=true`
+  semantics while normalizing the `rationale` text; both
+  `ConvertFrom-Json` and
+  `python .\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py --date 2026-07-27 --validate`
+  then passed.
+- Re-ran the formal live capture at `2026-07-28 13:39 +08:00`. Historical DB
+  auto-update succeeded and the live read-only capture completed, writing:
+  - `simnow_export_2026-07-28.json`
+  - `simnow_kline_update_2026-07-28.json`
+  - `simnow_replay_readiness_2026-07-28.json`
+  - `simnow_historical_db_update_2026-07-28.json`
+- The original long-running wrapper invocation then stalled in the delayed
+  replay/export phase and returned non-zero before `record/run_summary` were
+  generated. Existing artifacts showed the capture finished around `15:02 +08:00`
+  and the DB was replay-ready, so this was treated as a resumable post-process
+  failure rather than a SimNow connection failure.
+- Resumed safely from existing artifacts with:
+  `run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600 -MinKlineBarsPerSymbol 30`
+  This avoided a second live connection and completed the replay export, monitor,
+  ledger summary, promotion report, run summary, daily brief, risk-halt review,
+  and risk-halt decision template generation.
+
+### Verification
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision_2026-07-27.json | ConvertFrom-Json | Select-Object -ExpandProperty decision_status
+python .\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision.py --date 2026-07-27 --validate
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600 -MinKlineBarsPerSymbol 30
+```
+
+Result:
+
+- Preflight passed: `338 passed`.
+- Risk-halt decision parse gate repaired: PowerShell returned `decided`; Python
+  validation returned `{"valid": true, "errors": []}`.
+- Historical DB update passed with exit code `0`.
+- Replay readiness was `ready=true`, `latest_db_date=2026-07-28`, no lagged
+  symbols.
+- Post-process replay refresh completed and wrote `simnow_replay_2026-07-28.json`.
+- Full formal artifact set now exists, including:
+  - `simnow_export_2026-07-28.json`
+  - `simnow_record_2026-07-28.json`
+  - `simnow_report_2026-07-28.md`
+  - `simnow_run_summary_2026-07-28.json`
+- `simnow_run_summary_2026-07-28.json` is authoritative and reports:
+  - `automation_status=failed`
+  - `automation_exit_code=40`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=missing critical artifact or unknown status`
+- Capture/read-only safety snapshot:
+  - `ticks=24295`
+  - `contracts_count=16582`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=4`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+- Formal readiness gates passed for connection/query/subscription/kline/history:
+  - `historical_db_update.status=passed`
+  - `formal_readiness.overall_ready=true`
+  - `kline_missing_symbols=[]`
+  - `kline_short_symbols=[]`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+- The daily record itself is `status=pass` and `consistency_matched=true`, but
+  `record.valid_observation=false` and the summary still classifies the day as
+  `failed` because the authoritative automation layer maps the outcome to
+  `no_actionable_events_on_either_side`.
+- The run summary marks `user_action_needed=true`.
+
+### Next Action
+
+Inspect why the authoritative automation layer still classifies a day with
+successful environment capture and delayed replay as
+`automation_status=failed/no_actionable_events_on_either_side`, then decide
+whether the summary mapping or the daily monitor reasoning needs correction
+before the next formal observation window.
+
+## 2026-07-28 Risk-Halt Gate Scoped to Halt Days Only (0.2.53)
+
+### Goal
+
+Fix the last segment of the observation-blocking loop: the wrapper generated a
+risk-halt review pack and a pending decision record after EVERY LiveCapture,
+while ACCEPTANCE.md scopes that gate to `automation_status=halt`. Non-halt days
+(e.g. `no_actionable_events_on_either_side`) left pending records that A38
+would block on, so the 20-day count could never advance automatically.
+
+### Changes
+
+- `run_next_work.ps1`: reads `automation_status` from the run summary and only
+  generates the review pack + decision template when it is `halt`; other
+  statuses log an explicit Skip step.
+- Deleted the 2026-07-28 pending decision record (non-halt day,
+  `review_status=not_applicable`); the review pack is kept for audit.
+  A38 emulation over remaining records (07-24, 07-27, both decided/valid):
+  CLEAN.
+- Interpreter probe hardened from `import pytest` to
+  `import pytest, pandas, czsc` after a sandboxed runtime with pytest but no
+  czsc was selected and failed at conftest collection (exit 4).
+- New wrapper tests: halt-gate guard + full-deps probe regression.
+
+### Verification
+
+- Wrapper suite `107 passed`; full unit suite `965 passed, 23 skipped`;
+  bare-PATH Preflight resolves `C:\Python314\python.exe` and passes
+  (`317 passed, 23 skipped`); sync_check PASS at 0.2.53.
+
+### Next Action
+
+Resume formal `-LiveCapture` inside the next allowed window (`21:05` tonight).
+Non-halt days no longer create decision records, so the observation loop can
+run unattended; only genuine halt days will require a signed decision.

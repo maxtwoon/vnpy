@@ -1101,3 +1101,31 @@ def test_replay_readiness_json_written_with_utf8_set_content():
 
     assert '> $ReplayReadinessJson' not in script_text
     assert 'Set-Content -LiteralPath $ReplayReadinessJson -Encoding UTF8' in script_text
+
+
+def test_risk_halt_review_and_decision_generation_gated_on_halt_status():
+    """ACCEPTANCE.md scopes the risk-halt review/decision gate to
+    automation_status=halt. The wrapper must not emit pending decision records
+    for non-halt days, or A38 would block every subsequent observation day.
+    """
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    review_index = script_text.index("Generate risk halt review pack")
+    decision_index = script_text.index("Generate risk halt decision template")
+    gate_index = script_text.index('$AutomationStatus -eq "halt"')
+
+    assert gate_index < review_index < decision_index
+    # The automation status must be read from the run summary artifact.
+    gate_context = script_text[max(0, gate_index - 600):gate_index]
+    assert "automation_status" in gate_context
+    assert "$RunSummaryJson" in gate_context
+    # A skip note documents non-halt days instead of generating records.
+    assert "Skip risk halt review/decision" in script_text
+
+
+def test_python_probe_requires_full_project_deps():
+    """A bare `python` with pytest but without czsc/pandas (e.g. sandboxed
+    runtimes) must not be selected; conftest imports czsc, so a pytest-only
+    probe fails at collection with exit code 4.
+    """
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+    assert '"pytest, pandas, czsc"' in script_text
