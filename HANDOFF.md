@@ -1,8 +1,8 @@
 ---
 task: czsc-1.0-upgrade - Upgrade czsc dependency to 1.0 (Rust core rewrite)
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-28
 deliverables:
   - HANDOFF.md
@@ -10,12 +10,12 @@ deliverables:
   - examples/czsc_strategy/diagnostics/czsc_upgrade_behavior_diff_report.md
   - examples/czsc_strategy/diagnostics/czsc_upgrade_failure_attribution.md
 blockers: []
-last_transition_kind: reject
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: dev
-last_transition_from_owner: codex
-last_transition_to_owner: kimi-code
+last_transition_kind: next
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## 背景与目标
@@ -163,3 +163,4 @@ pytest tests/unit -q -m realdb
 | 2026-07-27 | claude-code → kimi-code | design → dev | czsc-1.0-upgrade 设计完成：六阶段迁移方案，已实测新版本真实 API 并用合成数据证实笔构造算法有实质性差异（分型一致、笔数量不一致），三个关键决定已与用户确认 |
 | 2026-07-28 | kimi-code → codex | dev → review | czsc upgrade dev completed: import paths migrated to top-level czsc namespace, kline_pro vendored into chan_strategy/vendor, requirements pinned to target RC, real-data behavior diff report generated, unit tests pass (968 not-realdb + 4 realdb) with refreshed research-mode baseline, both sync_check gates pass |
 | 2026-07-28 | codex → kimi-code | review → dev | 打回: czsc upgrade rejected: dev produced zero commits (rollback-isolation criterion unverifiable, work inseparable from concurrent SimNow tree changes incl. 29 deleted observation files); Phase 3 report omits the largest real-data delta (research-mode baseline: SC888 return 3.794%->0.646%, sharpe 0.809->0.242, 三买多头 4->1 trades) and its bi comparison is masked by the max_bi_num=50 cap; signal diff is a terminal snapshot not per-bar trigger statistics; no per-test failure attribution record; undesigned B/S labels + 1.1MB echarts inlining landed with no Decision Log entry |
+| 2026-07-28 | kimi-code → codex | dev → review | czsc-1.0-upgrade review fixes: baseline displacement now uses committed golden fixture with fail-loud, behavior diff report includes SC888/RB888 strategy-level delta, VERSION/CHANGELOG updated for this dev round, both sync_check gates pass, unit tests 978 passed/4 xfailed (not-realdb) and 4 passed (realdb) |
