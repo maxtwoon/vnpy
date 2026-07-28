@@ -24,16 +24,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 try:
-    from czsc import CZSC, Freq, RawBar
-    from czsc.objects import Direction, Mark, ZS
-except ImportError:
+    from czsc import CZSC, Direction, Freq, RawBar, ZS
+except ImportError as _err:
     raise ImportError(
         "无法导入 czsc 库，请先安装：pip install czsc  "
         "czsc 是缠论技术分析框架，提供 CZSC/RawBar/Freq 等核心类型。"
-    )
+    ) from _err
 
 from vnpy.trader.object import BarData
 
@@ -93,8 +91,8 @@ def get_czsc_freq(interval_minutes: int) -> Freq:
         30: Freq.F30,
         60: Freq.F60,
         120: Freq.F120,
-        240: Freq.F120,   # czsc 0.9.x 已移除 F240，以 F120 代替
-        360: Freq.F120,   # 同上
+        240: getattr(Freq, "F240", Freq.F120),   # czsc 1.0 已恢复 F240；0.9.x 回退到 F120
+        360: Freq.F120,   # czsc 1.0 未提供 F360，以 F120 作为元数据占位
         1440: Freq.D,
     }
     freq = _mapping.get(interval_minutes)
@@ -157,7 +155,7 @@ class CzscAnalyzer:
         self.czsc_freq: Freq = get_czsc_freq(freq)
         self.max_count: int = max_count
         self.raw_bars: list[RawBar] = []
-        self.czsc: Optional[CZSC] = None
+        self.czsc: CZSC | None = None
         self._bar_count: int = 0
 
     # ------------------------------------------------------------------
@@ -186,7 +184,7 @@ class CzscAnalyzer:
             # 首次初始化 CZSC 对象
             if len(self.raw_bars) >= 3:
                 try:
-                    self.czsc = CZSC(bars=self.raw_bars)
+                    self.czsc = CZSC(bars_raw=self.raw_bars)
                 except Exception:
                     # K线数据不足以构造 CZSC 时，静默等待更多数据
                     self.czsc = None
@@ -197,7 +195,7 @@ class CzscAnalyzer:
             except Exception:
                 # 增量更新失败时，回退为全量重建
                 try:
-                    self.czsc = CZSC(bars=self.raw_bars)
+                    self.czsc = CZSC(bars_raw=self.raw_bars)
                 except Exception:
                     self.czsc = None
 
@@ -250,7 +248,7 @@ class CzscAnalyzer:
     def _build_zs_from_bis(self) -> list:
         """从笔列表构建中枢列表。
 
-        使用 czsc.objects.ZS 类从连续的笔中检测中枢。
+        使用 czsc.ZS 类从连续的笔中检测中枢。
         """
         bi_list = self.get_bi_list()
         if len(bi_list) < 3:
@@ -395,7 +393,7 @@ class CzscAnalyzer:
             description=desc,
         )
 
-    def get_last_zs(self) -> Optional[ZSInfo]:
+    def get_last_zs(self) -> ZSInfo | None:
         """获取最近一个中枢的信息，无中枢返回 None。
 
         Returns:
@@ -413,7 +411,7 @@ class CzscAnalyzer:
             dd=float(last_zs.dd),
         )
 
-    def get_last_bi_direction(self) -> Optional[str]:
+    def get_last_bi_direction(self) -> str | None:
         """获取最后一笔的方向。
 
         Returns:
@@ -459,11 +457,11 @@ class CzscAnalyzer:
 
     def is_near_resistance(self, price: float, tolerance_pct: float = 0.01) -> bool:
         """判断当前价格是否接近最近中枢上沿（阴力位）。
-    
+
         Args:
             price: 当前价格
             tolerance_pct: 容差百分比，默认 1%
-    
+
         Returns:
             是否接近阴力位。无中枢时返回 True（不限制）
         """

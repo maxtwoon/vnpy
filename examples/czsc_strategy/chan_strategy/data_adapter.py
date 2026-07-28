@@ -6,11 +6,10 @@ SQLite数据适配器 - 从本地数据库加载K线数据并转换为czsc RawBa
 import sqlite3
 import pandas as pd
 from datetime import datetime, date
-from typing import List, Optional
 from pathlib import Path
 
 # czsc库导入
-from czsc.objects import RawBar, Freq
+from czsc import RawBar, Freq
 
 
 def _trading_day_for_bar(
@@ -44,10 +43,10 @@ def _trading_day_for_bar(
 
 
 def _resample_daily_trading_calendar(
-    bars: List[RawBar],
+    bars: list[RawBar],
     target_freq: Freq,
     night_session_start_hour: int,
-) -> List[RawBar]:
+) -> list[RawBar]:
     """Daily aggregation by exchange trading day (A39 Phase 1)."""
     symbol = bars[0].symbol
     day_session_hours = range(8, 16)
@@ -62,9 +61,9 @@ def _resample_daily_trading_calendar(
     trading_date_set = set(trading_dates)
     notes: list[str] = []
 
-    resampled: List[RawBar] = []
-    group: List[RawBar] = []
-    current_trading_day: Optional[date] = None
+    resampled: list[RawBar] = []
+    group: list[RawBar] = []
+    current_trading_day: date | None = None
 
     for bar in bars:
         trading_day = _trading_day_for_bar(
@@ -87,12 +86,12 @@ def _resample_daily_trading_calendar(
     return resampled
 
 
-def _resample_daily_natural(bars: List[RawBar], target_freq: Freq) -> List[RawBar]:
+def _resample_daily_natural(bars: list[RawBar], target_freq: Freq) -> list[RawBar]:
     """Daily aggregation by natural calendar date (legacy byte-identical path)."""
     symbol = bars[0].symbol
-    resampled: List[RawBar] = []
-    group: List[RawBar] = []
-    current_date: Optional[date] = None
+    resampled: list[RawBar] = []
+    group: list[RawBar] = []
+    current_date: date | None = None
 
     for bar in bars:
         bar_date = bar.dt.date()
@@ -114,12 +113,12 @@ def _resample_daily_natural(bars: List[RawBar], target_freq: Freq) -> List[RawBa
 
 
 def resample_bars(
-    bars: List[RawBar],
+    bars: list[RawBar],
     target_freq: Freq,
     target_minutes: int = None,
     daily_agg: str = None,
     night_session_start_hour: int = None,
-) -> List[RawBar]:
+) -> list[RawBar]:
     """
     将低频K线合成为高频K线（如1分钟→30分钟，1分钟→日线）
 
@@ -182,7 +181,7 @@ def resample_bars(
     return _resample_daily_natural(bars, target_freq)
 
 
-def _merge_bars(group: List[RawBar], symbol: str, freq: Freq, bar_id: int) -> RawBar:
+def _merge_bars(group: list[RawBar], symbol: str, freq: Freq, bar_id: int) -> RawBar:
     """将一组K线合并为一根"""
     return RawBar(
         symbol=symbol,
@@ -226,14 +225,14 @@ class SqliteDataAdapter:
             self._conn.close()
             self._conn = None
 
-    def get_tables(self) -> List[str]:
+    def get_tables(self) -> list[str]:
         """获取所有表名"""
         cursor = self.conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )
         return [row[0] for row in cursor.fetchall()]
 
-    def get_table_schema(self, table_name: str) -> List[dict]:
+    def get_table_schema(self, table_name: str) -> list[dict]:
         """获取表结构"""
         cursor = self.conn.execute(f"PRAGMA table_info({table_name})")
         columns = []
@@ -248,7 +247,7 @@ class SqliteDataAdapter:
             })
         return columns
 
-    def get_symbols(self, table_name: str = None) -> List[str]:
+    def get_symbols(self, table_name: str = None) -> list[str]:
         """获取所有可用的股票代码"""
         if table_name is None:
             tables = self.get_tables()
@@ -346,7 +345,7 @@ class SqliteDataAdapter:
         end_date: str = None,
         table_name: str = None,
         unparseable_count: list[int] | None = None,
-    ) -> List[RawBar]:
+    ) -> list[RawBar]:
         """
         加载并转换为czsc RawBar格式
 
@@ -377,6 +376,7 @@ class SqliteDataAdapter:
         freq_map = {
             "1": Freq.F1, "5": Freq.F5, "15": Freq.F15,
             "30": Freq.F30, "60": Freq.F60, "120": Freq.F120,
+            "240": getattr(Freq, "F240", Freq.F120),
             "d": Freq.D, "w": Freq.W, "m": Freq.M,
             "1min": Freq.F1, "5min": Freq.F5, "15min": Freq.F15,
             "30min": Freq.F30, "60min": Freq.F60,
@@ -434,7 +434,7 @@ class SqliteDataAdapter:
 
         return bars
 
-    def _find_column(self, columns: List[str], candidates: List[str]) -> Optional[str]:
+    def _find_column(self, columns: list[str], candidates: list[str]) -> str | None:
         """从列名列表中查找匹配的列"""
         columns_lower = {c.lower(): c for c in columns}
         for candidate in candidates:

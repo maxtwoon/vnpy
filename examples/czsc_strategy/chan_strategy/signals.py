@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from czsc import CZSC
-from czsc.objects import Direction
+from czsc import Direction
 from chan_strategy.config import STRATEGY_CONFIG
 from chan_strategy.zhongshu import build_zhongshu_from_bis
 

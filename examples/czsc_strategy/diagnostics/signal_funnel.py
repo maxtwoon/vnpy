@@ -32,20 +32,18 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import re
 import sqlite3
 import sys
 from collections import Counter, OrderedDict
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 # 允许从同级 examples/czsc_strategy 导入 chan_strategy
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from czsc import CZSC
-from czsc.objects import Freq
+from czsc import Freq
 
 from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG, BACKTEST_CONFIG
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
@@ -85,7 +83,7 @@ def _signal_label(signal_obj, signals_dict: dict) -> str:
     return f"{signal_obj.key}={_v1(signal_obj)}{suffix}"
 
 
-def _event_stages(event, signals_dict: dict) -> List[Tuple[str, bool]]:
+def _event_stages(event, signals_dict: dict) -> list[tuple[str, bool]]:
     """把一个开仓 Event 拆成有序的闸门列表 [(label, passed), ...]。
 
     顺序与 Event.is_match 的语义一致：
@@ -95,9 +93,9 @@ def _event_stages(event, signals_dict: dict) -> List[Tuple[str, bool]]:
       → factors（任一 factor 满足）
     判定全部复用真实 Signal/Factor 的 is_match，不复制逻辑。
     """
-    stages: List[Tuple[str, bool]] = []
+    stages: list[tuple[str, bool]] = []
 
-    for idx, s in enumerate(event.signals_all):
+    for _idx, s in enumerate(event.signals_all):
         stages.append((f"ALL {_signal_label(s, signals_dict)}", s.is_match(signals_dict)))
 
     if event.signals_any:
@@ -118,11 +116,11 @@ def _event_stages(event, signals_dict: dict) -> List[Tuple[str, bool]]:
     return stages
 
 
-def _factor_signal_breakdown(event, signals_dict: dict) -> List[Tuple[str, bool]]:
+def _factor_signal_breakdown(event, signals_dict: dict) -> list[tuple[str, bool]]:
     """把各 factor 内部的 signals_all/any/not 拆出来做边际统计，
     用于看清"买点确认"这一类核心信号到底有没有在事件层被引用到。
     """
-    out: List[Tuple[str, bool]] = []
+    out: list[tuple[str, bool]] = []
     for f in event.factors:
         for s in f.signals_all:
             out.append((f"[{f.name}] ALL {_signal_label(s, signals_dict)}", s.is_match(signals_dict)))
@@ -235,15 +233,15 @@ def run_funnel(
     anchor_available_count = 0
 
     # 信号层分布: key -> Counter(v1)
-    signal_dist: Dict[str, Counter] = {}
+    signal_dist: dict[str, Counter] = {}
 
     # 每个子策略: 有序 stage -> 累计存活 / 边际通过
-    cum_survive: Dict[str, "OrderedDict[str,int]"] = {n: OrderedDict() for n in sub_names}
-    marg_pass: Dict[str, "OrderedDict[str,int]"] = {n: OrderedDict() for n in sub_names}
-    final_open_ok: Dict[str, int] = {n: 0 for n in sub_names}
-    actual_open_count: Dict[str, int] = {n: 0 for n in sub_names}
+    cum_survive: dict[str, OrderedDict[str,int]] = {n: OrderedDict() for n in sub_names}
+    marg_pass: dict[str, OrderedDict[str,int]] = {n: OrderedDict() for n in sub_names}
+    final_open_ok: dict[str, int] = {n: 0 for n in sub_names}
+    actual_open_count: dict[str, int] = {n: 0 for n in sub_names}
     # factor 内部信号边际统计
-    factor_marg: Dict[str, "OrderedDict[str,int]"] = {n: OrderedDict() for n in sub_names}
+    factor_marg: dict[str, OrderedDict[str,int]] = {n: OrderedDict() for n in sub_names}
 
     pending_signals = None
 
@@ -401,7 +399,7 @@ def _print_report(r: dict) -> None:
         # factor 内部信号边际（买点确认这类核心信号到底触发了多少次）
         fm = r["factor_marg"][name]
         if fm:
-            print(f"  -- factor内部信号边际通过次数（与顺序无关）--")
+            print("  -- factor内部信号边际通过次数（与顺序无关）--")
             for label, c in fm.items():
                 print(f"     {label}: {c}")
 
@@ -420,7 +418,6 @@ def main():
     ap.add_argument("--config-file", default=None, help="JSON file merged into STRATEGY_CONFIG for diagnostics")
     args = ap.parse_args()
 
-    original_config = copy.deepcopy(STRATEGY_CONFIG)
     if args.config_json:
         STRATEGY_CONFIG.update(json.loads(args.config_json))
     if args.config_file:

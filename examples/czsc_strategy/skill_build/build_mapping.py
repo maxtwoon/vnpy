@@ -38,7 +38,7 @@ from typing import Dict, List
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from czsc import CZSC
-from czsc.objects import RawBar, Freq
+from czsc import RawBar, Freq
 
 try:
     # 与 diagnostics/signal_funnel.py 保持一致，优先用合并了买卖点的版本

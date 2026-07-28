@@ -26,7 +26,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from czsc import CZSC
-from czsc.objects import RawBar, Freq
+from czsc import RawBar, Freq
 
 from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG, BACKTEST_CONFIG
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
@@ -963,7 +963,7 @@ class BacktestEngine:
         name_to_freq = {
             "1分钟": Freq.F1, "5分钟": Freq.F5, "15分钟": Freq.F15,
             "30分钟": Freq.F30, "60分钟": Freq.F60, "120分钟": Freq.F120,
-            "240分钟": Freq.F120,  # czsc 没有 F240；仅作为元数据，不影响信号生成
+            "240分钟": getattr(Freq, "F240", Freq.F120),  # czsc 1.0 已恢复 F240；0.9.x 回退到 F120
             "日线": Freq.D, "周线": Freq.W, "月线": Freq.M,
         }
         return name_to_freq.get(freq_name, Freq.F30)

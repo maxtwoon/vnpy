@@ -21,7 +21,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from czsc import CZSC
-from czsc.objects import RawBar
+from czsc import RawBar
 
 from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG, BACKTEST_CONFIG
 from chan_strategy.data_adapter import SqliteDataAdapter

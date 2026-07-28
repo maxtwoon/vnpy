@@ -9,7 +9,7 @@ non-authoritative glossary for this repository, not a claim that this production
 signal path implements a single canonical Chan-theory definition.
 """
 from czsc import CZSC
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.zhongshu import build_zhongshu_from_bis
 from chan_strategy.config import STRATEGY_CONFIG

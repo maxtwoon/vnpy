@@ -25,7 +25,7 @@ from typing import Any
 # czsc is a required third-party dependency
 try:
     from czsc import CZSC
-    from czsc.objects import Freq
+    from czsc import Freq
 except Exception as exc:  # pragma: no cover - environment guard
     print(f"Error: czsc library is required but could not be imported: {exc}")
     sys.exit(1)
@@ -449,7 +449,7 @@ def _write_markdown_report(path: Path, report: dict[str, Any]) -> None:
             lines.append("")
             continue
 
-        lines.append(f"- **status**: ok")
+        lines.append("- **status**: ok")
         lines.append(f"- **records**: {result.get('records', 0)}")
         lines.append(
             f"- **bars**: {result.get('raw_bars', 0)} 1m → "

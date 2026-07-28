@@ -19,7 +19,7 @@ from typing import Any
 # czsc is a required third-party dependency
 try:
     from czsc import CZSC
-    from czsc.objects import Freq
+    from czsc import Freq
 except Exception as exc:  # pragma: no cover - environment guard
     print(f"Error: czsc library is required but could not be imported: {exc}")
     sys.exit(1)

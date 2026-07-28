@@ -48,7 +48,7 @@ for _root in _CANDIDATE_ROOTS:
         break
 
 from czsc import CZSC
-from czsc.objects import RawBar, Freq, Direction
+from czsc import RawBar, Freq, Direction
 
 from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars

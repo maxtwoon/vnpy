@@ -10,7 +10,7 @@ from enum import Enum
 from datetime import datetime
 from math import floor
 
-from czsc.objects import Direction
+from czsc import Direction
 
 from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG
 
