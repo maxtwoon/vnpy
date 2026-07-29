@@ -9617,3 +9617,147 @@ informational rows when the sample is too small.
 - `no_actionable_events_on_either_side` (strategy silence) remains a separate
   constraint on valid-day accumulation; it is a product decision and was not
   addressed here.
+
+## 2026-07-29 09:05 Formal SimNow Observation
+
+### Goal
+
+Run the formal read-only SimNow daily observation inside the `09:05` start
+window, complete the daily artifact chain, and determine the final automation
+outcome from `simnow_run_summary_2026-07-29.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current time was `2026-07-29 09:07:24 +08:00`, still inside the allowed
+  `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `347 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The initial formal `-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`
+  invocation completed the live read-only capture side and wrote:
+  - `simnow_export_2026-07-29.json`
+  - `simnow_historical_db_update_2026-07-29.json`
+  - `simnow_kline_update_2026-07-29.json`
+  - `simnow_replay_readiness_2026-07-29.json`
+- No `simnow_record_2026-07-29.json` or
+  `simnow_run_summary_2026-07-29.json` existed after that first run, so the
+  failure point was after live capture and before monitor/summary generation.
+- Root cause diagnosis showed an orphaned
+  `export_simnow_replay_snapshot.py --out-json simnow_replay_2026-07-29.json`
+  process still running after the wrapper returned non-zero. This matched the
+  wrapper default `ReplayTimeoutSeconds=1200` timeout path: replay export
+  exceeded the wrapper limit, parent exited, child remained alive.
+- Stopped only that orphaned replay export process, then resumed safely with:
+  `run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600 -MinKlineBarsPerSymbol 30`
+  so no second SimNow live connection was opened.
+
+### Verification
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600 -MinKlineBarsPerSymbol 30
+```
+
+Results:
+
+- Preflight passed: `347 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Replay readiness was `ready=true`, `latest_db_date=2026-07-29`, and
+  `missing_or_lagged_symbols=[]`.
+- Post-process replay refresh succeeded and wrote
+  `simnow_replay_2026-07-29.json`.
+- The full daily artifact set now exists, including:
+  - `simnow_export_2026-07-29.json`
+  - `simnow_record_2026-07-29.json`
+  - `simnow_report_2026-07-29.md`
+  - `simnow_run_summary_2026-07-29.json`
+- The authoritative result from `simnow_run_summary_2026-07-29.json` is:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=symbol_top1_abs_share,strategy_top1_abs_share`
+  - `automation_action=stop automation and review manually`
+- Daily summary fields from the same run summary:
+  - formal observation mode: `formal` (`09:10:50+08:00` to `11:32:31+08:00`)
+  - `ticks=36000`
+  - `contracts_count=16650`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=4`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `record.status=halt`
+  - `record.threshold_status=halt`
+  - `record.consistency_matched=true`
+  - `formal_readiness.overall_ready=true`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=halt`
+  - `user_action_needed=true`
+- Risk halt review and decision artifacts were generated automatically:
+  - `simnow_risk_halt_review_2026-07-29.json` / `.md`
+  - `simnow_risk_halt_decision_2026-07-29.json` / `.md`
+- The new decision template is intentionally safe-default:
+  `decision_status=pending_decision`,
+  `next_formal_observation_allowed=false`.
+
+### Next Action
+
+Do not start another formal live capture until the `2026-07-29` risk-halt
+decision record is completed and explicitly allows the next observation window.
+
+## 2026-07-29 13:35 Formal SimNow Observation Attempt
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation and determine
+whether the wrapper can proceed past the A38 risk-halt gate.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current time was `2026-07-29 13:39:08 +08:00`, inside the allowed `13:35`
+  formal start window.
+- `run_next_work.ps1 -Preflight` passed with `347 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required prior decision file
+  `simnow_risk_halt_decision_2026-07-29.json` still reports:
+  - `decision_status=pending_decision`
+  - `next_formal_observation_allowed=false`
+  - source halt reason:
+    `symbol_top1_abs_share,strategy_top1_abs_share`
+- The formal `-LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`
+  command was blocked before any new SimNow connection attempt, exactly as A38
+  requires.
+- Therefore no new `2026-07-29` live-capture artifacts were generated during
+  this `13:35` attempt; the authoritative daily status remains the existing
+  `simnow_run_summary_2026-07-29.json` produced by the earlier `09:05` formal
+  run.
+
+### Verification
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Results:
+
+- Preflight passed: `347 passed`.
+- Live capture blocked before connection with:
+  `pending risk halt decision blocks live capture:
+  D:\repo\vnpy\examples\czsc_strategy\diagnostics\simnow_risk_halt_decision_2026-07-29.json`.
+- The existing authoritative run summary for `2026-07-29` still reports:
+  - `automation_status=halt`
+  - `automation_exit_code=30`
+  - `automation_reason=symbol_top1_abs_share,strategy_top1_abs_share`
+  - `automation_action=stop automation and review manually`
+
+### Next Action
+
+Complete and validate
+`simnow_risk_halt_decision_2026-07-29.json` before any later formal observation
+window; until then, further `-LiveCapture` runs for this date should remain
+blocked by design.
