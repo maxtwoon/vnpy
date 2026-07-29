@@ -3,6 +3,19 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 0.2.63（2026-07-29）- A106 走势类型分类信号实现（dev 阶段）
+
+- `chan_strategy/signals.py` 新增只读 `signal_trend_type()`，输出
+  `{freq}_D1ZS_走势类型V260729` 五值完全分类：无中枢 / 盘整 / 上涨趋势 / 下跌趋势 / 中枢延伸；
+  复用已确认笔与 `build_zhongshu_from_bis()`，按相邻中枢 `zd/zg` 同时抬高/降低与 `[zd, zg]`
+  无重叠判据区分趋势；抬高但重叠、降低但重叠或方向不一致统一归为中枢延伸。
+- 新增 `tests/unit/test_a106_trend_type_signal.py` 覆盖 AC1~AC4：五值互斥穷尽、抬高但重叠归中枢延伸、
+  未确认末笔不影响已确认笔前缀、默认 `sell_signals.get_all_signals()` 不消费新信号。
+- 新信号未接入任何开/平仓门控，也未注册到默认信号聚合入口，保持默认配置下交易路径与回测基线不变。
+- 测试基建修复（review 阶段发现）：`tests/unit/test_handoff_tool.py` 的 subprocess 输出读取
+  显式指定 `encoding="utf-8", errors="replace"`；此前依赖 Windows 默认 GBK 解码，
+  在 handoff 任务名含中文（A106 首次触发）时 subprocess reader 线程抛 UnicodeDecodeError 致断言失败。
+
 ## 0.2.62（2026-07-29）- A106 走势类型分类信号立项（design 阶段）
 
 - 新增 `docs/design/A106_trend_type_signal.md`：按书第 75~79 页定义设计

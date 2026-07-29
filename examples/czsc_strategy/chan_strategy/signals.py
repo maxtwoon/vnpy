@@ -250,6 +250,62 @@ def signal_zs_position(c: CZSC, freq: str = "30分钟") -> dict:
     return {key: value}
 
 
+def signal_trend_type(c: CZSC, freq: str = "30分钟") -> dict:
+    """
+    走势类型信号
+
+    信号名: {freq}_D1ZS_走势类型V260729
+    完全分类: 无中枢 / 盘整 / 上涨趋势 / 下跌趋势 / 中枢延伸
+
+    判定口径:
+    - 仅使用 ``_get_confirmed_bi_list()`` 返回的已确认笔构建笔中枢；
+    - 本信号在单个 K 线周期的笔中枢上计算，周期是观察窗口标记，不等同于缠论递归级别；
+    - 中枢来源复用 ``build_zhongshu_from_bis()``，相邻中枢只比较 ``[zd, zg]`` 区间；
+    - 上涨趋势要求所有相邻中枢同时 ``zd``、``zg`` 依次抬高且 ``zg[i] < zd[i+1]``；
+    - 下跌趋势要求所有相邻中枢同时 ``zd``、``zg`` 依次降低且 ``zd[i] > zg[i+1]``；
+    - 两个及以上中枢若存在重叠，或抬高/降低方向不一致，归为中枢延伸；
+    - 方向完全由中枢序列几何决定，不引入进入段 a0 校验。
+    """
+    k1 = freq
+    k2 = "D1ZS"
+    k3 = "走势类型V260729"
+
+    bi_list = _get_confirmed_bi_list(c)
+    zhongshu_list = build_zhongshu_from_bis(bi_list)
+
+    if len(bi_list) < 5 or not zhongshu_list:
+        v1 = "无中枢"
+        score = 0
+    elif len(zhongshu_list) == 1:
+        v1 = "盘整"
+        score = 50
+    else:
+        is_uptrend = True
+        is_downtrend = True
+        for current_zs, next_zs in zip(zhongshu_list, zhongshu_list[1:]):
+            raised = next_zs["zd"] > current_zs["zd"] and next_zs["zg"] > current_zs["zg"]
+            lowered = next_zs["zd"] < current_zs["zd"] and next_zs["zg"] < current_zs["zg"]
+            up_disjoint = current_zs["zg"] < next_zs["zd"]
+            down_disjoint = current_zs["zd"] > next_zs["zg"]
+
+            is_uptrend = is_uptrend and raised and up_disjoint
+            is_downtrend = is_downtrend and lowered and down_disjoint
+
+        if is_uptrend:
+            v1 = "上涨趋势"
+            score = 80
+        elif is_downtrend:
+            v1 = "下跌趋势"
+            score = 80
+        else:
+            v1 = "中枢延伸"
+            score = 60
+
+    key = f"{k1}_{k2}_{k3}"
+    value = f"{v1}_任意_任意_{score}"
+    return {key: value}
+
+
 def _select_zhongshu_for_departure_leg(bi_list: list, zhongshu_list: list) -> dict:
     """
     Select the most recent zhongshu that has at least one confirmed BI after it.

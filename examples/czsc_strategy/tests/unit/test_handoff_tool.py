@@ -13,6 +13,8 @@ def test_handoff_status_uses_authoritative_sync_check_engine():
         cwd=project_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=15,
         check=False,
     )
