@@ -3,6 +3,34 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 0.2.61（2026-07-29）- P0 报告层笔中枢口径标注（对照核查表 §9 P0 落地）
+
+- `chan_strategy/html_report.py`：回测摘要卡新增口径说明——本报告所有中枢均为**笔中枢**
+  （由笔构建；czsc 1.0.0rc8 不提供线段中枢，两者级别不同、不可混称），K 线周期仅为观察窗口、
+  非递归级别。纯展示措辞，不改图表结构、信号与回测行为。
+- `skill_build/reference/解盘模板.md`：顶部新增口径约束行（中枢=笔中枢；周期不得表述为递归级别）；
+  模板正文"中枢 ZG=…"改为"中枢（笔中枢）ZG=…（n 笔构成）"；降级规则"无中枢"改"无笔中枢"。
+- `skill_build/reference/缠论术语表.md`：头部新增口径行，声明全表"中枢"均指笔中枢。
+- `docs/theory_code_crosscheck.md` §9：P0 行核销。
+- 测试：`tests/unit/test_html_report.py` 新增 `test_render_backtest_html_report_annotates_bi_zhongshu`
+  断言渲染产物含"笔中枢/不可混称/观察窗口"；html_report 套件 16 passed；
+  全量 not-realdb 982 passed；按 AGENTS.md 守则实跑 realdb 4 passed（html_report 产物经
+  `generate_report()` 链路，属报告生成触及范围）。
+
+## 0.2.60（2026-07-29）- czsc 1.0.0rc8 理论断言只读探针（对照核查表 §8 落地）
+
+- 新增 `diagnostics/czsc_rc8_theory_probe.py` 只读探针（czsc.mock 合成 K 线、不触网、
+  不发委托、不改参数），输出 `diagnostics/czsc_rc8_theory_probe_report.md`（含 RESEARCH-ONLY 横幅）。
+- 断言 A 证实：官方类型存根 `ZS.bis: list[BI]`，ZS 仅能由笔构造——书摘"czsc ZS 默认笔中枢"成立；
+  附带发现 rc8 的 `CZSC` 本体**无 `zs_list`**（不自动构建中枢），项目自研
+  `build_zhongshu_from_bis()` 属必要实现；`max_bi_num=50` 会截断笔缓存，长序列分析需留意。
+- 断言 B 证伪：rc8 无 `czsc.signals` 子模块，全包无"三买/三卖/五笔/七笔/九笔"形态信号实现，
+  `CZSC.signals` 仅为空缓存槽——书摘"读倒1/倒2 信号定性三类买卖点"系旧版 czsc API，
+  在 rc8 不可用；项目自研三阶段状态机（`signals.py` / `sell_signals.py`）为当前唯一实现。
+- `docs/theory_code_crosscheck.md` §8 由"待验证"改写为实测结论，并补口径提醒
+  （ZS.sdir/edir 为中枢内部首/末笔方向，≠ 书义"进入段方向"）；§9 汇总表同步核销。
+- 不涉及任何策略代码、参数、信号或回测行为。
+
 ## 0.2.59（2026-07-29）- A102 5分钟交易级别支持 + 过滤层泛化（filter_freq 全级别生效）
 
 - **D1 过滤层泛化**：解除环境过滤层对日线的硬编码（设计文档 H1~H7）。

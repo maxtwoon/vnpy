@@ -406,6 +406,10 @@ def _summary_card_html(symbol: str, summary: dict[str, Any]) -> str:
         <span>夏普比率: <strong>{summary['sharpe_ratio']:.2f}</strong></span>
         <span>周期: <strong>{summary['period']}</strong></span>
     </p>
+    <p style="margin:6px 0 0;color:#999;font-size:12px;">
+        口径说明：本报告所有中枢均为<strong>笔中枢</strong>（由笔构建；czsc 1.0.0rc8
+        不提供线段中枢，笔中枢与线段中枢级别不同，不可混称）；K 线周期仅为观察窗口，不代表递归级别。
+    </p>
 </div>
 """
 

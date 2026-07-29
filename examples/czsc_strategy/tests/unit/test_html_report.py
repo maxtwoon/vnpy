@@ -268,6 +268,20 @@ def test_render_backtest_html_report_smoke(tmp_path: Path):
     assert '<div class="report-extra"' in html
 
 
+def test_render_backtest_html_report_annotates_bi_zhongshu(tmp_path: Path):
+    """P0 口径整改（docs/theory_code_crosscheck.md §1.2）：报告必须注明所报
+    中枢为笔中枢，并声明周期仅为观察窗口、非递归级别。"""
+    engine_a = _make_fake_engine("A888")
+    payloads = {"A888": build_symbol_chart_payload(engine_a)}
+    out_path = tmp_path / "report.html"
+    render_backtest_html_report(payloads, out_path=out_path, title="Test Report")
+
+    html = out_path.read_text(encoding="utf-8")
+    assert "笔中枢" in html
+    assert "不可混称" in html
+    assert "观察窗口" in html
+
+
 def test_render_backtest_html_report_embeds_echarts_js_no_cdn(tmp_path: Path):
     """Reports must not depend on the pyecharts CDN to render offline."""
     engine_a = _make_fake_engine("A888")
