@@ -26,7 +26,7 @@ import pandas as pd
 
 from czsc import CZSC
 from czsc import Direction
-from chan_strategy.config import STRATEGY_CONFIG
+from chan_strategy.config import STRATEGY_CONFIG, get_strategy_param
 from chan_strategy.zhongshu import build_zhongshu_from_bis
 
 
@@ -882,7 +882,8 @@ def signal_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: float | 
         current_price = last_bi.low
 
     # 结构失效检测: 价格跌破中枢下沿的 (1 - structural_invalidation_pct) 位置
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
+    # A102 D2: 阈值经 get_strategy_param() 解析（trade_freq profile 优先）
+    pct = stop_loss_pct if stop_loss_pct is not None else get_strategy_param("structural_invalidation_pct")
     stop_level = zd * (1 - pct)
     if current_price < stop_level:
         v1 = "结构失效"
@@ -937,7 +938,7 @@ def signal_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_pct: f
     else:
         current_price = last_bi.low
 
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
+    pct = stop_loss_pct if stop_loss_pct is not None else get_strategy_param("structural_invalidation_pct")
     stop_level = zd * (1 - pct)
     if current_price < stop_level:
         v1 = "结构失效"

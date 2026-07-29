@@ -85,7 +85,7 @@ def test_backtest_error_branches(mini_backtest_bars, monkeypatch):
 
     e3 = BacktestEngine("T")
     e3.load_data = lambda: setattr(e3, "bars", mini_backtest_bars) or True
-    monkeypatch.setitem(__import__("chan_strategy.config").config.STRATEGY_CONFIG, "filter_freq", "无")
+    monkeypatch.setitem(__import__("chan_strategy.config").config.STRATEGY_CONFIG, "filter_freq", "off")
     assert "error" not in e3.run(warmup_bars=5)
 
 

@@ -1,0 +1,213 @@
+{
+  "probe": "five_min_trade_freq_feasibility",
+  "generated_at": "2026-07-29T00:42:20",
+  "window": {
+    "start": "2025-01-01",
+    "end": "2026-04-24"
+  },
+  "read_only": true,
+  "not_promotion_evidence": true,
+  "symbols": {
+    "AP888": {
+      "bars_1m": 70805,
+      "5分钟": {
+        "bar_count": 14174,
+        "trading_days": 315,
+        "bars_per_day": 45.0,
+        "first_dt": "2025-01-02 09:04:00",
+        "last_dt": "2026-04-24 14:59:00",
+        "bi_count": 947,
+        "bi_per_day": 3.01,
+        "bi_amp_pct_p25": 0.6075,
+        "bi_amp_pct_median": 0.8979,
+        "bi_amp_pct_p75": 1.4405,
+        "zs_count_segment": 151,
+        "bi_count_ge_5": true
+      },
+      "30分钟基线": {
+        "bar_count": 2520,
+        "trading_days": 315,
+        "bars_per_day": 8.0,
+        "first_dt": "2025-01-02 09:29:00",
+        "last_dt": "2026-04-24 14:59:00",
+        "bi_count": 173,
+        "bi_per_day": 0.55,
+        "bi_amp_pct_p25": 1.8126,
+        "bi_amp_pct_median": 2.7523,
+        "bi_amp_pct_p75": 4.1815,
+        "zs_count_segment": 28,
+        "bi_count_ge_5": true
+      },
+      "param_mismatch": [
+        "止损 200BP(2.0%) / 5分钟笔幅度中位数(0.90%) = 2.2x",
+        "止损 300BP(3.0%) / 5分钟笔幅度中位数(0.90%) = 3.3x",
+        "止损 350BP(3.5%) / 5分钟笔幅度中位数(0.90%) = 3.9x",
+        "结构失效阈值 5% / 5分钟笔幅度中位数 = 5.6x",
+        "timeout 600根: 30分钟下≈300小时 → 5分钟下≈50.0小时",
+        "timeout 1000根: 30分钟下≈500小时 → 5分钟下≈83.3小时",
+        "timeout 1500根: 30分钟下≈750小时 → 5分钟下≈125.0小时"
+      ]
+    },
+    "RB888": {
+      "bars_1m": 107923,
+      "5分钟": {
+        "bar_count": 21601,
+        "trading_days": 316,
+        "bars_per_day": 68.4,
+        "first_dt": "2025-01-02 09:04:00",
+        "last_dt": "2026-04-24 22:59:00",
+        "bi_count": 1119,
+        "bi_per_day": 3.54,
+        "bi_amp_pct_p25": 0.4523,
+        "bi_amp_pct_median": 0.6334,
+        "bi_amp_pct_p75": 0.9264,
+        "zs_count_segment": 181,
+        "bi_count_ge_5": true
+      },
+      "30分钟基线": {
+        "bar_count": 3759,
+        "trading_days": 316,
+        "bars_per_day": 11.9,
+        "first_dt": "2025-01-02 09:29:00",
+        "last_dt": "2026-04-24 22:59:00",
+        "bi_count": 252,
+        "bi_per_day": 0.8,
+        "bi_amp_pct_p25": 0.9464,
+        "bi_amp_pct_median": 1.4384,
+        "bi_amp_pct_p75": 2.1732,
+        "zs_count_segment": 39,
+        "bi_count_ge_5": true
+      },
+      "param_mismatch": [
+        "止损 200BP(2.0%) / 5分钟笔幅度中位数(0.63%) = 3.2x",
+        "止损 300BP(3.0%) / 5分钟笔幅度中位数(0.63%) = 4.7x",
+        "止损 350BP(3.5%) / 5分钟笔幅度中位数(0.63%) = 5.5x",
+        "结构失效阈值 5% / 5分钟笔幅度中位数 = 7.9x",
+        "timeout 600根: 30分钟下≈300小时 → 5分钟下≈50.0小时",
+        "timeout 1000根: 30分钟下≈500小时 → 5分钟下≈83.3小时",
+        "timeout 1500根: 30分钟下≈750小时 → 5分钟下≈125.0小时"
+      ]
+    },
+    "SC888": {
+      "bars_1m": 172379,
+      "5分钟": {
+        "bar_count": 34509,
+        "trading_days": 375,
+        "bars_per_day": 92.0,
+        "first_dt": "2025-01-02 09:04:00",
+        "last_dt": "2026-04-24 23:59:00",
+        "bi_count": 2190,
+        "bi_per_day": 5.84,
+        "bi_amp_pct_p25": 0.5116,
+        "bi_amp_pct_median": 0.7968,
+        "bi_amp_pct_p75": 1.3964,
+        "zs_count_segment": 372,
+        "bi_count_ge_5": true
+      },
+      "30分钟基线": {
+        "bar_count": 5912,
+        "trading_days": 375,
+        "bars_per_day": 15.8,
+        "first_dt": "2025-01-02 09:29:00",
+        "last_dt": "2026-04-24 23:59:00",
+        "bi_count": 440,
+        "bi_per_day": 1.17,
+        "bi_amp_pct_p25": 1.4284,
+        "bi_amp_pct_median": 2.0627,
+        "bi_amp_pct_p75": 3.4797,
+        "zs_count_segment": 69,
+        "bi_count_ge_5": true
+      },
+      "param_mismatch": [
+        "止损 200BP(2.0%) / 5分钟笔幅度中位数(0.80%) = 2.5x",
+        "止损 300BP(3.0%) / 5分钟笔幅度中位数(0.80%) = 3.8x",
+        "止损 350BP(3.5%) / 5分钟笔幅度中位数(0.80%) = 4.4x",
+        "结构失效阈值 5% / 5分钟笔幅度中位数 = 6.3x",
+        "timeout 600根: 30分钟下≈300小时 → 5分钟下≈50.0小时",
+        "timeout 1000根: 30分钟下≈500小时 → 5分钟下≈83.3小时",
+        "timeout 1500根: 30分钟下≈750小时 → 5分钟下≈125.0小时"
+      ]
+    },
+    "A888": {
+      "bars_1m": 107579,
+      "5分钟": {
+        "bar_count": 21532,
+        "trading_days": 316,
+        "bars_per_day": 68.1,
+        "first_dt": "2025-01-02 09:04:00",
+        "last_dt": "2026-04-24 22:59:00",
+        "bi_count": 1232,
+        "bi_per_day": 3.9,
+        "bi_amp_pct_p25": 0.4058,
+        "bi_amp_pct_median": 0.5996,
+        "bi_amp_pct_p75": 0.9084,
+        "zs_count_segment": 201,
+        "bi_count_ge_5": true
+      },
+      "30分钟基线": {
+        "bar_count": 3747,
+        "trading_days": 316,
+        "bars_per_day": 11.9,
+        "first_dt": "2025-01-02 09:29:00",
+        "last_dt": "2026-04-24 22:59:00",
+        "bi_count": 264,
+        "bi_per_day": 0.84,
+        "bi_amp_pct_p25": 0.9498,
+        "bi_amp_pct_median": 1.4524,
+        "bi_amp_pct_p75": 2.1094,
+        "zs_count_segment": 42,
+        "bi_count_ge_5": true
+      },
+      "param_mismatch": [
+        "止损 200BP(2.0%) / 5分钟笔幅度中位数(0.60%) = 3.3x",
+        "止损 300BP(3.0%) / 5分钟笔幅度中位数(0.60%) = 5.0x",
+        "止损 350BP(3.5%) / 5分钟笔幅度中位数(0.60%) = 5.8x",
+        "结构失效阈值 5% / 5分钟笔幅度中位数 = 8.3x",
+        "timeout 600根: 30分钟下≈300小时 → 5分钟下≈50.0小时",
+        "timeout 1000根: 30分钟下≈500小时 → 5分钟下≈83.3小时",
+        "timeout 1500根: 30分钟下≈750小时 → 5分钟下≈125.0小时"
+      ]
+    },
+    "ZN888": {
+      "bars_1m": 144825,
+      "5分钟": {
+        "bar_count": 28983,
+        "trading_days": 375,
+        "bars_per_day": 77.3,
+        "first_dt": "2025-01-02 09:04:00",
+        "last_dt": "2026-04-24 23:59:00",
+        "bi_count": 1725,
+        "bi_per_day": 4.6,
+        "bi_amp_pct_p25": 0.3506,
+        "bi_amp_pct_median": 0.5158,
+        "bi_amp_pct_p75": 0.8039,
+        "zs_count_segment": 264,
+        "bi_count_ge_5": true
+      },
+      "30分钟基线": {
+        "bar_count": 4991,
+        "trading_days": 375,
+        "bars_per_day": 13.3,
+        "first_dt": "2025-01-02 09:29:00",
+        "last_dt": "2026-04-24 23:59:00",
+        "bi_count": 171,
+        "bi_per_day": 0.46,
+        "bi_amp_pct_p25": 0.9314,
+        "bi_amp_pct_median": 1.3737,
+        "bi_amp_pct_p75": 2.2285,
+        "zs_count_segment": 27,
+        "bi_count_ge_5": true
+      },
+      "param_mismatch": [
+        "止损 200BP(2.0%) / 5分钟笔幅度中位数(0.52%) = 3.9x",
+        "止损 300BP(3.0%) / 5分钟笔幅度中位数(0.52%) = 5.8x",
+        "止损 350BP(3.5%) / 5分钟笔幅度中位数(0.52%) = 6.8x",
+        "结构失效阈值 5% / 5分钟笔幅度中位数 = 9.7x",
+        "timeout 600根: 30分钟下≈300小时 → 5分钟下≈50.0小时",
+        "timeout 1000根: 30分钟下≈500小时 → 5分钟下≈83.3小时",
+        "timeout 1500根: 30分钟下≈750小时 → 5分钟下≈125.0小时"
+      ]
+    }
+  },
+  "errors": {}
+}

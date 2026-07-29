@@ -3,6 +3,39 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 0.2.59（2026-07-29）- A102 5分钟交易级别支持 + 过滤层泛化（filter_freq 全级别生效）
+
+- **D1 过滤层泛化**：解除环境过滤层对日线的硬编码（设计文档 H1~H7）。
+  `backtest_engine.py` 过滤层 bar 合成由 `filter_freq` 驱动（"日线" 保留 legacy
+  `daily_agg` 合成路径；分钟级别走 `resample_bars` 固定间隔路径）；门控与
+  日级别解耦为"过滤层 CZSC 可用即启用"；过滤层信号数据与标签同源（修复了
+  旧代码"日线数据贴 filter_freq 标签"的错位）。`regime_model="router"` 且过滤层
+  非日线时，日线 regime 键独立合成（设计 §6.1，router 保持日线语义）。
+- **filter_freq="off"**：新增显式关闭环境过滤层的合法途径，替代旧的
+  "非日线值=禁用"hack（`test_a87_joint_replay.py`、`test_more_coverage.py`
+  两处旧 hack 已迁移）。
+- **D2 trade_freq_profiles**：新增按交易级别的参数覆盖机制
+  （`config.py::get_strategy_param()`，白名单 `PROFILE_ALLOWED_KEYS` 只允许
+  风险/时间类键，`validate_trade_freq_profiles()` 在 `run()` 启动时 fail-closed）。
+  "5分钟" profile 取值出处：`diagnostics/five_min_param_calibration_20260729.md`
+  （价格类按笔幅度系数 r=0.4361 缩放，timeout 按级别分钟数比 ×6 保持实际时间）。
+  消费点切换：`positions.py`（timeout/stop_loss/trailing 共 16 处）、
+  `signals.py`/`sell_signals.py`（structural_invalidation_pct 共 4 处）。
+- **D3 标签一致**：`positions.py` 过滤信号键、`[级别趋势]` 日志全部跟随
+  `filter_freq`（`_log_daily_trend` → `_log_filter_trend`）；默认 "日线" 键名字节不变。
+- **默认配置基线字节一致**：RB888 默认配置回测改动前后 diff = 0
+  （`diagnostics/a102_baseline_diff_rb888_20260729.md`）。
+- **测试**：新增 `tests/unit/test_a102_filter_level_generalization.py`（9 条：
+  profile 覆盖/兜底/白名单 fail-closed、标签泛化、分钟级过滤层时序纪律 AC5、
+  60分钟过滤/router 独立日线/默认日线 3 条引擎端到端）；
+  `pytest tests/unit -q -m "not realdb"` 981 passed；
+  `python -m pytest tests/unit -m realdb -q` 4 passed（触及 positions.py，realdb 守则）。
+- **AC3 端到端**：5分钟+30分钟+daily_4h 组合 5 品种（AP/RB/SC/A/ZN 888）
+  3 个月窗口冒烟全部跑通，三级标签齐全（`diagnostics/a102_ac3_summary_20260729.md`）；
+  窗口偏离（3个月冒烟 vs 全窗口评估）已记入 HANDOFF 决策记录。
+- 诊断探针：`diagnostics/five_min_feasibility_probe.py`（5分钟级别数据覆盖与
+  笔/中枢结构质量）、`diagnostics/five_min_param_calibration.py`（参数标定推导）。
+
 ## 0.2.58（2026-07-29）- 新增缠论书摘 ⇄ 代码对照核查表（纯文档）
 
 - 新增 `docs/theory_code_crosscheck.md`：将带页码锚点的缠论书摘

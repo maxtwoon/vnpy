@@ -28,7 +28,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from czsc import CZSC
 from czsc import RawBar, Freq
 
-from chan_strategy.config import SQLITE_DB_PATH, STRATEGY_CONFIG, BACKTEST_CONFIG
+from chan_strategy.config import (
+    SQLITE_DB_PATH, STRATEGY_CONFIG, BACKTEST_CONFIG, validate_trade_freq_profiles,
+)
 from chan_strategy.data_adapter import SqliteDataAdapter, resample_bars
 from chan_strategy.limit_config import (
     SYMBOL_LIMIT_CONFIG,
@@ -474,6 +476,9 @@ class BacktestEngine:
         # 重置状态，保证 run() 幂等
         self._reset_state()
 
+        # A102 D2: trade_freq profile 白名单校验（fail-closed，非法 profile 不静默降级）
+        validate_trade_freq_profiles()
+
         if not self.load_data():
             return {"error": "数据加载失败"}
 
@@ -497,15 +502,35 @@ class BacktestEngine:
         self.trade_bars = trade_bars  # 保存供外部验证使用
         print(f"K线合成: {len(self.bars)}根1分钟 → {len(trade_bars)}根{trade_freq_name}")
 
-        # 从1分钟K线合成日线K线（用于趋势过滤）
-        daily_agg = STRATEGY_CONFIG["daily_agg"]
-        night_session_start_hour = STRATEGY_CONFIG["night_session_start_hour"]
-        daily_bars = resample_bars(
-            self.bars, Freq.D, target_minutes=None,
-            daily_agg=daily_agg,
-            night_session_start_hour=night_session_start_hour,
-        )
-        print(f"K线合成: {len(self.bars)}根1分钟 → {len(daily_bars)}根日线")
+        # 从1分钟K线合成过滤层K线（A102 D1：级别由 filter_freq 决定；
+        # "日线" 保持 legacy daily_agg 合成路径，默认配置字节一致；
+        # "off" 显式关闭环境过滤层——替代旧的"非日线值=禁用"hack）
+        if filter_freq_name == "off":
+            filter_bars = []
+        elif filter_freq_name == "日线":
+            daily_agg = STRATEGY_CONFIG["daily_agg"]
+            night_session_start_hour = STRATEGY_CONFIG["night_session_start_hour"]
+            filter_bars = resample_bars(
+                self.bars, Freq.D, target_minutes=None,
+                daily_agg=daily_agg,
+                night_session_start_hour=night_session_start_hour,
+            )
+            print(f"K线合成: {len(self.bars)}根1分钟 → {len(filter_bars)}根{filter_freq_name}")
+        else:
+            filter_minutes = self._freq_to_minutes(filter_freq_name)
+            filter_freq_obj = self._freq_name_to_czsc_freq(filter_freq_name)
+            filter_bars = resample_bars(self.bars, filter_freq_obj, filter_minutes)
+            print(f"K线合成: {len(self.bars)}根1分钟 → {len(filter_bars)}根{filter_freq_name}")
+
+        # A46 regime router 消费日线 regime 键。过滤层不是日线时，日线需独立合成
+        # （A102 设计 §6.1：router 保持日线语义，不跟随 filter_freq）。
+        router_daily_bars: list[RawBar] = []
+        if STRATEGY_CONFIG["regime_model"] == "router" and filter_freq_name != "日线":
+            router_daily_bars = resample_bars(
+                self.bars, Freq.D, target_minutes=None,
+                daily_agg=STRATEGY_CONFIG["daily_agg"],
+                night_session_start_hour=STRATEGY_CONFIG["night_session_start_hour"],
+            )
 
         # 从1分钟K线合成4H K线（仅用于 A44 daily_4h 共振模式）
         resonance_filter = STRATEGY_CONFIG["resonance_filter"]
@@ -526,13 +551,24 @@ class BacktestEngine:
         # 交易周期CZSC（主分析对象）
         czsc_trade = CZSC(trade_bars[:warmup_bars])
 
-        # 日线CZSC（趋势过滤）- 找到warmup对应的日线范围
+        # 过滤层CZSC（趋势过滤）- 找到warmup对应的过滤层范围
         warmup_dt = trade_bars[warmup_bars - 1].dt if warmup_bars <= len(trade_bars) else trade_bars[-1].dt
-        daily_warmup_bars = [b for b in daily_bars if b.dt <= warmup_dt]
-        czsc_daily = CZSC(daily_warmup_bars) if len(daily_warmup_bars) >= 3 else None
-        enable_daily_filter = STRATEGY_CONFIG["filter_freq"] == "日线" and czsc_daily is not None
-        if STRATEGY_CONFIG["filter_freq"] == "日线" and czsc_daily is None:
-            print("日线趋势过滤不可用: 日线预热数据不足，已自动禁用日线过滤")
+        filter_warmup_bars = [b for b in filter_bars if b.dt <= warmup_dt]
+        czsc_filter = CZSC(filter_warmup_bars) if len(filter_warmup_bars) >= 3 else None
+        # A102 H2: 门控与日级别解耦——过滤层 CZSC 可用即启用；"off" 显式关闭
+        enable_filter = czsc_filter is not None
+        if czsc_filter is None and filter_freq_name != "off":
+            print(f"{filter_freq_name}趋势过滤不可用: 过滤层预热数据不足，已自动禁用过滤")
+
+        # router 专用日线 CZSC（独立于过滤层，仅 regime_model="router" 且过滤层非日线时）
+        czsc_router_daily = None
+        router_daily_bar_idx = 0
+        if router_daily_bars:
+            router_warmup_bars = [b for b in router_daily_bars if b.dt <= warmup_dt]
+            czsc_router_daily = CZSC(router_warmup_bars) if len(router_warmup_bars) >= 3 else None
+            router_daily_bar_idx = len(router_warmup_bars)
+            if czsc_router_daily is None:
+                print("日线regime路由不可用: 日线预热数据不足，router 退化为 ambiguous")
 
         # 4H CZSC（A44 daily_4h 共振）- 找到warmup对应的4H范围
         h4_bar_idx = 0
@@ -547,12 +583,12 @@ class BacktestEngine:
         self.strategy = ChanTimingStrategy(
             symbol=self.symbol, freq=trade_freq_name,
             commission_rate=self.commission_rate, slippage=self.slippage,
-            enable_daily_filter=enable_daily_filter,
+            enable_daily_filter=enable_filter,
             enable_short=self.enable_short,
         )
 
-        # 构建日线bar时间索引，用于增量更新日线CZSC
-        daily_bar_idx = len(daily_warmup_bars)
+        # 构建过滤层bar时间索引，用于增量更新过滤层CZSC
+        filter_bar_idx = len(filter_warmup_bars)
 
         # --- 回测主循环（按交易周期K线驱动） ---
         # 实现"延迟一根bar成交": 信号在当根产生，下一根bar开盘价成交
@@ -616,7 +652,7 @@ class BacktestEngine:
                     )
 
         def _bar_loop() -> Generator[tuple[str, Any, float, float, float], tuple[float, float] | None, dict]:
-            nonlocal pending_signals, daily_bar_idx, h4_bar_idx, excluded_dates
+            nonlocal pending_signals, filter_bar_idx, router_daily_bar_idx, h4_bar_idx, excluded_dates
 
             for i in range(warmup_bars, len(trade_bars)):
                 bar = trade_bars[i]
@@ -695,11 +731,17 @@ class BacktestEngine:
                 # 2. 更新交易周期CZSC
                 czsc_trade.update(bar)
 
-                # 3. 增量更新日线CZSC（当有新的日线bar时）
-                if czsc_daily is not None:
-                    while daily_bar_idx < len(daily_bars) and daily_bars[daily_bar_idx].dt <= bar.dt:
-                        czsc_daily.update(daily_bars[daily_bar_idx])
-                        daily_bar_idx += 1
+                # 3. 增量更新过滤层CZSC（当有新的过滤层bar时，dt <= 当前bar，无未来函数）
+                if czsc_filter is not None:
+                    while filter_bar_idx < len(filter_bars) and filter_bars[filter_bar_idx].dt <= bar.dt:
+                        czsc_filter.update(filter_bars[filter_bar_idx])
+                        filter_bar_idx += 1
+
+                # 3b. 增量更新 router 专用日线CZSC（仅 regime_model="router" 且过滤层非日线）
+                if czsc_router_daily is not None:
+                    while router_daily_bar_idx < len(router_daily_bars) and router_daily_bars[router_daily_bar_idx].dt <= bar.dt:
+                        czsc_router_daily.update(router_daily_bars[router_daily_bar_idx])
+                        router_daily_bar_idx += 1
 
                 # 4. 增量更新4H CZSC（当有新的4H bar时，dt <= 当前bar，无未来函数）
                 if czsc_4h is not None:
@@ -717,10 +759,17 @@ class BacktestEngine:
                     sell1_anchor=sell1_anchor,
                 )
 
-                # 添加日线趋势过滤信号（由 positions.py / ChanTimingStrategy 消费）
-                if czsc_daily is not None and czsc_daily.bi_list:
-                    daily_signals = get_all_signals(czsc_daily, filter_freq_name)
-                    signals.update(daily_signals)
+                # 添加过滤层趋势过滤信号（由 positions.py / ChanTimingStrategy 消费；
+                # A102 H4：数据与标签同源——过滤层 bar 由 filter_freq 合成，标签即 filter_freq）
+                if czsc_filter is not None and czsc_filter.bi_list:
+                    filter_signals = get_all_signals(czsc_filter, filter_freq_name)
+                    signals.update(filter_signals)
+
+                # 添加 router 专用日线 regime 信号（仅独立合成路径；过滤层为日线时
+                # 日线键已由上面的过滤层信号提供，不重复合并）
+                if czsc_router_daily is not None and czsc_router_daily.bi_list:
+                    router_daily_signals = get_all_signals(czsc_router_daily, "日线")
+                    signals.update(router_daily_signals)
 
                 # 添加4H共振过滤信号（A44 daily_4h 模式消费）
                 if czsc_4h is not None and czsc_4h.bi_list:

@@ -176,12 +176,13 @@ def _run_joint(symbols=("AAA", "BBB"), initial_capital: float = IC) -> dict:
 
 
 def _risk_config(**overrides) -> None:
-    """Base config for joint-replay driver tests (filter_freq disables the
-    daily filter regardless of the 20 daily warmup bars)."""
+    """Base config for joint-replay driver tests (filter_freq="off" disables the
+    environment filter explicitly; pre-A102 this used a non-daily filter_freq
+    value as an implicit disable hack)."""
     STRATEGY_CONFIG.update({
         "sizing_model": "risk",
         "portfolio_risk": "on",
-        "filter_freq": "5分钟",
+        "filter_freq": "off",
         "contract_specs": {
             "AAA": {"multiplier": 10, "tick": 1.0, "margin_rate": 0.05},
             "BBB": {"multiplier": 10, "tick": 1.0, "margin_rate": 0.05},

@@ -110,7 +110,7 @@ def test_strategy_logs_and_anchor_fallback(czsc_factory, bi_factory, capsys):
 
     base = datetime(2024, 1, 1)
     s = ChanTimingStrategy("T", enable_daily_filter=False)
-    s._log_daily_trend({"日线_D1BI_方向V260615": "向上_任意_任意_0"}, base)
+    s._log_filter_trend({"日线_D1BI_方向V260615": "向上_任意_任意_0"}, base)
     assert "日线趋势" in capsys.readouterr().out
     s._last_buy1_anchor = {"dt": base, "price": 1, "zs_zd": None, "zs_zg": None}
     bis = zbase(base, bi_factory)

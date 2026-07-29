@@ -12,7 +12,7 @@ from math import floor
 
 from czsc import Direction
 
-from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG
+from chan_strategy.config import BACKTEST_CONFIG, STRATEGY_CONFIG, get_strategy_param
 
 
 def _resolve_limit_flag(
@@ -48,25 +48,27 @@ def _resolve_limit_flag(
 
 
 def _daily_trend_filter_signals(direction: str = "long", strict: bool = True) -> dict:
-    """日线趋势过滤信号
+    """环境过滤层趋势过滤信号（A102 H5：级别标签跟随 filter_freq）
 
-    在开仓 Event 的 signals_all/signals_not 中显式引用日线键，
-    使 positions.py 成为日线趋势过滤的直接消费方。
+    在开仓 Event 的 signals_all/signals_not 中显式引用过滤层键，
+    使 positions.py 成为过滤层趋势过滤的直接消费方。
+    默认 filter_freq="日线" 时产出与历史完全相同的 "日线_*" 信号串（字节一致）。
 
     :param direction: long 使用向上趋势过滤；short 使用向下趋势过滤。
-    :param strict: 是否要求日线方向同向。二买/三买/二卖/三卖属于右侧顺势信号，
+    :param strict: 是否要求过滤层方向同向。二买/三买/二卖/三卖属于右侧顺势信号，
         使用严格过滤；一买/一卖是左侧背驰试仓，只排除高级别明确反向。
     """
     if direction not in {"long", "short"}:
-        raise ValueError(f"不支持的日线过滤方向: {direction}")
+        raise ValueError(f"不支持的过滤方向: {direction}")
+    level = STRATEGY_CONFIG["filter_freq"]
     trend = "向上" if direction == "long" else "向下"
     blocked_position = "中枢下方" if direction == "long" else "中枢上方"
     return {
         "signals_all": [
-            f"日线_D1BI_方向V260615_{trend}_任意_任意_0",
+            f"{level}_D1BI_方向V260615_{trend}_任意_任意_0",
         ] if strict else [],
         "signals_not": [
-            f"日线_D1ZS_位置V260615_{blocked_position}_任意_任意_0",
+            f"{level}_D1ZS_位置V260615_{blocked_position}_任意_任意_0",
         ],
     }
 
@@ -99,18 +101,21 @@ def _resonance_filter_signals(direction: str = "long", level: str = "日线") ->
 
 
 def _higher_level_filter_signals(direction: str = "long", strict: bool = True) -> dict:
-    """Combine daily trend filter with the optional A44 resonance filter.
+    """Combine filter-level trend filter with the optional A44 resonance filter.
 
-    When ``resonance_filter`` is ``"off"`` this returns exactly the legacy daily
+    When ``resonance_filter`` is ``"off"`` this returns exactly the legacy
     filter (byte-identical), preserving the original ``strict`` semantics used by
-    each sub-strategy.  ``"daily"`` requires strictly-positive daily structure.
-    ``"daily_4h"`` additionally requires constructive 4H structure.
+    each sub-strategy.  ``"daily"`` requires strictly-positive filter-level
+    structure. ``"daily_4h"`` additionally requires constructive 4H structure.
+
+    A102 H5: 共振第一腿（环境过滤层）标签跟随 ``filter_freq``；默认 "日线" 字节一致。
     """
     resonance_filter = STRATEGY_CONFIG["resonance_filter"]
     if resonance_filter == "off":
         return _daily_trend_filter_signals(direction=direction, strict=strict)
 
-    daily = _resonance_filter_signals(direction=direction, level="日线")
+    filter_level = STRATEGY_CONFIG["filter_freq"]
+    daily = _resonance_filter_signals(direction=direction, level=filter_level)
     if resonance_filter == "daily":
         return daily
 
@@ -134,21 +139,22 @@ def _resonance_holds(
     so P5/A44 logic is not duplicated.
 
     When ``force_resonance`` is True, the ``resonance_filter="off"`` fallback to
-    the legacy daily trend filter is bypassed and the actual P5 resonance
-    condition is enforced: daily level (and 4H when configured as ``daily_4h``).
+    the legacy filter trend filter is bypassed and the actual P5 resonance
+    condition is enforced: filter level (and 4H when configured as ``daily_4h``).
     """
     if force_resonance:
         resonance_filter = STRATEGY_CONFIG["resonance_filter"]
+        filter_level = STRATEGY_CONFIG["filter_freq"]
         if resonance_filter == "daily_4h":
             freq_4h = STRATEGY_CONFIG["resonance_freq_4h"]
-            daily = _resonance_filter_signals(direction=direction, level="日线")
+            daily = _resonance_filter_signals(direction=direction, level=filter_level)
             h4 = _resonance_filter_signals(direction=direction, level=freq_4h)
             filters = {
                 "signals_all": daily["signals_all"] + h4["signals_all"],
                 "signals_not": daily["signals_not"] + h4["signals_not"],
             }
         else:
-            filters = _resonance_filter_signals(direction=direction, level="日线")
+            filters = _resonance_filter_signals(direction=direction, level=filter_level)
     else:
         filters = _higher_level_filter_signals(direction=direction, strict=True)
 
@@ -368,19 +374,23 @@ def _round_price_to_tick(symbol: str, price: float) -> float:
 
 
 def _research_trailing_params(symbol: str) -> tuple[int, float]:
-    """Return trailing params, optionally overridden per symbol for diagnostics."""
+    """Return trailing params, optionally overridden per symbol for diagnostics.
+
+    A102 D2: 基线值经 get_strategy_param() 解析（trade_freq profile 优先）；
+    trailing_overrides 的显式 per-symbol 值仍最优先（研究诊断用途不变）。
+    """
     overrides = STRATEGY_CONFIG.get("trailing_overrides") or {}
     item = overrides.get(_research_symbol_key(symbol), None)
     if isinstance(item, dict):
         return (
-            item.get("trailing_start_bp", STRATEGY_CONFIG["trailing_start_bp"]),
-            item.get("trailing_drawback_pct", STRATEGY_CONFIG["trailing_drawback_pct"]),
+            item.get("trailing_start_bp", get_strategy_param("trailing_start_bp")),
+            item.get("trailing_drawback_pct", get_strategy_param("trailing_drawback_pct")),
         )
     if isinstance(item, (list, tuple)) and len(item) == 2:
         return item[0], item[1]
     return (
-        STRATEGY_CONFIG["trailing_start_bp"],
-        STRATEGY_CONFIG["trailing_drawback_pct"],
+        get_strategy_param("trailing_start_bp"),
+        get_strategy_param("trailing_drawback_pct"),
     )
 
 
@@ -451,8 +461,10 @@ def _research_first_buy_allowed(symbol: str, signals_dict: dict) -> bool:
         if _research_symbol_key(symbol) not in enabled_keys:
             return False
 
-    daily_direction = signals_dict.get("日线_D1BI_方向V260615", "")
-    daily_position = signals_dict.get("日线_D1ZS_位置V260615", "")
+    # A102 H5: 环境键跟随 filter_freq（默认 "日线" 时与历史键名一致）
+    filter_level = STRATEGY_CONFIG["filter_freq"]
+    daily_direction = signals_dict.get(f"{filter_level}_D1BI_方向V260615", "")
+    daily_position = signals_dict.get(f"{filter_level}_D1ZS_位置V260615", "")
 
     if STRATEGY_CONFIG.get("block_1buy_daily_down") and daily_direction.startswith("向下"):
         return False
@@ -626,10 +638,10 @@ class Position:
         # timeout 按交易周期 bar 计数；当前交易周期为 30 分钟
         self.timeout = timeout    # 超时K线数（交易周期级别，如 600 根 30 分钟 K 线 ≈ 12.5 个交易日）
         self.stop_loss = stop_loss  # 止损BP (1BP=0.01%)
-        # 移动止损启动阈值(BP)；None 时回退到 STRATEGY_CONFIG（与 commission_rate/slippage 同一模式）
-        self.trailing_start = trailing_start if trailing_start is not None else STRATEGY_CONFIG["trailing_start_bp"]
-        # 移动止损回撤容忍比例；None 时回退到 STRATEGY_CONFIG
-        self.trailing_drawback_pct = trailing_drawback_pct if trailing_drawback_pct is not None else STRATEGY_CONFIG["trailing_drawback_pct"]
+        # 移动止损启动阈值(BP)；None 时回退到配置（A102 D2 起经 profile 解析）
+        self.trailing_start = trailing_start if trailing_start is not None else get_strategy_param("trailing_start_bp")
+        # 移动止损回撤容忍比例；None 时回退到配置（A102 D2 起经 profile 解析）
+        self.trailing_drawback_pct = trailing_drawback_pct if trailing_drawback_pct is not None else get_strategy_param("trailing_drawback_pct")
         self.T0 = T0
         self.commission_rate = commission_rate if commission_rate is not None else BACKTEST_CONFIG["commission_rate"]
         self.slippage = slippage if slippage is not None else BACKTEST_CONFIG["slippage"]
@@ -1310,8 +1322,8 @@ def create_first_buy_position(symbol: str, freq: str = "30分钟",
         opens=opens,
         exits=exits,
         interval=STRATEGY_CONFIG["interval_1buy"],
-        timeout=STRATEGY_CONFIG["timeout_1buy"],
-        stop_loss=STRATEGY_CONFIG["stop_loss_1buy"],
+        timeout=get_strategy_param("timeout_1buy"),
+        stop_loss=get_strategy_param("stop_loss_1buy"),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
         T0=STRATEGY_CONFIG["T0"],
@@ -1404,8 +1416,8 @@ def create_second_buy_position(symbol: str, freq: str = "30分钟",
         opens=opens,
         exits=exits,
         interval=STRATEGY_CONFIG["interval_2buy"],
-        timeout=STRATEGY_CONFIG["timeout_2buy"],
-        stop_loss=STRATEGY_CONFIG["stop_loss_2buy"],
+        timeout=get_strategy_param("timeout_2buy"),
+        stop_loss=get_strategy_param("stop_loss_2buy"),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
         T0=STRATEGY_CONFIG["T0"],
@@ -1498,8 +1510,8 @@ def create_third_buy_position(symbol: str, freq: str = "30分钟",
         opens=opens,
         exits=exits,
         interval=STRATEGY_CONFIG["interval_3buy"],
-        timeout=STRATEGY_CONFIG["timeout_3buy"],
-        stop_loss=STRATEGY_CONFIG["stop_loss_3buy"],
+        timeout=get_strategy_param("timeout_3buy"),
+        stop_loss=get_strategy_param("stop_loss_3buy"),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
         T0=STRATEGY_CONFIG["T0"],
@@ -1575,8 +1587,8 @@ def create_first_sell_position(symbol: str, freq: str = "30分钟",
         opens=opens,
         exits=exits,
         interval=STRATEGY_CONFIG.get("interval_1sell", STRATEGY_CONFIG["interval_1buy"]),
-        timeout=STRATEGY_CONFIG.get("timeout_1sell", STRATEGY_CONFIG["timeout_1buy"]),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_1sell", STRATEGY_CONFIG["stop_loss_1buy"]),
+        timeout=get_strategy_param("timeout_1sell"),
+        stop_loss=get_strategy_param("stop_loss_1sell"),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
         T0=STRATEGY_CONFIG["T0"],
@@ -1652,8 +1664,8 @@ def create_second_sell_position(symbol: str, freq: str = "30分钟",
         opens=opens,
         exits=exits,
         interval=STRATEGY_CONFIG.get("interval_2sell", STRATEGY_CONFIG["interval_2buy"]),
-        timeout=STRATEGY_CONFIG.get("timeout_2sell", STRATEGY_CONFIG["timeout_2buy"]),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_2sell", STRATEGY_CONFIG["stop_loss_2buy"]),
+        timeout=get_strategy_param("timeout_2sell"),
+        stop_loss=get_strategy_param("stop_loss_2sell"),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
         T0=STRATEGY_CONFIG["T0"],
@@ -1731,8 +1743,8 @@ def create_third_sell_position(symbol: str, freq: str = "30分钟",
         opens=opens,
         exits=exits,
         interval=STRATEGY_CONFIG.get("interval_3sell", STRATEGY_CONFIG["interval_3buy"]),
-        timeout=STRATEGY_CONFIG.get("timeout_3sell", STRATEGY_CONFIG["timeout_3buy"]),
-        stop_loss=STRATEGY_CONFIG.get("stop_loss_3sell", STRATEGY_CONFIG["stop_loss_3buy"]),
+        timeout=get_strategy_param("timeout_3sell"),
+        stop_loss=get_strategy_param("stop_loss_3sell"),
         trailing_start=trailing_start,
         trailing_drawback_pct=trailing_drawback,
         T0=STRATEGY_CONFIG["T0"],
@@ -1770,14 +1782,15 @@ class ChanTimingStrategy:
         :param freq: 交易周期频率名
         :param commission_rate: 手续费率（从config或engine传入，不再硬编码）
         :param slippage: 滑点（从config或engine传入，不再硬编码）
-        :param enable_daily_filter: 是否启用日线趋势过滤；None 时按配置决定
+        :param enable_daily_filter: 是否启用环境过滤层趋势过滤；None 时按配置决定。
+            （A102 H2/H6：参数名保留以兼容既有调用方，语义已泛化为 filter_freq 级别）
         :param enable_short: 是否启用一卖/二卖/三卖空头子策略；None 时按配置决定
         """
         from chan_strategy.config import BACKTEST_CONFIG
         self.symbol = symbol
         self.freq = freq
         self.enable_daily_filter = (
-            STRATEGY_CONFIG["filter_freq"] == "日线"
+            STRATEGY_CONFIG["filter_freq"] not in ("", "off")
             if enable_daily_filter is None else enable_daily_filter
         )
         self.enable_short = (
@@ -1818,13 +1831,11 @@ class ChanTimingStrategy:
         """获取最近的一卖锚点信息（供二卖信号绑定使用）"""
         return self._last_sell1_anchor
 
-    def _log_daily_trend(self, signals_dict: dict, dt: datetime):
-        """记录日线趋势状态（供调试与验证过滤是否生效）"""
-        if STRATEGY_CONFIG["filter_freq"] != "日线":
-            return
-
-        bi_key = "日线_D1BI_方向V260615"
-        zs_key = "日线_D1ZS_位置V260615"
+    def _log_filter_trend(self, signals_dict: dict, dt: datetime):
+        """记录环境过滤层趋势状态（供调试与验证过滤是否生效；A102 H6 跟随 filter_freq）"""
+        filter_level = STRATEGY_CONFIG["filter_freq"]
+        bi_key = f"{filter_level}_D1BI_方向V260615"
+        zs_key = f"{filter_level}_D1ZS_位置V260615"
         if bi_key not in signals_dict:
             return
 
@@ -1833,9 +1844,9 @@ class ChanTimingStrategy:
         bullish = direction == "向上" and position != "中枢下方"
         status = "看多" if bullish else "不看多"
         # 仅在状态变化时打印，避免日志刷屏
-        if getattr(self, "_last_daily_trend_status", None) != status:
-            self._last_daily_trend_status = status
-            self.write_log(f"[日线趋势] {dt}: 方向={direction}, 位置={position} -> {status}")
+        if getattr(self, "_last_filter_trend_status", None) != status:
+            self._last_filter_trend_status = status
+            self.write_log(f"[{STRATEGY_CONFIG['filter_freq']}趋势] {dt}: 方向={direction}, 位置={position} -> {status}")
 
     def _daily_regime(self, signals_dict: dict) -> str:
         """Classify the current daily regime for the A46 router.
@@ -1985,7 +1996,7 @@ class ChanTimingStrategy:
         rollover_kwargs: dict = {"rollover_open_blocked": rollover_open_blocked}
 
         # 记录日线趋势状态（便于验证日线过滤是否生效）
-        self._log_daily_trend(signals_dict, dt)
+        self._log_filter_trend(signals_dict, dt)
 
         # 记录一买/一卖锚点（在信号生成后、策略更新前）
         self._record_buy1_anchor(signals_dict, price, dt, czsc_obj=czsc_obj)

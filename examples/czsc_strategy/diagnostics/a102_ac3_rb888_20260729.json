@@ -1,0 +1,88 @@
+{
+  "ac3_config": {
+    "filter_freq": "30分钟",
+    "resonance_filter": "daily_4h",
+    "trade_freq": "5分钟"
+  },
+  "ac3_warmup_bars": 1500,
+  "ac3_window": [
+    "2025-01-01",
+    "2025-03-31"
+  ],
+  "avg_bars_held": 93.0,
+  "avg_loss_pct": -0.9486824033045266,
+  "avg_profit_pct": 0.35852770125497396,
+  "both_long_short_bars": 0,
+  "circuit_breaker_caveat": "本回测不包含任何组合级日亏损限额/强制平仓保护；该机制（A90）仅存在于 PortfolioEngine._build_joint_report() （需 sizing_model='risk' 且 portfolio_risk='on'）。",
+  "exit_event_semantics": "legacy",
+  "final_equity": 998461.1628946459,
+  "freq": "1",
+  "label_check": {
+    "has_30min_filter_keys": true,
+    "has_4h_keys": true,
+    "has_5min_keys": true,
+    "has_daily_keys": false
+  },
+  "limit_halt_model": "off",
+  "long_short_overlap_caveat": "When enable_short=True and regime_model=\"independent\", long and short sub-strategies are self-gated and may overlap on the same symbol; both_long_short_bars audits that modeling simplification.",
+  "long_short_overlap_metric": "both_long_short_bars",
+  "long_short_overlap_policy": "independent_long_short_substrategies",
+  "max_drawdown_pct": 0.23938408536276953,
+  "max_gross_exposure": 0.1,
+  "max_long_exposure": 0.1,
+  "max_loss_pct": -0.9543967150979153,
+  "max_profit_pct": 0.35852770125497396,
+  "max_short_exposure": 0.0,
+  "max_unparseable_row_rate": null,
+  "mode_label": "RESEARCH_BASELINE",
+  "period": "2025-01-01 ~ 2025-03-31",
+  "portfolio_risk": "off",
+  "price_tick_rounding": "off",
+  "profit_factor": 0.1889608682558681,
+  "resonance_filter": "daily_4h",
+  "rollover_open_gating": "off",
+  "round_trip_cost_formula": "2 * commission_rate + slippage",
+  "round_trip_cost_pct_per_trade": 0.07,
+  "sharpe_ratio": -2.635204288354012,
+  "sizing_caveat": "当前为信号研究模式（方向型仓位+事后加权），未建模合约乘数/资金上限/复利，仅评估信号有效性。",
+  "sizing_model": "research",
+  "slippage_application": "single_side_per_round_trip",
+  "slippage_model_caveat": "The backtest deducts commission on both open and close but applies single-side slippage once per round-trip; cost-sensitivity runs should be consulted before treating results as robust to a two-sided slippage assumption.",
+  "stop_execution_model": "close",
+  "stop_penalty_bp": 0,
+  "sub_strategies": {
+    "一买多头": {
+      "avg_bars_held": 93.0,
+      "avg_loss": 0.009486824033045266,
+      "avg_profit": 0.0035852770125497395,
+      "loss_count": 2,
+      "max_pnl": 0.0035852770125497395,
+      "min_pnl": -0.009543967150979153,
+      "profit_factor": 0.1889608682558681,
+      "total_trades": 3,
+      "win_count": 1,
+      "win_rate": 0.3333333333333333
+    },
+    "三买多头": {
+      "profit_factor": 0,
+      "total_trades": 0,
+      "win_rate": 0
+    },
+    "二买多头": {
+      "profit_factor": 0,
+      "total_trades": 0,
+      "win_rate": 0
+    }
+  },
+  "symbol": "RB888",
+  "total_bars": 19545,
+  "total_return_pct": -0.1538837105354074,
+  "total_trades": 3,
+  "traded_bars": 2409,
+  "transaction_cost_model": "round_trip_commission_plus_single_side_slippage",
+  "unparseable_row_rate": 0.0,
+  "unparseable_rows_skipped": 0,
+  "unparseable_rows_total": 19545,
+  "weighting": "fixed",
+  "win_rate": 0.3333333333333333
+}

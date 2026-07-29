@@ -1,0 +1,58 @@
+{
+  "calibration": "five_min_trade_freq_profile",
+  "generated_at": "2026-07-29T00:51:31",
+  "source_probe": "five_min_feasibility_probe_20260729.json",
+  "read_only": true,
+  "not_promotion_evidence": true,
+  "global_medians": {
+    "med30_pct": 1.4524,
+    "med5_pct": 0.6334,
+    "r": 0.4361
+  },
+  "per_symbol": {
+    "AP888": {
+      "med30": 2.7523,
+      "med5": 0.8979,
+      "r": 0.3262
+    },
+    "RB888": {
+      "med30": 1.4384,
+      "med5": 0.6334,
+      "r": 0.4404
+    },
+    "SC888": {
+      "med30": 2.0627,
+      "med5": 0.7968,
+      "r": 0.3863
+    },
+    "A888": {
+      "med30": 1.4524,
+      "med5": 0.5996,
+      "r": 0.4128
+    },
+    "ZN888": {
+      "med30": 1.3737,
+      "med5": 0.5158,
+      "r": 0.3755
+    }
+  },
+  "profile_5分钟": {
+    "stop_loss_1buy": 87,
+    "stop_loss_2buy": 131,
+    "stop_loss_3buy": 153,
+    "stop_loss_1sell": 87,
+    "stop_loss_2sell": 131,
+    "stop_loss_3sell": 153,
+    "trailing_start_bp": 131,
+    "structural_invalidation_pct": 0.0218,
+    "timeout_1buy": 3600,
+    "timeout_2buy": 6000,
+    "timeout_3buy": 9000,
+    "timeout_1sell": 3600,
+    "timeout_2sell": 6000,
+    "timeout_3sell": 9000
+  },
+  "unchanged": {
+    "trailing_drawback_pct": "比例回撤容忍，无价格尺度"
+  }
+}

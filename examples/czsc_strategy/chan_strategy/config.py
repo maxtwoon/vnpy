@@ -13,7 +13,31 @@ STRATEGY_CONFIG = {
     # 曾存在的 base_freq/confirm_freq 键从未被任何代码消费（"次级别确认"未实现），
     # 已于 2026-07-26 审核后删除，避免用户误以为改这两项会生效。
     "trade_freq": "30分钟",    # 交易周期
-    "filter_freq": "日线",     # 环境过滤周期
+    "filter_freq": "日线",     # 环境过滤周期（A102 D1 起支持分钟级别，如 "30分钟"；"off" 显式关闭过滤层；默认 "日线" 基线字节一致）
+
+    # A102 D2 per-trade-freq parameter profiles. 引擎在 trade_freq 命中 profile 时
+    # 应用覆盖（经 get_strategy_param() 消费）；未命中或键缺失 = 现状值，基线字节一致。
+    # 仅允许覆盖风险/时间类键（PROFILE_ALLOWED_KEYS 白名单强制），不允许覆盖信号逻辑、
+    # 成本、仓位比例。"5分钟" 的取值出处：diagnostics/five_min_param_calibration_20260729.md
+    # （价格类按笔幅度系数 r=0.4361 缩放，timeout 按级别分钟数比 ×6 保持实际时间不变）。
+    "trade_freq_profiles": {
+        "5分钟": {
+            "stop_loss_1buy": 87,          # 30分钟基线 200BP × r
+            "stop_loss_2buy": 131,         # 300BP × r
+            "stop_loss_3buy": 153,         # 350BP × r
+            "stop_loss_1sell": 87,
+            "stop_loss_2sell": 131,
+            "stop_loss_3sell": 153,
+            "trailing_start_bp": 131,      # 300BP × r
+            "structural_invalidation_pct": 0.0218,  # 0.05 × r
+            "timeout_1buy": 3600,          # 600根 × 6 ≈ 保持300小时
+            "timeout_2buy": 6000,          # 1000根 × 6 ≈ 保持500小时
+            "timeout_3buy": 9000,          # 1500根 × 6 ≈ 保持750小时
+            "timeout_1sell": 3600,
+            "timeout_2sell": 6000,
+            "timeout_3sell": 9000,
+        },
+    },
 
     # 仓位管理
     # 注：总资金实际来自 BACKTEST_CONFIG["initial_capital"]（见下）；
@@ -246,3 +270,42 @@ BACKTEST_CONFIG = {
 
 # 信号版本
 SIGNAL_VERSION = "V260615"
+
+# A102 D2: trade_freq profile 可覆盖键白名单（风险/时间类）。
+# 信号逻辑、成本、仓位比例一律不允许通过 profile 覆盖。
+PROFILE_ALLOWED_KEYS = frozenset({
+    "stop_loss_1buy", "stop_loss_2buy", "stop_loss_3buy",
+    "stop_loss_1sell", "stop_loss_2sell", "stop_loss_3sell",
+    "timeout_1buy", "timeout_2buy", "timeout_3buy",
+    "timeout_1sell", "timeout_2sell", "timeout_3sell",
+    "trailing_start_bp", "trailing_drawback_pct",
+    "structural_invalidation_pct",
+})
+
+
+def validate_trade_freq_profiles() -> None:
+    """校验 trade_freq_profiles 只含白名单键；违规即 raise（fail-closed）。
+
+    引擎在 run() 启动时调用；非法 profile 不允许静默降级为部分生效。
+    """
+    profiles = STRATEGY_CONFIG.get("trade_freq_profiles") or {}
+    for freq, profile in profiles.items():
+        bad = set(profile) - PROFILE_ALLOWED_KEYS
+        if bad:
+            raise ValueError(
+                f"trade_freq_profiles[{freq!r}] 含非白名单键 {sorted(bad)}；"
+                f"只允许覆盖 {sorted(PROFILE_ALLOWED_KEYS)}"
+            )
+
+
+def get_strategy_param(key: str):
+    """A102 D2: 按当前 trade_freq 解析参数（profile 覆盖优先，基线值兜底）。
+
+    trade_freq 无 profile 或 profile 缺该键时返回 STRATEGY_CONFIG[key]，
+    默认配置下与直接读 STRATEGY_CONFIG[key] 字节一致。
+    """
+    profiles = STRATEGY_CONFIG.get("trade_freq_profiles") or {}
+    profile = profiles.get(STRATEGY_CONFIG.get("trade_freq")) or {}
+    if key in profile:
+        return profile[key]
+    return STRATEGY_CONFIG[key]

@@ -449,10 +449,10 @@ def test_get_all_signals_and_strategy_daily_anchor_branches(czsc_factory, bi_fac
     strategy = ChanTimingStrategy("T", enable_daily_filter=False)
     logs = []
     strategy.write_log = logs.append
-    strategy._log_daily_trend({}, base)
+    strategy._log_filter_trend({}, base)
     monkeypatch.setitem(positions_module.STRATEGY_CONFIG, "filter_freq", "日线")
-    strategy._log_daily_trend({"日线_D1BI_方向V260615": "向下_任意_任意_0"}, base)
-    strategy._log_daily_trend({"日线_D1BI_方向V260615": "向下_任意_任意_0"}, base)
+    strategy._log_filter_trend({"日线_D1BI_方向V260615": "向下_任意_任意_0"}, base)
+    strategy._log_filter_trend({"日线_D1BI_方向V260615": "向下_任意_任意_0"}, base)
     assert len(logs) == 1
 
     strategy.positions[0].pairs.append(

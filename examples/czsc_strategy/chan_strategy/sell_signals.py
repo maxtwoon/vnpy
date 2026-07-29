@@ -12,7 +12,7 @@ from czsc import CZSC
 from czsc import Direction
 
 from chan_strategy.zhongshu import build_zhongshu_from_bis
-from chan_strategy.config import STRATEGY_CONFIG
+from chan_strategy.config import STRATEGY_CONFIG, get_strategy_param
 from chan_strategy.signals import (
     _divergence_power,
     _get_confirmed_bi_list,
@@ -258,7 +258,7 @@ def signal_short_risk_control(c: CZSC, freq: str = "30分钟", stop_loss_pct: fl
         current_price = last_bi.high
     else:
         current_price = last_bi.low
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
+    pct = stop_loss_pct if stop_loss_pct is not None else get_strategy_param("structural_invalidation_pct")
     if current_price > last_zs["zg"] * (1 + pct):
         v1, score = "结构失效", 95
     elif last_zs["n_bis"] >= 9:
@@ -274,7 +274,8 @@ def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_
 
     Uses mode="recent" so the structural-exit center aligns with the center
     used by position/direction factors. The threshold is read from
-    ``STRATEGY_CONFIG["structural_invalidation_pct"]``.
+    ``STRATEGY_CONFIG["structural_invalidation_pct"]``（A102 D2 起经
+    ``get_strategy_param()`` 解析，trade_freq profile 优先）。
     """
     k1, k2, k3 = freq, "D1BSP", "空头风控RV260615"
     bi_list = _get_confirmed_bi_list(c)
@@ -291,7 +292,7 @@ def signal_short_risk_control_recent(c: CZSC, freq: str = "30分钟", stop_loss_
         current_price = last_bi.high
     else:
         current_price = last_bi.low
-    pct = stop_loss_pct if stop_loss_pct is not None else STRATEGY_CONFIG["structural_invalidation_pct"]
+    pct = stop_loss_pct if stop_loss_pct is not None else get_strategy_param("structural_invalidation_pct")
     if current_price > last_zs["zg"] * (1 + pct):
         v1, score = "结构失效", 95
     return {f"{k1}_{k2}_{k3}": f"{v1}_任意_任意_{score}"}
