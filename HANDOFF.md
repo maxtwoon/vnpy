@@ -1,20 +1,135 @@
 ---
-task: fix-divergence-status-zhongshu-selection - Fix P4 divergence signal structurally unreachable for shorts
+task: A107-scaffolding-docs-overhaul - czsc_strategy 子项目手脚架整改 + 基础库文档/示例完善
 version: 4.4.0
-stage: done
-owner: codex
-updated: 2026-07-28
+stage: dev
+owner: kimi-code
+updated: 2026-07-29
 deliverables:
   - HANDOFF.md
-  - docs/design/fix-divergence-status-zhongshu-selection.md
+  - examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md
+  - examples/czsc_strategy/README.md
+  - examples/czsc_strategy/docs/README.md
+  - examples/czsc_strategy/docs/design/README.md
+  - examples/czsc_strategy/docs/reference/chan_strategy_api.md
+  - examples/czsc_strategy/docs/reference/czsc_vendor_notes.md
+  - examples/czsc_strategy/docs/reference/quickstart_example.py
+  - examples/czsc_strategy/tests/conftest.py
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
-last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: design
+last_transition_to_stage: dev
+last_transition_from_owner: claude-cowork
+last_transition_to_owner: kimi-code
 ---
+
+## Background (A107)
+
+用户要求对 `examples/czsc_strategy/` 子项目做详细审计，并据此设计、完善项目手脚架/目录
+架构，同时完善基础库（`chan_strategy/` 内部库、`chan_strategy/vendor/` 第三方 vendor 库、
+vnpy 核心接入点）的文档与示例。范围经用户澄清确认为 czsc_strategy 子项目本身（不含
+`vnpy/` 上游核心框架目录结构）。
+
+完整审计发现（4 个并行只读子代理分别覆盖 chan_strategy/ 核心库、diagnostics/ 约 480 个
+文件、根目录散落脚本、docs//tests//tools//skill_build/）与完整设计方案在
+`examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md`，请 dev 完整阅读
+该文件后开工——本节只是指针，不是复述。
+
+## 验收标准
+
+完整、逐条可判定的验收清单见
+`examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md` 的"验收标准"节
+（AC1~AC7）。要点：
+
+- [ ] AC1 目录结构：新增 `scripts/`、`legacy/`、`archive/one_shot_scripts/`、
+      `archive/reports/`，原 19 个根级散落脚本/notebook 全部 `git mv` 归位（非删除）。
+- [ ] AC2 零行为变化：`chan_strategy/**` 与 `diagnostics/**` 零改动；现有测试通过数不减少。
+- [ ] AC3 路径引用一致性：README.md 等活跃文档中对已迁移文件的引用同步更新新路径。
+- [ ] AC4 命名去陷阱：`archive/one_shot_scripts/` 下不留任何匹配 pytest 默认收集模式
+      （`test_*.py`）的文件名。
+- [ ] AC5 新增 `docs/reference/chan_strategy_api.md` 覆盖全部 14 个 chan_strategy 模块，
+      明确写出 `signals.py`/`sell_signals.py` 两个 `get_all_signals()` 的关系；
+      `docs/design/README.md` 索引条目数等于 `docs/design/*.md` 文件数。
+- [ ] AC6 `docs/reference/quickstart_example.py` 可运行或明确声明数据依赖，Manual
+      Verification 附实际运行输出（或替代验证方式）。
+- [ ] AC7 完成定义：VERSION bump + CHANGELOG 一条 + 设计文档阶段字段更新为
+      "dev implemented"，同一提交；`python tools/sync_check.py`（`--root
+      examples/czsc_strategy`）通过。
+
+## 给下一棒的说明
+
+(dev = kimi-code)
+
+1. 先完整阅读 `examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md`
+   全文，特别是 §4"接入边界"和 §6"非目标"——本任务明确**不**触碰 `chan_strategy/`
+   任何代码逻辑，也**不**处理 `diagnostics/` 目录重组（那是留给后续任务 A108 的建议，
+   不要顺手做）。
+2. 所有文件搬迁用 `git mv`，保留历史；不要用删除+新建。
+3. 迁移后必须 grep 全部活跃文档（README.md 等，历史 CHANGELOG/HANDOFF 条目不回溯改写）
+   确认路径引用同步，设计文档 AC3 给了具体 grep 命令。
+4. 新增的 `docs/reference/chan_strategy_api.md` 每条公开 API 描述必须能在对应源文件中
+   找到依据（签名/docstring/调用点），不得凭空推测未读代码的行为——设计文档 §3.2 已
+   明确这条要求。
+5. 完成后跑 `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` 确认通过数不
+   低于本任务开始前基线，并在 Manual Verification 记录前后对比。
+
+## Manual Verification
+
+- **pytest 基线（迁移前）**：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+  ```
+  结果：`1009 passed, 4 deselected, 4 xfailed`（2026-07-30 00:01）。
+
+- **pytest 迁移后**：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+  ```
+  结果：`1009 passed, 4 deselected, 4 xfailed`（2026-07-30 00:30），通过数未减少。
+
+- **`docs/reference/quickstart_example.py` 实跑**：
+  ```powershell
+  cd D:\repo\vnpy\examples\czsc_strategy
+  python docs/reference/quickstart_example.py
+  ```
+  结果：脚本在合成数据上跑通，输出 1200 根 1 分钟 bar → 40 根 30 分钟 bar、13 条信号、
+  "一买多头"子策略的开仓/平仓事件描述。无需真实历史数据库。
+
+- **路径引用一致性抽查**：
+  - `README.md` 中所有 `run_chan_backtest.py` / `run_formal_evaluation.py` / `run_validation.py` 引用均指向 `scripts/`。
+  - `README.md` 中 A 股原型文件引用均指向 `legacy/`。
+  - `archive/one_shot_scripts/` 下无 `test_*.py` 文件名。
+
+- **`python tools/sync_check.py --root examples/czsc_strategy`**：PASS（VERSION/CHANGELOG 一致）。
+
+## 决策记录
+
+- 2026-07-29 (claude-code, design) - A107 设计完成，范围经用户澄清确认（4 个问题，见
+  设计文档 §8 决策记录）；`diagnostics/` 重组排除出本任务范围，建议作为独立后续任务
+  A108。
+- 2026-07-30 (kimi-code, dev) - A107 实现完成：目录重组、文档/示例补齐、VERSION bump 至
+  0.2.65 <!-- synccheck:ignore -->，所有变更见 `examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md` §7
+  Dev 实现记录与 `CHANGELOG.md` 0.2.65 <!-- synccheck:ignore --> 条目。
+- 2026-07-30 (kimi-code, dev) - 关于 `tests/unit/test_repo_hygiene.py` 的路径同步：该测试原本
+  断言根目录存在 `_patch_backtest*.py` 并检查其头部含 `ONE-SHOT`/`LEGACY` 标注。A107 已将这
+  4 个脚本 `git mv` 到 `archive/one_shot_scripts/patch_backtest_1.py..4.py` 并保留标注，因此
+  仅更新测试中的路径列表以反映新的仓库布局；未改动断言条件本身。这是本次任务中唯一一处
+  非 `conftest.py` 的测试文件路径更新，理由：AC1/AC2 要求根目录清理且测试通过，而该测试
+  的性质是仓库结构卫生检查，必须随结构同步。
+
+## 交接历史（本任务）
+
+| 日期 | 从 → 到 | 阶段变化 | 摘要 |
+|------|---------|----------|------|
+| 2026-07-29 | 人 → claude-code | done → design | A107 启动：czsc_strategy 子项目详细审计 + 手脚架/目录架构设计 + 基础库文档/示例完善，用户确认范围为子项目本身、基础库涵盖 chan_strategy/vendor/vnpy 核心三者、走正式 design 交接流程 |
+
+---
+
+## 历史任务记录（fix-divergence-status-zhongshu-selection，已于 2026-07-28 done，详见 git 历史）
 
 ## Background
 
@@ -194,3 +309,4 @@ blocking reason.
 | 2026-07-28 | codex → kimi-code | review → dev | 打回: signal_first_sell not refactored to shared departure-leg helper |
 | 2026-07-28 | kimi-code → codex | dev → review | Fixed review rejection: signal_first_sell() now calls _select_zhongshu_for_departure_leg(); all gates pass (unit 986, realdb 4, preflight 338, sync_check root+subproject, ruff 0). |
 | 2026-07-28 | codex → codex | review → done | Review passed: divergence zhongshu helper reused by signal_divergence_status/signal_first_buy/signal_first_sell; focused 8-test fixture passes; sync gates and touched-file ruff pass; unit/preflight rely on recorded native counts due documented WinError 5 sandbox limitation. |
+| 2026-07-29 | claude-cowork → kimi-code | design → dev | A107 设计完成：4 子代理并行审计 chan_strategy 核心库/diagnostics 480 文件/根目录散落脚本/docs-tests-tools-skill_build，产出 scripts+legacy+archive 根目录重组方案与 docs 索引/基础库 API 参考文档设计；diagnostics 重组排除出范围留作 A108 建议 |

@@ -10,13 +10,31 @@
 > - `research_only`: True
 > - `note`: 请勿将本仓库中的回测数字、参数默认值或诊断报告作为投资建议使用。
 
+## 快速开始
+
+1. **安装依赖**：本项目基于 VeighNa（vnpy）框架，环境安装请参考仓库根目录 `AGENTS.md` / `install.bat`；本目录额外依赖见 `requirements.txt`（核心为 `czsc==1.0.0rc8`、`pyecharts==2.1.0`）。
+2. **验证环境**：
+   ```bash
+   python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+   ```
+3. **跑一次默认回测**（需要本地 SQLite 期货 1 分钟数据库，路径见 `chan_strategy/config.py`）：
+   ```bash
+   cd examples/czsc_strategy
+   python scripts/run_chan_backtest.py
+   ```
+   正式评估（risk + enforce）使用 `python scripts/run_formal_evaluation.py`。
+4. **看最小 API 示例**：`docs/reference/quickstart_example.py` 演示了如何在不依赖真实历史数据库的情况下，用 `chan_strategy` 导出的核心 API 生成信号。
+5. **完整测试矩阵**：见 `tests/TEST_REPORT.md`。
+
+现役入口脚本已统一放在 `scripts/`；已废止的早期 A 股原型在 `legacy/`；一次性调试脚本和历史报告归档在 `archive/`。详细信息见下文"文件结构"。
+
 ## 策略概述
 
 本目录是 VeighNa（vnpy）框架上的一个**期货 CTA 研究策略**，基于缠论（CZSC）结构分析，以"一买 / 二买 / 三买"及其镜像卖点作为核心信号，对选定的商品期货连续合约进行多周期择时。
 
-与仓库中仍保留的早期 A 股原型（`czsc_adapter.py` / `czsc_multi_timeframe_strategy.py` / `run_baostock_backtest.py`）不同，当前 actively-tested 的实现完全位于 `chan_strategy/` 目录下，信号版本为 `V260615`。
+与仓库中仍保留的早期 A 股原型（`legacy/czsc_adapter.py` / `legacy/czsc_multi_timeframe_strategy.py` / `legacy/run_baostock_backtest.py`）不同，当前 actively-tested 的实现完全位于 `chan_strategy/` 目录下，信号版本为 `V260615`。
 
-> **历史归档**：旧版 README 内容已移至 [`README.legacy.md`](./README.legacy.md)，其中描述的 2021-2022 年 A 股波段战法原型已不再接入当前回测与测试路径。
+> **历史归档**：旧版 README 内容已移至 [`legacy/README.md`](./legacy/README.md)，其中描述的 2021-2022 年 A 股波段战法原型已不再接入当前回测与测试路径。
 
 ## 核心设计
 
@@ -82,7 +100,7 @@
 | `trailing_drawback_pct` | 0.25 | 从最高盈利回撤 25% 时平仓 |
 | `structural_invalidation_pct` | 0.05 | 价格突破中枢边缘 5% 视为结构失效 |
 
-> **参数沿革（2026-07-26 审核后补充）**：上表止损/超时/移动止损数值源自项目早期 A 股波段战法原型（`README.legacy.md`）的经验设定，迁移到期货 CTA 场景时未针对期货合约的波动率/保证金特性重新优化或做参数敏感性扫描；`diagnostics/` 下的稳健性扫描（成本敏感性、品种邻域扫描）验证的是这组既定数值的稳健性，不等于验证了数值本身的最优性。修改前建议先看 `diagnostics/platform_optimization_round*.md` 系列既有扫描结果。
+> **参数沿革（2026-07-26 审核后补充）**：上表止损/超时/移动止损数值源自项目早期 A 股波段战法原型（`legacy/README.md`）的经验设定，迁移到期货 CTA 场景时未针对期货合约的波动率/保证金特性重新优化或做参数敏感性扫描；`diagnostics/` 下的稳健性扫描（成本敏感性、品种邻域扫描）验证的是这组既定数值的稳健性，不等于验证了数值本身的最优性。修改前建议先看 `diagnostics/platform_optimization_round*.md` 系列既有扫描结果。
 
 ### 默认交易标的
 
@@ -122,30 +140,52 @@ not broker-grade execution modeling.
 
 ```
 examples/czsc_strategy/
+├── README.md                          # 本文档（当前策略）
+├── VERSION                            # 子项目版本
+├── CHANGELOG.md                       # 子项目变更日志
+├── AGENTS.md                          # 子项目 agent 指引
+├── requirements.txt                   # Python 依赖
 ├── chan_strategy/                     # 当前策略核心实现
+│   ├── __init__.py                    # 公开 API 导出
 │   ├── backtest_engine.py             # 回测引擎
 │   ├── config.py                      # 策略与回测配置（单一来源）
 │   ├── data_adapter.py                # SQLite 数据适配层
+│   ├── html_report.py                 # HTML 可视化报告
 │   ├── limit_config.py                # 涨跌停/停牌配置
 │   ├── portfolio_engine.py            # 组合风险协调器
+│   ├── portfolio_ledger.py            # 组合账本
 │   ├── positions.py                   # 持仓与仓位管理
 │   ├── rollover_config.py             # 连续合约 rollover 配置
 │   ├── sell_signals.py                # 生产卖点/买点信号（当前回测使用）
 │   ├── signals.py                     # 基础分类与买点信号（含兼容实现）
-│   ├── utils.py                       # 工具函数
 │   ├── validation.py                  # 验证工具
-│   └── zhongshu.py                    # 中枢构建
+│   ├── zhongshu.py                    # 中枢构建
+│   └── vendor/                        # czsc 0.9.51 echarts_plot 文件级 vendor
+├── scripts/                           # 现役入口脚本
+│   ├── run_chan_backtest.py           # 当前期货策略回测入口
+│   ├── run_formal_evaluation.py       # 正式评估入口（risk + enforce）
+│   └── run_validation.py              # 验证脚本
+├── legacy/                            # 已废止的早期 A 股原型
+│   ├── README.md                      # 旧版 A 股原型归档
+│   ├── czsc_adapter.py
+│   ├── czsc_multi_timeframe_strategy.py
+│   ├── run_akshare_backtest.py
+│   ├── run_baostock_backtest.py
+│   ├── run_stock_backtest.py
+│   └── backtesting_demo.ipynb
+├── archive/                           # 一次性调试脚本与历史报告
+│   ├── one_shot_scripts/
+│   └── reports/
 ├── diagnostics/                       # 诊断报告与研究输出
 ├── tests/                             # 单元/集成/性能测试
-├── run_chan_backtest.py               # 当前期货策略回测入口
-├── run_validation.py                  # 验证脚本
-├── README.md                          # 本文档（当前策略）
-├── README.legacy.md                   # 旧版 A 股原型归档
-├── VERSION                            # 子项目版本
-└── CHANGELOG.md                       # 子项目变更日志
+└── docs/                              # 文档索引、设计文档与参考
+    ├── README.md
+    ├── architecture/
+    ├── design/
+    └── reference/
 ```
 
-> 旧版文件 `czsc_adapter.py`、`czsc_multi_timeframe_strategy.py`、`run_baostock_backtest.py` 等仍保留在目录中，但属于**已废止的早期 A 股原型**，当前测试与生产回测路径不再引用。
+> 旧版文件已整体迁入 `legacy/`，属于**已废止的早期 A 股原型**，当前测试与生产回测路径不再引用。
 
 ## 使用方法
 
@@ -153,7 +193,7 @@ examples/czsc_strategy/
 
 ```bash
 cd examples/czsc_strategy
-python run_chan_backtest.py
+python scripts/run_chan_backtest.py
 ```
 
 首次运行前请确认 `chan_strategy/config.py` 中的 `SQLITE_DB_PATH` 指向有效的期货 1 分钟 K 线 SQLite 数据库。数据库表名格式通常为 `{symbol}_1M_raw`（如 `sc888_1M_raw`）。
@@ -186,7 +226,7 @@ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
 
 完整列表与默认值请以 `chan_strategy/config.py` 为准，README 不再逐一复制，以避免再次出现文档漂移。
 
-如需运行默认配置以上的正式评估路径（`sizing_model="risk"`、`limit_halt_model="enforce"`、换月窗口开仓门控等），请使用独立入口 `run_formal_evaluation.py`，而不是默认的 `run_chan_backtest.py`。**该入口是单品种评估，不包含任何组合级风控**（`max_margin_pct` / `daily_loss_limit_pct` / `max_drawdown_breaker_pct` 均只存在于多品种联合回放路径）；如需组合级风控约束下的报告，请改用 `PortfolioEngine(symbols, ...).run()` 并设置 `portfolio_risk="on"` + `sizing_model="risk"`（见 `chan_strategy/portfolio_engine.py` / `portfolio_ledger.py`）。
+如需运行默认配置以上的正式评估路径（`sizing_model="risk"`、`limit_halt_model="enforce"`、换月窗口开仓门控等），请使用独立入口 `scripts/run_formal_evaluation.py`，而不是默认的 `scripts/run_chan_backtest.py`。**该入口是单品种评估，不包含任何组合级风控**（`max_margin_pct` / `daily_loss_limit_pct` / `max_drawdown_breaker_pct` 均只存在于多品种联合回放路径）；如需组合级风控约束下的报告，请改用 `PortfolioEngine(symbols, ...).run()` 并设置 `portfolio_risk="on"` + `sizing_model="risk"`（见 `chan_strategy/portfolio_engine.py` / `portfolio_ledger.py`）。
 
 ### 适用前提与失效环境（2026-07-26 审核后补充）
 

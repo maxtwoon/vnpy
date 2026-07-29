@@ -15,10 +15,10 @@ def test_backtest_idempotent_regression_lives_under_unit_tests():
 
 def test_one_shot_patch_scripts_are_explicitly_labeled_legacy():
     for name in (
-        "_patch_backtest.py",
-        "_patch_backtest2.py",
-        "_patch_backtest3.py",
-        "_patch_backtest4.py",
+        "archive/one_shot_scripts/patch_backtest_1.py",
+        "archive/one_shot_scripts/patch_backtest_2.py",
+        "archive/one_shot_scripts/patch_backtest_3.py",
+        "archive/one_shot_scripts/patch_backtest_4.py",
     ):
         header = "\n".join((PROJECT_ROOT / name).read_text(encoding="utf-8").splitlines()[:8])
         assert "ONE-SHOT" in header

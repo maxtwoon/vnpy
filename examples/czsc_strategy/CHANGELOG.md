@@ -3,6 +3,62 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 0.2.65（2026-07-30）- A107 项目手脚架整改 + 基础库文档/示例完善
+
+- 目录结构重组（全部 `git mv`，无删除）：
+  - 现役入口脚本迁入 `scripts/`：`run_chan_backtest.py`、`run_formal_evaluation.py`、`run_validation.py`。
+  - 已废止的早期 A 股原型迁入 `legacy/`：`README.md`（原 `README.legacy.md`）、`czsc_adapter.py`、
+    `czsc_multi_timeframe_strategy.py`、`run_akshare_backtest.py`、`run_baostock_backtest.py`、
+    `run_stock_backtest.py`、`backtesting_demo.ipynb`。
+  - 一次性调试脚本迁入 `archive/one_shot_scripts/`：`debug_zs.py`（原 `_debug_zs.py`）、
+    `patch_backtest_1.py..4.py`（原 `_patch_backtest{1..4}.py`）、`debug_pos.py`、`inspect_db.py`、
+    `czsc_api_probe_1.py` / `czsc_api_probe_2.py`（原 `test_czsc_api.py` / `test_czsc_api2.py`，改名避免 pytest 默认收集）。
+  - 历史点状审计/复审报告迁入 `archive/reports/`：`AUDIT_REPORT_2026-07-03.md`、
+    `AI_REVIEW_REPORT_2026-07-26.md`、`AI_REVIEW_REPORT_2026-07-26_v2.md`。
+- 活跃文档路径引用同步：
+  - `README.md` 新增"快速开始"小节，修正目录树与所有现役/legacy 脚本路径引用。
+  - 被归档脚本内部硬编码路径已同步为 `legacy/` 或仓库根定位；一次性脚本顶部追加 A107 迁移说明。
+  - `tests/unit/test_repo_hygiene.py` 的 one-shot 补丁脚本路径同步更新为 `archive/one_shot_scripts/`。
+- 新增文档：
+  - `docs/README.md`：docs/ 总索引，区分 architecture/design/reference 三类文档。
+  - `docs/design/README.md`：现有设计文档索引（条目数等于 `docs/design/*.md` 文件数）。
+  - `docs/reference/chan_strategy_api.md`：`chan_strategy/` 全部 14 个模块的 API 参考，
+    明确说明 `signals.py.get_all_signals()`（已弃用遗留入口）与 `sell_signals.py.get_all_signals()`
+    （当前生产路径、包级导出）的关系。
+  - `docs/reference/czsc_vendor_notes.md`：`chan_strategy/vendor/` 来源、原因、版本 guard 说明。
+  - `docs/reference/quickstart_example.py`：最小可运行示例（合成数据 → 重采样 → CZSC → 信号 → 仓位工厂），
+    不依赖真实历史数据库即可跑通。
+- `tests/conftest.py` 仅新增模块级 docstring，说明核心 fixture 用途，未改动 fixture 实现。
+- 铁律保持：`chan_strategy/**` 与 `diagnostics/**` 无任何代码逻辑改动；`diagnostics/` 目录重组明确排除在本任务之外。
+- 门禁：not-realdb 单元测试 1009 passed/4 deselected/4 xfailed（与迁移前基线一致）；
+  `python tools/sync_check.py --root examples/czsc_strategy` PASS。
+
+## 0.2.64（2026-07-29）- 07-29 决策签署：集中度阈值按滚动口径重校准 + 观察窗重置
+
+- **事件**：07-29 上午实跑 `automation_status=halt`，触发项
+  `symbol_top1_abs_share=0.8917` / `strategy_top1_abs_share=0.7576`。方案 C 行为验证正确：
+  `concentration_sample={trade_count: 7, insufficient_sample: false}`，样本充足、指标 binding，
+  属真实越线而非 07-28 式漂移。
+- **决策**（`simnow_risk_halt_decision_2026-07-29.json`，operator=hanabeatrisa，
+  官方校验 valid）：`adjust_thresholds_with_documented_rationale`，
+  `requires_observation_window_reset=true`，`next_formal_observation_allowed=true`。
+- **重校准证据**：旧线来自累计口径基线，在 0.2.55 滚动 60 日口径下位于历史中位数之下——
+  回放 2023-06-01~2026-07-29（5 品种 200 笔平仓，1034 个样本充足日）显示旧 halt 线会在
+  75.9%（symbol）/ 43.9%（strategy）的普通交易日误停；07-29 值 symbol=p99（历史第 3）、
+  strategy=p75（第 253），均属常态分布内。新线沿用仓库惯例（baseline=滚动口径历史最差、
+  warning=0.9×halt）：symbol halt `0.9204427273660823` / warning `0.8283984546294741`；
+  strategy halt `1.0` / warning `0.9`（按构造仅 warning 门，组合级风险仍由 symbol 集中度、
+  回撤、敞口、连亏线把守）。校准方法脚本 `diagnostics/calibrate_concentration_step1.py` +
+  `step2.py` 入库，口径与窗口 caveat 写入阈值 json 的 `_updated_2026-07-29` 注记。
+- **观察窗**：`simnow_observation_window.json` → `observation_start_date=2026-07-30`
+  （guardrail：阈值改动即重置，20 日重新计数）；07-29 halt 日保留审计、不计有效。
+  阈值/决策 json 为 gitignored 本地 artifact（沿用仓库惯例），入库的是本条目、
+  ACCEPTANCE.md 口径说明、校准脚本与观察窗配置。
+- **测试**：修复 `test_cli_writes_summary_json` 对观察窗配置的隐式耦合
+  （硬编码记录日期 2026-07-28，窗口前移后必挂；改为从 `load_observation_start_date()`
+  动态取日期）；全量单测 986 passed, 23 skipped；
+  `simnow_risk_halt_decision.py --validate` valid；sync_check PASS。
+
 ## 0.2.63（2026-07-29）- A106 走势类型分类信号实现（dev 阶段）
 
 - `chan_strategy/signals.py` 新增只读 `signal_trend_type()`，输出

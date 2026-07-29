@@ -1,3 +1,27 @@
+"""czsc_strategy 测试共享 fixture。
+
+本模块为 `tests/unit`、`tests/integration`、`tests/performance` 提供合成数据与测试替身，
+避免单元测试依赖真实历史数据库或实盘行情。
+
+核心 fixture：
+
+- `FakeBI` / `FakeCZSC`：轻量 dataclass 替身，模拟 czsc 的 BI/CZSC 对象，
+  用于不触发 czsc 内部复杂笔构造的信号分支测试。
+- `strict_czsc_factory`：在 `FakeCZSC` 构造时校验已确认笔方向严格交替，
+  关闭曾被历史 bug 利用的"连续同向笔" fixture 漏洞。
+- `bi_factory` / `czsc_factory`：快速构造 FakeBI / FakeCZSC 的工厂。
+- `synthetic_1m_bars` / `mini_backtest_bars`：由随机游走合成的 1 分钟 RawBar，
+  用于数据适配器、重采样、回测引擎等不依赖真实数据库的测试。
+- `memory_db`：基于 `tmp_path` 的内存（临时文件）SQLite 数据库，
+  表结构模拟 `{symbol}_1M_raw`，供 data_adapter 与回测入口测试使用。
+- `real_db_path`：本地历史 SQLite 数据库路径，默认指向 `chan_strategy/config.py`
+  中的 `SQLITE_DB_PATH`，可通过环境变量 `CHAN_SQLITE_DB_PATH` 覆盖；
+  仅被标记为 `realdb` 的集成/性能测试使用。
+
+pytest 自定义：
+
+- `pytest_configure` 注册 `realdb`（需要本地历史数据库）和 `slow`（长时运行）两个 marker。
+"""
 import os
 import sqlite3
 import sys
