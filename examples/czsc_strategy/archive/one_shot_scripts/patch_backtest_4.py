@@ -1,6 +1,7 @@
-"""ONE-SHOT / LEGACY patch script for archived Baostock backtest experiments."""
+"""ONE-SHOT / LEGACY patch script for archived Baostock backtest experiments.
+路径已随 A107 迁移（原 _patch_backtest4.py → archive/one_shot_scripts/patch_backtest_4.py），未重新验证可运行性。"""
 
-fpath = r'd:\repo\vnpy\examples\czsc_strategy\run_baostock_backtest.py'
+fpath = r'd:\repo\vnpy\examples\czsc_strategy\legacy\run_baostock_backtest.py'
 content = open(fpath, 'r', encoding='utf-8').read()
 
 # Change COOLDOWN from 48 to 144
@@ -16,7 +17,7 @@ else:
 open(fpath, 'w', encoding='utf-8').write(content)
 
 # Change profit_lock_pct_2 to 0.40 in STRATEGY_SETTING
-fpath2 = r'd:\repo\vnpy\examples\czsc_strategy\run_baostock_backtest.py'
+fpath2 = r'd:\repo\vnpy\examples\czsc_strategy\legacy\run_baostock_backtest.py'
 content2 = open(fpath2, 'r', encoding='utf-8').read()
 old_pl2 = '    "profit_lock_pct_2": 0.30,'
 new_pl2 = '    "profit_lock_pct_2": 0.40,  # 放宽止盈门槛'

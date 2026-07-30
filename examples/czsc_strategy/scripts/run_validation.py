@@ -1,7 +1,7 @@
 """
 缠论择时策略验证脚本
 
-运行: python run_validation.py
+运行: python scripts/run_validation.py
 
 功能:
 1. 加载数据并运行回测获取信号历史

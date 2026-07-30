@@ -2,13 +2,13 @@
 正式评估回测入口
 
 Usage:
-    python run_formal_evaluation.py [--symbol SYMBOL] [--table TABLE]
+    python scripts/run_formal_evaluation.py [--symbol SYMBOL] [--table TABLE]
 
 本入口显式启用 `sizing_model="risk"` + `limit_halt_model="enforce"`，
 用于生成比默认研究基线更接近真实合约约束的正式评估报告。
 它不会修改 `chan_strategy/config.py` 中的默认字典值。
 
-数据来源、数据库结构与 `run_chan_backtest.py` 一致。
+数据来源、数据库结构与 `scripts/run_chan_backtest.py` 一致。
 
 注（2026-07-26 审核后补充）：本入口是**单品种**评估，不包含任何组合级风控
 （max_margin_pct / daily_loss_limit_pct / max_drawdown_breaker_pct）——这些

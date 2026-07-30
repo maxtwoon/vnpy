@@ -2,7 +2,7 @@
 缠论择时策略回测脚本
 
 使用方法:
-    python run_chan_backtest.py
+    python scripts/run_chan_backtest.py
 
 数据来源: SQLite数据库（期货1分钟K线）
     D:\\BaiduNetdiskDownload\\新数据库\\ssquant数据库_20260425\\kline_data.db
@@ -28,7 +28,7 @@ def main():
     print("!" * 60)
     print("警告：本入口为 RESEARCH_BASELINE（研究基线）默认入口。")
     print("      生成的报告使用默认研究配置，不构成生产/可交易证据。")
-    print("      正式评估请使用 run_formal_evaluation.py。")
+    print("      正式评估请使用 scripts/run_formal_evaluation.py。")
     print("!" * 60)
     print()
 

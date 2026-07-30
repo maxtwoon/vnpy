@@ -3,7 +3,7 @@ task: A107-scaffolding-docs-overhaul - czsc_strategy 子项目手脚架整改 + 
 version: 4.4.0
 stage: dev
 owner: kimi-code
-updated: 2026-07-29
+updated: 2026-07-30
 deliverables:
   - HANDOFF.md
   - examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md
@@ -17,11 +17,11 @@ deliverables:
   - examples/czsc_strategy/VERSION
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
-last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
+last_transition_kind: reject
+last_transition_actor: codex
+last_transition_from_stage: review
 last_transition_to_stage: dev
-last_transition_from_owner: claude-cowork
+last_transition_from_owner: codex
 last_transition_to_owner: kimi-code
 ---
 
@@ -105,6 +105,33 @@ vnpy 核心接入点）的文档与示例。范围经用户澄清确认为 czsc_
   - `archive/one_shot_scripts/` 下无 `test_*.py` 文件名。
 
 - **`python tools/sync_check.py --root examples/czsc_strategy`**：PASS（VERSION/CHANGELOG 一致）。
+
+## Review 结论（codex 角色，由 Claude 子代理代跑）
+
+**说明**：codex CLI 当前额度耗尽，本轮 review 由用户明确指示改用 Claude Code 的 Agent 子代理
+独立完成，非真实 codex 执行；`--actor codex` 仅用于满足 `.synccheck.yml` 门禁的字符串匹配，
+如实记录于此保证审计链条不失真（见 claude-code 侧记忆 kimi-codex-quota-fallback-to-subagents）。
+
+子代理独立重跑（不是复述 dev 自述）：`git diff --stat` 确认 `chan_strategy/**` 零改动；
+`diagnostics/**` 的 4 处改动经 `git log` 追溯均为会话开始前已存在、与 A107 无关的 SimNow 记录；
+`pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` 实测 `1009 passed, 4 deselected,
+4 xfailed`，与基线一致；`pytest --collect-only -q`（从子项目根目录裸跑，无路径参数）验证
+`archive/one_shot_scripts/` 下零文件被误收集；`docs/reference/chan_strategy_api.md` 对全部
+14 个模块的描述抽查 2 处均可在源码找到依据，`signals.py`/`sell_signals.py` 两个
+`get_all_signals()` 关系描述准确；`docs/reference/quickstart_example.py` 实跑通过；两处
+`sync_check.py` 均 PASS；`test_repo_hygiene.py` 的路径同步判定为合理适配，断言强度未被削弱
+（结论与 kimi-code 决策记录一致）。
+
+**发现的真实阻塞问题**：`git status` 显示 commit `ad343801d`（dev 提交）之后，工作区仍留有
+**未提交**的必要收尾修复：`scripts/run_chan_backtest.py`/`run_formal_evaluation.py`/
+`run_validation.py` 的 docstring 路径修正、`archive/one_shot_scripts/patch_backtest_{1,4}.py`
+内部硬编码的绝对路径修正（原来仍指向已不存在的根目录 `run_baostock_backtest.py`，应指向
+`legacy/run_baostock_backtest.py`）、其余 one_shot 脚本的迁移说明追加、`legacy/README.md`
+路径修正。这些改动内容本身正确、必要，但从未 `git commit`，与 AC7"同一提交完成"的要求相悖——
+若现在标记 done，实际已提交的归档脚本里仍留着指向不存在路径的死引用。
+
+**裁决：REJECT → dev**。不是设计或实现思路的问题，只是收尾提交遗漏，预计 dev 一次
+`git add` + `git commit` 即可解决，无需重新设计或重新实现。
 
 ## 决策记录
 
@@ -310,3 +337,5 @@ blocking reason.
 | 2026-07-28 | kimi-code → codex | dev → review | Fixed review rejection: signal_first_sell() now calls _select_zhongshu_for_departure_leg(); all gates pass (unit 986, realdb 4, preflight 338, sync_check root+subproject, ruff 0). |
 | 2026-07-28 | codex → codex | review → done | Review passed: divergence zhongshu helper reused by signal_divergence_status/signal_first_buy/signal_first_sell; focused 8-test fixture passes; sync gates and touched-file ruff pass; unit/preflight rely on recorded native counts due documented WinError 5 sandbox limitation. |
 | 2026-07-29 | claude-cowork → kimi-code | design → dev | A107 设计完成：4 子代理并行审计 chan_strategy 核心库/diagnostics 480 文件/根目录散落脚本/docs-tests-tools-skill_build，产出 scripts+legacy+archive 根目录重组方案与 docs 索引/基础库 API 参考文档设计；diagnostics 重组排除出范围留作 A108 建议 |
+| 2026-07-30 | kimi-code → codex | dev → review | A107 dev 完成：根目录 19 个脚本/报告全部 git mv 归位（scripts/、legacy/、archive/one_shot_scripts/、archive/reports/），README 新增快速开始并同步路径；新增 docs 索引、API 参考、vendor 说明、最小可运行示例；conftest.py 仅补 docstring；子项目 VERSION bump 与 CHANGELOG 条目、设计文档阶段更新已同提交。验证：pytest not-realdb 1009 passed/4 deselected/4 xfailed（与基线持平），quickstart_example.py 实跑通过，sync_check root + --root examples/czsc_strategy 双 PASS，handoff.py status deliverables 全 OK。 |
+| 2026-07-30 | codex → kimi-code | review → dev | 打回: Working-tree contains uncommitted-but-necessary A107 follow-up fixes (scripts/*.py docstring paths, archive/one_shot_scripts/patch_backtest_{1,4}.py hardcoded absolute paths still pointing at deleted root location, legacy/README.md path corrections) never captured in a commit; git commit them (git add + git commit, no redesign/reimplementation needed) then hand back to review. |

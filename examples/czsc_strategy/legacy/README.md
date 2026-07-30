@@ -3,9 +3,10 @@
 > **⚠️ 此文档为历史归档，描述的是 2021-2022 年 A 股市场的早期原型，不是当前策略。**
 >
 > - **归档日期**：2026-07-15（随 A66 README 重写任务一并归档）
+> - **二次迁移日期**：2026-07-30（A107）——本文件及对应 A 股原型脚本已从仓库根目录迁入 `legacy/`，以清理根目录并避免与现役入口混淆。
 > - **状态**：已废止、未接入当前回测路径
-> - **对应文件**：`czsc_adapter.py`、`czsc_multi_timeframe_strategy.py`、`run_baostock_backtest.py` 等仍保留在仓库中，但当前 `chan_strategy/` 的生产代码与测试已不再引用它们。
-> - **当前策略**：请参见同目录下的 `README.md`。
+> - **对应文件**：`legacy/czsc_adapter.py`、`legacy/czsc_multi_timeframe_strategy.py`、`legacy/run_baostock_backtest.py` 等仍保留在仓库中，但当前 `chan_strategy/` 的生产代码与测试已不再引用它们。
+> - **当前策略**：请参见仓库根目录下的 `README.md`。
 
 ---
 
@@ -78,7 +79,7 @@
 ## 文件结构
 
 ```
-examples/czsc_strategy/
+examples/czsc_strategy/legacy/
 ├── czsc_adapter.py                    # CZSC缠论适配层
 ├── czsc_multi_timeframe_strategy.py   # 策略主文件（波段战法分仓版）
 ├── run_baostock_backtest.py           # Baostock 5分钟数据回测脚本

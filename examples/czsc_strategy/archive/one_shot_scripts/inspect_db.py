@@ -2,6 +2,7 @@
 ONE-SHOT / 开发调试脚本，不在文档化测试或回测入口范围内。
 独立脚本：检查SQLite数据库结构
 运行: python inspect_db.py
+路径已随 A107 迁移（原 inspect_db.py → archive/one_shot_scripts/inspect_db.py），未重新验证可运行性。
 """
 import os
 import sys

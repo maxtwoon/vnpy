@@ -1,9 +1,12 @@
 """ONE-SHOT / 开发期调试脚本（针对已归档的 A 股原型 czsc_adapter.py），非 chan_strategy
 生产路径的一部分，不在 tests/unit 门禁范围内。
+路径已随 A107 迁移（原 _debug_zs.py → archive/one_shot_scripts/debug_zs.py），未重新验证可运行性。
 
 Debug: check why no trades happen - diagnose 4H and 5m ZS formation."""
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+from pathlib import Path
+# 本脚本现位于 archive/one_shot_scripts/，仓库根目录为其上两级
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import pandas as pd
 from datetime import datetime
 from vnpy.trader.object import BarData

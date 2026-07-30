@@ -1,5 +1,6 @@
 # =============================================================================
 # !! LEGACY / 已停止维护 —— RESEARCH-ONLY / NOT PROMOTION EVIDENCE !!
+# 路径已随 A107 迁移（原 debug_pos.py → archive/one_shot_scripts/debug_pos.py），未重新验证可运行性。
 # -----------------------------------------------------------------------------
 # 本文件（debug_pos.py）是早期 A 股原型代码，已停止维护，未接入当前回测/测试路径；
 # 当前唯一活跃维护、有测试覆盖的实现是 chan_strategy/（期货 CTA）。
@@ -19,7 +20,9 @@
 RuntimeError fail-closed，不提供任何默认/回退 token。
 """
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+from pathlib import Path
+# 本脚本现位于 archive/one_shot_scripts/，仓库根目录为其上两级；被导入的 A 股原型已迁至 legacy/
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import tushare as ts
 from vnpy.trader.object import BarData
 from vnpy.trader.constant import Exchange, Interval

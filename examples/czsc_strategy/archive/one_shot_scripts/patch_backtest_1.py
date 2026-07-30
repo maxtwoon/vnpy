@@ -1,7 +1,8 @@
-"""ONE-SHOT / LEGACY patch script for archived Baostock backtest experiments."""
+"""ONE-SHOT / LEGACY patch script for archived Baostock backtest experiments.
+路径已随 A107 迁移（原 _patch_backtest.py → archive/one_shot_scripts/patch_backtest_1.py），未重新验证可运行性。"""
 import re
 
-fpath = r'd:\repo\vnpy\examples\czsc_strategy\run_baostock_backtest.py'
+fpath = r'd:\repo\vnpy\examples\czsc_strategy\legacy\run_baostock_backtest.py'
 content = open(fpath, 'r', encoding='utf-8').read()
 
 # -------------------------------------------------------

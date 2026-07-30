@@ -1,4 +1,5 @@
 """ONE-SHOT / 开发期 czsc 库 API 探索脚本，非 pytest 用例，不在 tests/unit 门禁范围内。
+路径已随 A107 迁移并改名（原 test_czsc_api.py → archive/one_shot_scripts/czsc_api_probe_1.py），未重新验证可运行性。
 
 Test czsc API compatibility"""
 import datetime
