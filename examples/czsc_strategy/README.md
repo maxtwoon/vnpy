@@ -253,6 +253,6 @@ python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
 例如：
 
 - `diagnostics/backtest_matrix_20220101_20260424.md` —— 全样本回测矩阵（覆盖 AP888 / RB888 / SC888 / A888 / ZN888），但该报告使用的窗口 `2022-01-01~2026-04-24` 属于反复用于参数选择的历史数据，报告自身已明确标注为受污染/负面证据，不能作为推广依据。
-- `diagnostics/trailing_oos_validation_20250101_20260424.md` —— 移动止损的样本外验证（2025-01-01 ~ 2026-04-24）。
+- `diagnostics/research/trailing/trailing_oos_validation_20250101_20260424.md` —— 移动止损的样本外验证（2025-01-01 ~ 2026-04-24）。
 
 > 任何历史绩效数字都必须以原始横幅报告为准；本 README 不生成、不重复、不更新此类数字。

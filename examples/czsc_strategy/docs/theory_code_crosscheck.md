@@ -66,7 +66,7 @@
 ## 8. 书摘对 czsc 的行为断言 —— 已实测核实（2026-07-29，探针存档）
 
 书摘包含两条对 czsc 库行为的断言，已用项目解释器（C:\Python314，czsc==1.0.0rc8）跑只读探针核实，
-证据见 `diagnostics/czsc_rc8_theory_probe_report.md`（可复现脚本 `diagnostics/czsc_rc8_theory_probe.py`）：
+证据见 `diagnostics/research/misc/czsc_rc8_theory_probe_report.md`（可复现脚本 `diagnostics/czsc_rc8_theory_probe.py`）：
 
 - ✅ **"czsc 的 ZS 默认是笔中枢"——证实**。官方类型存根 `ZS.bis: list[BI]`（「获取构成中枢的笔列表」）；
   实测 `ZS(bis=[BI×5])` 构造成功，构成元素全部为笔。**附带重要发现**：rc8 的 `CZSC` 本体**没有 `zs_list` 属性**，
@@ -89,6 +89,6 @@
 | P1 | 走势类型按中枢个数 + 相邻中枢无重叠判据（2.1/2.2） | 信号计算层 | 可作为新信号独立交付 |
 | P2 | 报告层多义性披露：列主要合法划分与共同买卖点（7.1） | 报告/叙事层 | skill_build 叙事规范增补 |
 | P2 | MACD 柱面积背驰通道、动能公式（4.2） | 信号计算层 | 并列辅助判据，非替代 |
-| — | ~~czsc 行为断言核实（§8）~~ ✅ 已完成 2026-07-29 | 工具/诊断 | 见 `diagnostics/czsc_rc8_theory_probe_report.md` |
+| — | ~~czsc 行为断言核实（§8）~~ ✅ 已完成 2026-07-29 | 工具/诊断 | 见 `diagnostics/research/misc/czsc_rc8_theory_probe_report.md` |
 
 > 铁律提醒（AGENTS.md）：以上任何整改若落地，诊断/工具保持只读，不发送委托、不改策略参数与买卖信号；输出不含敏感字段；诊断结果不得包装成盈利能力证明。

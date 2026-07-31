@@ -3,6 +3,43 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 0.2.66（2026-07-31）- A108 diagnostics/ 目录重组（研究产出归档化）
+
+- `diagnostics/` 目录下 352 个纯产出文件（`.md`/`.json`/`.html`/`.txt`/`.jsonl`）按前缀分类
+  归档到新增的 `diagnostics/research/<topic>/` 子目录（`simnow/`、`platform/`、`second_buy/`、
+  `signal_funnel/`、`trailing/`、`backtest_reports/`、`sc_short_weight/`、`first_buy_five_min/`、
+  `misc/`），根目录直属文件数从 489 降到 137（115 个 `.py` 脚本 + 22 个例外清单文件）。
+  零 `.py` 文件移动/改名/逻辑改动，零 `chan_strategy/` 改动。
+- 迁移前对每个候选文件执行全仓库硬编码依赖 grep 安全网检查（design 文档 §4 第三步），
+  在设计文档已知的 14 个例外（4 核心治理文档 + 2 named-skip 文档 + 8 个活跃 simnow 配置/状态
+  文件）之外新发现 7 个真实硬编码依赖并追加进例外清单，留在根目录未移动：
+  `backtest_matrix_20220101_20260424.json` / `.md`（被 `buy_signal_quality_report.py` 的
+  `DEFAULT_MATRIX` 默认输入路径读取）、`phase1_dead_factor_equivalence.json`（被
+  `test_phase1_dead_factor_equivalence.py` 引用其生成脚本路径）、
+  `simnow_20d_promotion_decision.md` / `simnow_ledger_summary.json`（被
+  `diagnostics/run_next_work.ps1` 自动化脚本硬编码路径读写）、
+  `symbol_set_stability_scan.json` / `.md`（被 `platform_stability_review.py` 引用为默认
+  evidence 来源文件名）。
+- 新增 `diagnostics/research/MIGRATION_LOG.md` 记录全部 352 条迁移（旧路径 -> 新路径），
+  与 `git log --follow` / 文件系统实际位置交叉核对一致。其中 161 个受 git 跟踪的文件用
+  `git mv` 保留历史；其余 191 个文件此前被根 `.gitignore`（`examples/czsc_strategy/
+  diagnostics/*.json|*.md|*.txt|*.jsonl` 系列规则）标记为生成产出、从未 `git add` 过，
+  移动前后均不在 git 索引中，不涉及历史丢失，用普通文件系统移动、未追加 `git add`（维持
+  原有 untracked 状态）。
+- 更新 3 处活跃文档中对已移动文件的路径引用：`README.md`（`trailing_oos_validation_*`
+  样本外验证报告）、`docs/design/A102_trade_freq_5min_filter_generalization.md`
+  （`five_min_feasibility_probe_*` 前置证据）、`docs/theory_code_crosscheck.md`
+  （`czsc_rc8_theory_probe_report.md` 探针证据，2 处）。历史 CHANGELOG/HANDOFF 条目未回溯改写。
+- `.synccheck.yml` 零改动；`diagnostics_banner_check` 门禁要求新增 `.md` 文件携带
+  `<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->` 横幅，因此给新增的
+  `research/MIGRATION_LOG.md` 补了该横幅（内容本身仍是审计记录，非回测结果，标注属实）。
+- 根 `.gitignore` 追加 3 行最小补丁（设计文档未预见）：新建的 `diagnostics/research/`
+  目录被既有的 `examples/czsc_strategy/diagnostics/*` 目录级忽略规则整体吞掉，导致
+  `MIGRATION_LOG.md` 这个审计交付物本身也被忽略、无法提交；补丁精确收窄为"目录级解禁 + 重新
+  忽略其直属子项 + 单独解禁 `MIGRATION_LOG.md`"，352 个实际研究产出文件继续维持 reorg 前的
+  untracked/ignored 状态不变，用 `git check-ignore -v` 逐一核实前后行为符合预期。
+
+
 ## 0.2.65（2026-07-30）- A107 项目手脚架整改 + 基础库文档/示例完善
 
 - 目录结构重组（全部 `git mv`，无删除）：

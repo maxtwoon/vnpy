@@ -3,7 +3,7 @@
 - 任务：A102
 - 阶段：design（claude-cowork）
 - 日期：2026-07-29
-- 前置证据：`diagnostics/five_min_feasibility_probe_20260729.md` / `.json`（只读探针，RESEARCH-ONLY）
+- 前置证据：`diagnostics/research/first_buy_five_min/five_min_feasibility_probe_20260729.md` / `.json`（只读探针，RESEARCH-ONLY）
 - 关联分析：本会话对 `czsc_multi_timeframe_strategy.py`（legacy）与 `chan_strategy/` 的多级别联立对比
 
 ---
