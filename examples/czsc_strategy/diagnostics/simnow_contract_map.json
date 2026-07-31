@@ -1,0 +1,64 @@
+{
+  "_meta": {
+    "version": "V20260722",
+    "effective_date": "2026-07-22",
+    "note": "formal daily observation four-symbol set after AP888 disablement"
+  },
+  "AP888": {
+    "vt_symbol": "ap610.CZCE",
+    "symbol": "ap610",
+    "exchange": "CZCE",
+    "formal_sessions": ["day", "night"],
+    "role": "research_main_to_simnow_contract",
+    "enabled": false,
+    "note": "Disabled for formal daily observation because recent SimNow sessions subscribed successfully but produced zero live ticks. Keep only for targeted diagnostics until live data is stable."
+  },
+  "SC888": {
+    "vt_symbol": "sc2608.INE",
+    "symbol": "sc2608",
+    "exchange": "INE",
+    "formal_sessions": ["day", "night"],
+    "formal_session_capture_end": {
+      "night": "02:30:00"
+    },
+    "role": "research_main_to_simnow_contract",
+    "enabled": true,
+    "note": "Template mapping for SimNow smoke. Confirm current active contract before daily observation."
+  },
+  "A888": {
+    "vt_symbol": "a2609.DCE",
+    "symbol": "a2609",
+    "exchange": "DCE",
+    "formal_sessions": ["day", "night"],
+    "formal_session_capture_end": {
+      "night": "23:00:00"
+    },
+    "role": "research_main_to_simnow_contract",
+    "enabled": true,
+    "note": "Template mapping; verify this exact contract exists in SimNow before subscribing."
+  },
+  "ZN888": {
+    "vt_symbol": "zn2608.SHFE",
+    "symbol": "zn2608",
+    "exchange": "SHFE",
+    "formal_sessions": ["day", "night"],
+    "formal_session_capture_end": {
+      "night": "01:00:00"
+    },
+    "role": "research_main_to_simnow_contract",
+    "enabled": true,
+    "note": "Template mapping; verify this exact contract exists in SimNow before subscribing."
+  },
+  "RB888": {
+    "vt_symbol": "rb2610.SHFE",
+    "symbol": "rb2610",
+    "exchange": "SHFE",
+    "formal_sessions": ["day", "night"],
+    "formal_session_capture_end": {
+      "night": "23:00:00"
+    },
+    "role": "research_main_to_simnow_contract",
+    "enabled": true,
+    "note": "Template mapping; verify this exact contract exists in SimNow before subscribing."
+  }
+}

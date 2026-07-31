@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "source": "simnow_precheck_risk_report.json",
+  "description": "Shared SimNow observation risk thresholds. Values are derived from the accepted historical/precheck baseline. Warning is 90% of halt unless explicitly reviewed.",
+  "metrics": {
+    "single_day_loss_abs_pct": {
+      "baseline": 0.28673230449897114,
+      "warning": 0.258059074049074,
+      "halt": 0.28673230449897114,
+      "direction": "high",
+      "unit": "%"
+    },
+    "drawdown_abs_pct": {
+      "baseline": 1.3171201051993764,
+      "warning": 1.1854080946794388,
+      "halt": 1.3171201051993764,
+      "direction": "high",
+      "unit": "%"
+    },
+    "gross_exposure": {
+      "baseline": 0.28,
+      "warning": 0.252,
+      "halt": 0.28,
+      "direction": "high",
+      "unit": ""
+    },
+    "net_exposure_abs": {
+      "baseline": 0.28,
+      "warning": 0.252,
+      "halt": 0.28,
+      "direction": "high",
+      "unit": ""
+    },
+    "both_long_short_symbols": {
+      "baseline": 2.0,
+      "warning": 1.8,
+      "halt": 2.0,
+      "direction": "high",
+      "unit": ""
+    },
+    "consecutive_loss_days": {
+      "baseline": 6.0,
+      "warning": 5.4,
+      "halt": 6.0,
+      "direction": "high",
+      "unit": "days"
+    },
+    "consecutive_loss_abs_pct": {
+      "baseline": 0.12175908171444538,
+      "warning": 0.10958317354300084,
+      "halt": 0.12175908171444538,
+      "direction": "high",
+      "unit": "%",
+      "_updated_2026-07-27": "Recalibrated per simnow_risk_halt_decision_2026-07-27.json (adjust_thresholds_with_documented_rationale). The prior baseline (0.06457800845717232, generated 2026-06-21) was computed against strategy code that predates numerous subsequent chan_strategy changes. Re-running simnow_precheck_risk_report.py with CURRENT code over the identical window (2022-01-01~2026-04-24, same 5 symbols) reproduces the exact halt-triggering value (0.12175908171444538%, 6-day streak ending 2023-06-28) seen live on 2026-07-24 and again 2026-07-27 -- confirming this is a stable, reproducible property of the current strategy code on this historical window, not a live-only anomaly. Only this metric was recalibrated; the rerun also showed drift in other precheck metrics (trade count 534->318, max_single_day_loss_pct -0.287%->-0.532%) that were deliberately left untouched pending separate investigation into why trade frequency dropped -- see simnow_precheck_risk_report_rerun_2026-07-27.json/.md and WORK_LOG.md."
+    },
+    "symbol_top1_abs_share": {
+      "baseline": 0.9204427273660823,
+      "warning": 0.8283984546294741,
+      "halt": 0.9204427273660823,
+      "direction": "high",
+      "unit": "",
+      "_updated_2026-07-29": "Recalibrated per simnow_risk_halt_decision_2026-07-29.json (adjust_thresholds_with_documented_rationale). The prior baseline (0.4479323941930841) was derived from the precheck CUMULATIVE full-history caliber (318-trade multi-year mix); since 0.2.55 the monitor measures concentration over a rolling 60-calendar-day window (typically 5-10 trades), a caliber in which the old halt line sits BELOW the historical median (0.5634) and would have halted 75.9% of ordinary days (785/1034 sufficient-sample days, replay 2023-06-01~2026-07-29, 200 closed trades, calibration method: diagnostics/calibrate_concentration_step1.py+step2.py). The 2026-07-29 live value 0.8917 equals p99 of the rolling-caliber distribution (rank 3/1034). New baseline = exact historical worst case 0.9204427273660823 (2025-07-23, 9 trades); warning = 0.9x baseline per repo convention (fires on ~3.4% of historical days; no historical day exceeds the new halt)."
+    },
+    "strategy_top1_abs_share": {
+      "baseline": 1.0,
+      "warning": 0.9,
+      "halt": 1.0,
+      "direction": "high",
+      "unit": "",
+      "_updated_2026-07-29": "Recalibrated per simnow_risk_halt_decision_2026-07-29.json (adjust_thresholds_with_documented_rationale). The prior baseline (0.6560212126892128) was calibrated on the cumulative caliber; under the rolling-60d caliber (0.2.55) the historical median is 0.6276 and the old halt line would have halted 43.9% of ordinary days (454/1034). A single strategy accounting for ~100% of window abs-PnL occurred on 37/1034 historical days (including 2026-07-12~16), so the rolling-caliber worst case is 1.0 by construction and this metric degrades to warning-only gating (warning=0.9 fires on ~9.2% of historical days); portfolio-level concentration risk remains gated by symbol_top1_abs_share, drawdown, exposure, and consecutive-loss lines. The 2026-07-29 live value 0.7576 equals p75 (rank 253/1034)."
+    }
+  }
+}

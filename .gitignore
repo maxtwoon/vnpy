@@ -7,13 +7,14 @@
 # Jupyter
 .ipynb_checkpoints
 
-# IDE
+# IDE / local agent tooling
 .vscode
 .idea
 *.wpr
 *.wpu
 .vs
 x64
+.claude/
 
 # Temp
 build
@@ -45,21 +46,6 @@ _templates
 lab/
 /.mypy_cache
 
-# SimNow private configs and local observation artifacts
-examples/czsc_strategy/diagnostics/simnow_connection_config.json
-examples/czsc_strategy/diagnostics/simnow_connection_config_*.json
-examples/czsc_strategy/diagnostics/simnow_connection_probe_report*.json
-examples/czsc_strategy/diagnostics/simnow_export_*.json
-examples/czsc_strategy/diagnostics/simnow_replay_*.json
-examples/czsc_strategy/diagnostics/simnow_replay_readiness_*.json
-examples/czsc_strategy/diagnostics/simnow_backfill_plan*.json
-examples/czsc_strategy/diagnostics/simnow_kline_update_*.json
-examples/czsc_strategy/diagnostics/simnow_record_*.json
-examples/czsc_strategy/diagnostics/simnow_report_*.md
-examples/czsc_strategy/diagnostics/simnow_20d_promotion_decision.md
-examples/czsc_strategy/diagnostics/simnow_observation_ledger.jsonl
-examples/czsc_strategy/diagnostics/simnow_20d_observation_report.md
-
 # Python cache
 __pycache__/
 
@@ -71,35 +57,11 @@ cosmic-ray.sqlite
 ai-stock-trading-reviewer.zip
 ai-stock-trading-reviewer/
 
-# Generated diagnostic artifacts (keep only workflow docs/configs)
-examples/czsc_strategy/diagnostics/*.json
-!examples/czsc_strategy/diagnostics/simnow_connection_config.example.json
-!examples/czsc_strategy/diagnostics/simnow_contract_map.json
-!examples/czsc_strategy/diagnostics/simnow_risk_thresholds.json
-!examples/czsc_strategy/diagnostics/platform_base_block1buy_sc075_config.json
-!examples/czsc_strategy/diagnostics/platform_final_candidate_config.json
-
-examples/czsc_strategy/diagnostics/*.md
-!examples/czsc_strategy/diagnostics/AUTOMATION_PROMPT.md
-!examples/czsc_strategy/diagnostics/run_position_sizing_report.py
-!examples/czsc_strategy/diagnostics/position_sizing_report_*.json
-!examples/czsc_strategy/diagnostics/ACCEPTANCE.md
-!examples/czsc_strategy/diagnostics/NEXT_WORK.md
-!examples/czsc_strategy/diagnostics/WORK_LOG.md
-!examples/czsc_strategy/diagnostics/simnow_daily_observation_workflow.md
-!examples/czsc_strategy/diagnostics/simnow_connection_probe.md
-!examples/czsc_strategy/diagnostics/simnow_candidate_v1_monitoring.md
-!examples/czsc_strategy/diagnostics/simnow_candidate_v1_robustness_summary.md
-examples/czsc_strategy/diagnostics/*.txt
-examples/czsc_strategy/diagnostics/*.jsonl
-examples/czsc_strategy/diagnostics/signal_history_*.json
-
 # Cached market data
 data_cache/
 docs/chanlunnew/codex_chan_audit_pack/expected_outputs/
 docs/chanlunnew/codex_chan_audit_pack/payload/
 docs/chanlunnew/*.pdf
-examples/czsc_strategy/data_cache/*.csv
 examples/czsc_strategy/skill_build/corpus/
 examples/czsc_strategy/skill_build/mapping/*.json
 examples/czsc_strategy/skill_build/mapping/*.jsonl
@@ -108,24 +70,59 @@ examples/czsc_strategy/skill_build/reports/*.json
 examples/czsc_strategy/skill_build/sh000001_daily.csv
 examples/czsc_strategy/skill_build/llm_eval_config.json
 
-# Ignore generated diagnostics artifacts, while allowing checked-in workflow code/config.
+# ---------------------------------------------------------------------------
+# examples/czsc_strategy/diagnostics/ -- ignore generated research/diagnostic
+# output by default, keep only checked-in workflow code/docs/config. This is
+# ONE consolidated block (A109 gitignore cleanup): a prior version spread this
+# across four separately-added sections without ordering awareness, which put
+# a later, broader blanket ignore AFTER an earlier per-file allowlist -- git
+# resolves overlapping patterns by "last match in the file wins", so that
+# earlier allowlist was silently shadowed and dead (verified via
+# `git check-ignore --no-index`). It only "worked" because every affected file
+# was already tracked before the shadowing was introduced, and .gitignore has
+# no effect on already-tracked files. ANY exception to the blanket ignore
+# below MUST be listed after it, in this same block -- do not add a new
+# per-file `!` rule earlier in this file, it will be silently overridden here.
+# ---------------------------------------------------------------------------
 examples/czsc_strategy/diagnostics/*
 !examples/czsc_strategy/diagnostics/
-!examples/czsc_strategy/diagnostics/simnow_observation_window.py
-!examples/czsc_strategy/diagnostics/simnow_observation_window.json
 
-# A108: diagnostics/research/ archives non-.py research output artifacts (still generated,
-# still ignored -- same status as before the A108 reorg) but the migration audit trail itself
-# (MIGRATION_LOG.md) must be checked in.
+# -- workflow code: keep every diagnostics script trackable by default,
+#    including ones not yet written, so a new script never needs `git add -f` --
+!examples/czsc_strategy/diagnostics/*.py
+!examples/czsc_strategy/diagnostics/*.ps1
+
+# -- core governance docs (must stay tracked) --
+!examples/czsc_strategy/diagnostics/ACCEPTANCE.md
+!examples/czsc_strategy/diagnostics/WORK_LOG.md
+!examples/czsc_strategy/diagnostics/NEXT_WORK.md
+!examples/czsc_strategy/diagnostics/AUTOMATION_PROMPT.md
+!examples/czsc_strategy/diagnostics/simnow_daily_observation_workflow.md
+!examples/czsc_strategy/diagnostics/simnow_connection_probe.md
+!examples/czsc_strategy/diagnostics/simnow_candidate_v1_monitoring.md
+!examples/czsc_strategy/diagnostics/simnow_candidate_v1_robustness_summary.md
+
+# -- active config/state read by code at a fixed path (not disposable
+#    research output, do not treat like dated report artifacts) --
+!examples/czsc_strategy/diagnostics/simnow_connection_config.example.json
+!examples/czsc_strategy/diagnostics/simnow_contract_map.json
+!examples/czsc_strategy/diagnostics/simnow_risk_thresholds.json
+!examples/czsc_strategy/diagnostics/simnow_observation_window.json
+!examples/czsc_strategy/diagnostics/platform_base_block1buy_sc075_config.json
+!examples/czsc_strategy/diagnostics/platform_final_candidate_config.json
+
+# -- checked-in report artifacts (deliberately committed, not regenerated
+#    fresh each run) --
+!examples/czsc_strategy/diagnostics/position_sizing_report_*.json
+!examples/czsc_strategy/diagnostics/czsc_upgrade_behavior_diff_report.md
+!examples/czsc_strategy/diagnostics/czsc_upgrade_failure_attribution.md
+
+# -- A108: diagnostics/research/ archives non-.py research output artifacts
+#    (still generated, still ignored as a whole) except the migration audit
+#    trail itself --
 !examples/czsc_strategy/diagnostics/research/
 examples/czsc_strategy/diagnostics/research/*
 !examples/czsc_strategy/diagnostics/research/MIGRATION_LOG.md
-
-# czsc 1.0 upgrade diagnostics (scripts + reports are committed; fixtures/HTML are generated)
-!examples/czsc_strategy/diagnostics/czsc_upgrade_bi_diff.py
-!examples/czsc_strategy/diagnostics/czsc_upgrade_diff_report.py
-!examples/czsc_strategy/diagnostics/czsc_upgrade_behavior_diff_report.md
-!examples/czsc_strategy/diagnostics/czsc_upgrade_failure_attribution.md
 
 # Skill evaluation report generated locally
 SKILL_audit_report.md
