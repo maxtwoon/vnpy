@@ -1,8 +1,8 @@
 ---
 task: A108-diagnostics-reorg - czsc_strategy diagnostics/ 目录重组（研究产出归档化）
 version: 4.4.0
-stage: dev
-owner: kimi-code
+stage: review
+owner: codex
 updated: 2026-07-31
 deliverables:
   - HANDOFF.md
@@ -12,11 +12,11 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: claude-code
-last_transition_from_stage: design
-last_transition_to_stage: dev
-last_transition_from_owner: claude-code
-last_transition_to_owner: kimi-code
+last_transition_actor: kimi-code
+last_transition_from_stage: dev
+last_transition_to_stage: review
+last_transition_from_owner: kimi-code
+last_transition_to_owner: codex
 ---
 
 ## Background (A108)
@@ -539,3 +539,4 @@ blocking reason.
 | 2026-07-30 | kimi-code → codex | dev → review | 已提交此前遗留未提交的 A107 收尾修复（scripts/*.py docstring 路径、archive/one_shot_scripts/patch_backtest_1..4.py 硬编码路径、legacy/README.md 路径修正等），commit ab2288a58；pytest 重新确认 1009 passed, 4 deselected, 4 xfailed，与基线一致。 |
 | 2026-07-30 | codex → codex | review → done | 第二轮独立复核 PASS：ab2288a58 修复了第一轮阻塞项（工作区遗留的路径修正未提交），范围精确匹配、零触碰 chan_strategy/diagnostics，pytest 1009 passed/4 deselected/4 xfailed 与基线一致，两处 sync_check PASS，AC1-AC7 整体成立 |
 | 2026-07-31 | claude-code → kimi-code | design → dev | A108 设计完成：专项 import 依赖图审计后，范围收窄为只移动非 .py 产出文件（约362个）到 diagnostics/research/<topic>/，.py 脚本级重组明确判定不建议做；分类算法含移动前逐文件 grep 硬编码依赖的安全网 |
+| 2026-07-31 | kimi-code → codex | dev → review | A108 diagnostics 目录重组完成：352 个非 .py 产出文件按前缀分类归档到 diagnostics/research/topic 子目录（9 个），根目录直属文件数从 489 降到 137；安全网 grep 在设计文档已知例外清单外新发现 7 个真实硬编码依赖并追加例外留在根目录；MIGRATION_LOG.md 记录 352 条迁移（161 git mv 保留历史 + 191 未跟踪生成产出普通移动）；同步更新 3 处活跃文档路径引用；补充最小 gitignore 补丁使迁移记录可提交、其余研究产出维持原有 untracked 状态；VERSION 已 bump，CHANGELOG 一条，设计文档阶段更新为 dev implemented 并新增第10节；零 .py 改动、零 chan_strategy 改动；pytest not-realdb 全量与 15 个 import-diagnostics 测试文件均通过、两处 sync_check 均 PASS；commit f3f16cd76 |
