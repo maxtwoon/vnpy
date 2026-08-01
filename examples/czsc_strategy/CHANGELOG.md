@@ -3,6 +3,21 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 0.2.67（2026-08-01）- A109 audit remediation：CI 门禁与 SimNow 晋级口径修复
+
+- 修复 `simnow_20d_aggregate.py` 的自动化状态口径：`status=pass` 但 `valid_observation=false`
+  的记录现在按 failed day 计入，`failed_days` 与 `failed_days_present` blocker 会进入 20 日汇总，
+  避免无有效观测日被误计为通过日。
+- 根项目移除旧的 `czsc==0.9.51` 运行时依赖，CI 改为显式安装
+  `examples/czsc_strategy/requirements.txt` 中的 `czsc==1.0.0rc8`，并新增仓库卫生守卫防止双源漂移。
+- CI lint 改为显式检查 `vnpy`、核心 tests/tools、以及本次纳入门禁的 SimNow 诊断/测试文件；
+  本地归档、研究产出脚本和 notebook 不再被 `ruff check .` 意外纳入核心 CI 门禁。
+- `mypy vnpy` 对当前外部依赖 stub 口径补齐配置，并移除 `vnpy/chart/item.py` 中已过期的
+  `type: ignore`，恢复类型检查通过。
+- `run_next_work.ps1` 的 `ReplayTimeoutSeconds` 默认值从 `1200` 提升为 `3600`，匹配此前正式
+  replay 导出恢复路径；`ACCEPTANCE.md` 与 wrapper 测试同步固化该默认窗口。
+
+
 ## 0.2.66（2026-07-31）- A108 diagnostics/ 目录重组（研究产出归档化）
 
 - `diagnostics/` 目录下 352 个纯产出文件（`.md`/`.json`/`.html`/`.txt`/`.jsonl`）按前缀分类

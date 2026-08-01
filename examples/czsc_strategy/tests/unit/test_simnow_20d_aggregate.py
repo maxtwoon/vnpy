@@ -72,6 +72,29 @@ def _halt_record(date: str, reason: str) -> dict[str, Any]:
     }
 
 
+def test_build_20d_aggregate_treats_invalid_pass_as_failed_day():
+    record = _valid_record("2026-07-30")
+    record["valid_observation"] = False
+    record["consistency"] = {
+        "matched": True,
+        "verified": True,
+        "reason": "no_actionable_events_on_either_side",
+    }
+    record["thresholds"] = {"status": "warning"}
+
+    summary = build_20d_aggregate(
+        [record],
+        min_days=20,
+        matched_day_predicate=lambda row: bool(row.get("consistency", {}).get("matched")),
+        halt_day_predicate=lambda row: row.get("thresholds", {}).get("status") == "halt",
+    )
+
+    assert summary["pass_days"] == 0
+    assert summary["failed_days"] == 1
+    assert "failed_days_present" in summary["promotion_blockers"]
+    assert "non_pass_days_present" in summary["promotion_blockers"]
+
+
 def test_build_20d_aggregate_returns_common_summary_fields():
     records = [
         _valid_record("2026-07-18"),

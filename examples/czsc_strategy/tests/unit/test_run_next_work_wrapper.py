@@ -65,6 +65,12 @@ def _decode_output(data: bytes) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def test_replay_timeout_default_matches_recovered_formal_export_window():
+    script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
+
+    assert "[int]$ReplayTimeoutSeconds = 3600" in script_text
+
+
 def test_invoke_checked_process_treats_completed_child_as_success():
     script_text = RUN_NEXT_WORK.read_text(encoding="utf-8")
     write_step = _extract_function(script_text, "Write-Step")

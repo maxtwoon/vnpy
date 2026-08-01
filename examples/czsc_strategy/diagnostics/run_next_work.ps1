@@ -7,7 +7,7 @@ param(
     [switch]$SkipKlineUpdate,
     [int]$DurationSeconds = 1800,
     [int]$CaptureTimeoutSeconds = 0,
-    [int]$ReplayTimeoutSeconds = 1200,
+    [int]$ReplayTimeoutSeconds = 3600,
     [int]$MinKlineBarsPerSymbol = 30,
     [switch]$UpdateHistoricalDb,
     [switch]$SkipHistoricalDbUpdate,

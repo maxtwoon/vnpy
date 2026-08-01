@@ -38,6 +38,27 @@ def test_obsolete_data_cache_csv_files_are_not_git_tracked():
     assert completed.stdout.strip() == ""
 
 
+def test_czsc_runtime_dependency_has_single_ci_source():
+    repo_root = PROJECT_ROOT.parents[1]
+    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+    workflow = (repo_root / ".github" / "workflows" / "pythonapp.yml").read_text(encoding="utf-8")
+    requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+    assert "czsc==0.9.51" not in pyproject
+    assert "czsc==1.0.0rc8" in requirements
+    assert "examples/czsc_strategy/requirements.txt" in workflow
+
+
+def test_ci_lint_scope_excludes_local_research_artifacts():
+    repo_root = PROJECT_ROOT.parents[1]
+    workflow = (repo_root / ".github" / "workflows" / "pythonapp.yml").read_text(encoding="utf-8")
+
+    assert "ruff check .\n" not in workflow
+    assert "ruff check vnpy tests tools/handoff.py tools/sync_check.py" in workflow
+    assert "examples/czsc_strategy/diagnostics/simnow_20d_aggregate.py" in workflow
+    assert "examples/czsc_strategy/tests/unit/test_repo_hygiene.py" in workflow
+
+
 def test_in_flight_changes_manifest_documents_uncommitted_simnow_work():
     manifest = PROJECT_ROOT / "IN_FLIGHT_CHANGES.md"
     text = manifest.read_text(encoding="utf-8")

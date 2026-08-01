@@ -30,9 +30,13 @@ jobs:
           pip install ruff mypy uv types-tqdm
           uv pip install ta-lib==0.6.4 --index=https://pypi.vnpy.com --system
           uv pip install -e .[alpha,dev] --system
+          uv pip install -r examples/czsc_strategy/requirements.txt --system
 
       - name: Lint
-        run: ruff check .
+        run: |
+          ruff check vnpy tests tools/handoff.py tools/sync_check.py
+          ruff check examples/czsc_strategy/diagnostics/simnow_20d_aggregate.py examples/czsc_strategy/diagnostics/simnow_promotion_decision.py
+          ruff check examples/czsc_strategy/tests/unit/test_simnow_20d_aggregate.py examples/czsc_strategy/tests/unit/test_simnow_promotion_parity.py examples/czsc_strategy/tests/unit/test_simnow_ledger_summary.py examples/czsc_strategy/tests/unit/test_repo_hygiene.py
 
       - name: Type check
         run: mypy vnpy

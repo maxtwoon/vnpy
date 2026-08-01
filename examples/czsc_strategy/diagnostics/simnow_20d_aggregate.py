@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from collections import Counter
-from typing import Any, Callable
+from typing import Any
 
 from simnow_action_summary import _record_reason, build_action_summary
 from simnow_halt_metadata import halt_family
 from simnow_observation_rules import is_valid_observation
 from simnow_observation_window import filter_records_by_start
 from simnow_reason_governance import build_reason_governance
+
+
+def _automation_status(record: dict[str, Any]) -> str:
+    status = str(record.get("status") or "")
+    if status == "pass" and is_valid_observation(record):
+        return "pass"
+    if status in {"pending", "skipped", "halt"}:
+        return status
+    return "failed"
 
 
 def _count_by(values: list[str]) -> dict[str, int]:
@@ -42,13 +52,14 @@ def build_20d_aggregate(
     recent = ordered[-min_days:]
     observed_days = len(recent)
     valid_days = sum(1 for row in recent if is_valid_observation(row))
-    pass_days = sum(1 for row in recent if row.get("status") == "pass")
-    pending_days = sum(1 for row in recent if row.get("status") == "pending")
-    skipped_days = sum(1 for row in recent if row.get("status") == "skipped")
+    pass_days = sum(1 for row in recent if _automation_status(row) == "pass")
+    pending_days = sum(1 for row in recent if _automation_status(row) == "pending")
+    skipped_days = sum(1 for row in recent if _automation_status(row) == "skipped")
+    failed_days = sum(1 for row in recent if _automation_status(row) == "failed")
     matched_days = sum(1 for row in recent if matched_day_predicate(row))
     halt_days = sum(1 for row in recent if halt_day_predicate(row))
     warning_days = sum(1 for row in recent if row.get("thresholds", {}).get("status") == "warning")
-    status_counts = _count_by([str(row.get("status") or "unknown") for row in recent])
+    status_counts = _count_by([_automation_status(row) for row in recent])
     halt_family_counts = _count_by([
         halt_family(row)
         for row in recent
@@ -67,6 +78,8 @@ def build_20d_aggregate(
         blockers.append("pending_days_present")
     if skipped_days:
         blockers.append("skipped_days_present")
+    if failed_days:
+        blockers.append("failed_days_present")
     if pass_days != observed_days:
         blockers.append("non_pass_days_present")
     if matched_days != observed_days:
@@ -121,6 +134,7 @@ def build_20d_aggregate(
         "pass_days": pass_days,
         "pending_days": pending_days,
         "skipped_days": skipped_days,
+        "failed_days": failed_days,
         "consistency_matched_days": matched_days,
         "warning_days": warning_days,
         "halt_days": halt_days,

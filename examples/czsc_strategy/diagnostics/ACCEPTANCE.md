@@ -59,6 +59,16 @@ fewer than 5 closed trades the monitor reports both concentration rows as
 `--concentration-window-days` (<=0 restores full history) and
 `--concentration-min-trades`.
 
+Concentration thresholds (recalibrated 2026-07-29 per
+`simnow_risk_halt_decision_2026-07-29.json`): the pre-0.2.55 lines were derived
+from the cumulative caliber and sat below the rolling-caliber medians (they
+would have halted 75.9% / 43.9% of ordinary days). Current lines follow the
+repo convention (baseline = rolling-caliber historical worst case over
+2023-06-01~2026-07-29, warning = 0.9 × halt): `symbol_top1_abs_share`
+warning `0.8284` / halt `0.9204`; `strategy_top1_abs_share` warning `0.9` /
+halt `1.0` (warning-only by construction; see the `_updated_2026-07-29` notes
+in `simnow_risk_thresholds.json`).
+
 Initial reference thresholds:
 
 - max single-day loss warning: around `-0.29%`
@@ -173,6 +183,8 @@ The run summary JSON embeds a safe aggregate copy of `simnow_ledger_summary.json
 ## Historical DB Update Artifact
 
 The formal wrapper supports a pre-capture historical replay DB update through `run_next_work.ps1 -LiveCapture`. This step is read-only with respect to SimNow and must run before the SimNow capture for formal observation runs unless `-SkipHistoricalDbUpdate` is explicitly used. `-UpdateHistoricalDb` remains accepted as an explicit opt-in alias for the same formal update path.
+
+Formal replay snapshot export must default `run_next_work.ps1 -ReplayTimeoutSeconds` to `3600`, matching the recovered export window used after prior `1200`-second timeouts. Operators may still override the parameter explicitly for smoke tests or constrained maintenance runs.
 
 Every formal `-LiveCapture` run must write `simnow_historical_db_update_YYYY-MM-DD.json`:
 
