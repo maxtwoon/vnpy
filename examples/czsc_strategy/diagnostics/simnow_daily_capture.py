@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import asdict, dataclass, field, is_dataclass
@@ -60,6 +61,96 @@ class CaptureState:
     orders: dict[str, dict[str, Any]] = field(default_factory=dict)
     trades: dict[str, dict[str, Any]] = field(default_factory=dict)
     subscribed: list[dict[str, str]] = field(default_factory=list)
+
+
+def _symbol_prefix(symbol: str) -> str:
+    match = re.match(r"([A-Za-z]+)", str(symbol or ""))
+    return match.group(1).lower() if match else ""
+
+
+def _symbol_month(symbol: str) -> int:
+    match = re.search(r"(\d+)$", str(symbol or ""))
+    return int(match.group(1)) if match else -1
+
+
+def _sorted_unique_symbols(symbols: list[str]) -> list[str]:
+    return sorted({str(symbol) for symbol in symbols}, key=lambda value: (_symbol_month(value), value), reverse=False)
+
+
+def _candidate_symbols_for_row(row: dict[str, Any], contracts: dict[str, dict[str, Any]]) -> list[str]:
+    expected_exchange = str(row.get("exchange", ""))
+    expected_prefix = _symbol_prefix(str(row.get("symbol", "")))
+    matches: list[str] = []
+    for contract in contracts.values():
+        contract_symbol = str(contract.get("symbol", ""))
+        contract_exchange = str(contract.get("exchange", ""))
+        if not contract_symbol or contract_exchange != expected_exchange:
+            continue
+        if _symbol_prefix(contract_symbol) != expected_prefix:
+            continue
+        matches.append(contract_symbol)
+    return _sorted_unique_symbols(matches)
+
+
+def _account_activity_symbols_for_row(row: dict[str, Any], state: CaptureState) -> list[str]:
+    expected_exchange = str(row.get("exchange", ""))
+    expected_prefix = _symbol_prefix(str(row.get("symbol", "")))
+    matches: list[str] = []
+    for source in (state.positions, state.orders, state.trades):
+        for item in source.values():
+            symbol = str(item.get("symbol", ""))
+            exchange = str(item.get("exchange", ""))
+            if not symbol or exchange != expected_exchange:
+                continue
+            if _symbol_prefix(symbol) != expected_prefix:
+                continue
+            matches.append(symbol)
+    return _sorted_unique_symbols(matches)
+
+
+def resolve_contract_map_for_subscription(
+    contract_map: dict[str, dict[str, Any]],
+    state: CaptureState,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    resolved: dict[str, dict[str, Any]] = {}
+    details: dict[str, dict[str, Any]] = {}
+    for research_symbol, row in contract_map.items():
+        default_symbol = str(row["symbol"])
+        exchange = str(row["exchange"])
+        query_candidates = _candidate_symbols_for_row(row, state.contracts)
+        account_activity_symbols = _account_activity_symbols_for_row(row, state)
+
+        chosen_symbol = default_symbol
+        source = "static_default"
+        account_activity_symbol = ""
+
+        if account_activity_symbols:
+            chosen_symbol = account_activity_symbols[-1]
+            account_activity_symbol = chosen_symbol
+            source = "account_activity"
+        elif default_symbol in query_candidates:
+            chosen_symbol = default_symbol
+            source = "contract_query_default"
+        elif query_candidates:
+            chosen_symbol = query_candidates[-1]
+            source = "contract_query_roll_forward"
+
+        resolved_row = dict(row)
+        resolved_row["symbol"] = chosen_symbol
+        resolved_row["vt_symbol"] = str(resolved_row.get("vt_symbol") or f"{default_symbol}.{exchange}")
+        if resolved_row["vt_symbol"] == f"{default_symbol}.{exchange}" or str(row.get("symbol")) != chosen_symbol:
+            resolved_row["vt_symbol"] = f"{chosen_symbol}.{exchange}"
+        resolved[research_symbol] = resolved_row
+        details[research_symbol] = {
+            "source": source,
+            "default_symbol": default_symbol,
+            "resolved_symbol": chosen_symbol,
+            "exchange": exchange,
+            "query_candidates": query_candidates,
+            "account_activity_symbol": account_activity_symbol,
+            "account_activity_symbols": account_activity_symbols,
+        }
+    return resolved, details
 
 
 def _now() -> str:
@@ -267,6 +358,7 @@ def build_export(
     ended_at: str,
     duration_seconds: int,
     setting_masked: dict[str, Any],
+    contract_map_resolution: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     orders = [_order_event(row) for row in state.orders.values()]
     trades = [_trade_event(row) for row in state.trades.values()]
@@ -284,6 +376,7 @@ def build_export(
             "setting_masked": setting_masked,
             "contract_map_provenance": contract_map_provenance,
             "contract_map": contract_map,
+            "contract_map_resolution": contract_map_resolution or {},
         },
         "signals": [],
         # Top-level strategy-event surfaces are populated later by the
@@ -344,9 +437,13 @@ def run_capture(
         main_engine.connect(config["setting"], gateway_name)
         deadline = time.time() + duration_seconds
         subscribed = False
+        resolved_contract_map = contract_map
+        contract_map_resolution: dict[str, dict[str, Any]] = {}
         while time.time() < deadline:
             can_subscribe = state.contracts or not subscribe_after_contracts
             if can_subscribe and not subscribed:
+                resolved_contract_map, contract_map_resolution = resolve_contract_map_for_subscription(contract_map, state)
+                subscriptions = contract_subscriptions(resolved_contract_map)
                 for item in subscriptions:
                     req = SubscribeRequest(symbol=item["symbol"], exchange=_exchange(item["exchange"]))
                     main_engine.subscribe(req, gateway_name)
@@ -361,12 +458,13 @@ def run_capture(
         state=state,
         config_path=config_path,
         contract_map_path=contract_map_path,
-        contract_map=contract_map,
+        contract_map=resolved_contract_map,
         contract_map_provenance=contract_map_provenance(contract_map_path),
         started_at=started_at,
         ended_at=ended_at,
         duration_seconds=duration_seconds,
         setting_masked=mask_setting(config["setting"]),
+        contract_map_resolution=contract_map_resolution,
     )
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")

@@ -14,6 +14,7 @@ from simnow_daily_capture import (  # noqa: E402
     build_risk,
     contract_subscriptions,
     load_contract_map,
+    resolve_contract_map_for_subscription,
 )
 from simnow_daily_monitor import make_record  # noqa: E402
 
@@ -146,3 +147,88 @@ def test_live_contract_map_excludes_ap888_from_formal_observation_set():
 
     assert "AP888" not in data
     assert set(data) == {"A888", "ZN888", "RB888"}
+
+
+def test_resolve_contract_map_uses_account_activity_override_for_rollover():
+    contract_map = {
+        "SC888": {"symbol": "sc2608", "exchange": "INE", "vt_symbol": "sc2608.INE"},
+        "RB888": {"symbol": "rb2610", "exchange": "SHFE", "vt_symbol": "rb2610.SHFE"},
+    }
+    state = CaptureState()
+    state.contracts["sc2608.INE"] = {"symbol": "sc2608", "exchange": "INE", "vt_symbol": "sc2608.INE"}
+    state.contracts["sc2609.INE"] = {"symbol": "sc2609", "exchange": "INE", "vt_symbol": "sc2609.INE"}
+    state.contracts["rb2610.SHFE"] = {"symbol": "rb2610", "exchange": "SHFE", "vt_symbol": "rb2610.SHFE"}
+    state.positions["sc2609.INE.short"] = {"symbol": "sc2609", "exchange": "INE", "volume": 1}
+
+    resolved, details = resolve_contract_map_for_subscription(contract_map, state)
+
+    assert resolved["SC888"]["symbol"] == "sc2609"
+    assert resolved["SC888"]["vt_symbol"] == "sc2609.INE"
+    assert details["SC888"]["source"] == "account_activity"
+    assert details["SC888"]["account_activity_symbol"] == "sc2609"
+    assert resolved["RB888"]["symbol"] == "rb2610"
+
+
+def test_resolve_contract_map_keeps_default_when_query_still_contains_it():
+    contract_map = {
+        "A888": {"symbol": "a2609", "exchange": "DCE", "vt_symbol": "a2609.DCE"},
+    }
+    state = CaptureState()
+    state.contracts["a2609.DCE"] = {"symbol": "a2609", "exchange": "DCE", "vt_symbol": "a2609.DCE"}
+    state.contracts["a2611.DCE"] = {"symbol": "a2611", "exchange": "DCE", "vt_symbol": "a2611.DCE"}
+
+    resolved, details = resolve_contract_map_for_subscription(contract_map, state)
+
+    assert resolved["A888"]["symbol"] == "a2609"
+    assert details["A888"]["source"] == "contract_query_default"
+    assert details["A888"]["query_candidates"] == ["a2609", "a2611"]
+
+
+def test_resolve_contract_map_uses_query_candidate_when_default_missing():
+    contract_map = {
+        "ZN888": {"symbol": "zn2608", "exchange": "SHFE", "vt_symbol": "zn2608.SHFE"},
+    }
+    state = CaptureState()
+    state.contracts["zn2609.SHFE"] = {"symbol": "zn2609", "exchange": "SHFE", "vt_symbol": "zn2609.SHFE"}
+    state.contracts["zn2610.SHFE"] = {"symbol": "zn2610", "exchange": "SHFE", "vt_symbol": "zn2610.SHFE"}
+
+    resolved, details = resolve_contract_map_for_subscription(contract_map, state)
+
+    assert resolved["ZN888"]["symbol"] == "zn2610"
+    assert resolved["ZN888"]["vt_symbol"] == "zn2610.SHFE"
+    assert details["ZN888"]["source"] == "contract_query_roll_forward"
+    assert details["ZN888"]["query_candidates"] == ["zn2609", "zn2610"]
+
+
+def test_build_export_includes_contract_resolution_metadata(tmp_path):
+    state = CaptureState()
+    payload = build_export(
+        state=state,
+        config_path=tmp_path / "cfg.json",
+        contract_map_path=tmp_path / "map.json",
+        contract_map={"SC888": {"symbol": "sc2609", "exchange": "INE", "vt_symbol": "sc2609.INE"}},
+        contract_map_provenance={
+            "path": str(tmp_path / "map.json"),
+            "version": "V1",
+            "effective_date": "2026-08-11",
+            "note": "",
+            "enabled_symbols": ["SC888"],
+            "enabled_count": 1,
+        },
+        started_at="2026-08-11T05:39:31+00:00",
+        ended_at="2026-08-11T07:01:11+00:00",
+        duration_seconds=4900,
+        setting_masked={},
+        contract_map_resolution={
+            "SC888": {
+                "source": "account_activity",
+                "default_symbol": "sc2608",
+                "resolved_symbol": "sc2609",
+                "query_candidates": ["sc2608", "sc2609"],
+                "account_activity_symbol": "sc2609",
+            }
+        },
+    )
+
+    assert payload["meta"]["contract_map"]["SC888"]["symbol"] == "sc2609"
+    assert payload["meta"]["contract_map_resolution"]["SC888"]["source"] == "account_activity"
