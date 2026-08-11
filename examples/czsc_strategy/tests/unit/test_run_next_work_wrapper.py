@@ -434,6 +434,9 @@ def test_formal_capture_plan_night_window_supports_next_day_symbol_cutoff():
 
 def test_enabled_night_symbols_define_formal_session_capture_end_in_contract_map():
     contract_map = json.loads((DIAG / "simnow_contract_map.json").read_text(encoding="utf-8"))
+    enabled_symbols = sorted(
+        symbol for symbol, row in contract_map.items() if isinstance(row, dict) and row.get("enabled")
+    )
 
     missing = []
     for symbol, row in contract_map.items():
@@ -445,6 +448,7 @@ def test_enabled_night_symbols_define_formal_session_capture_end_in_contract_map
         if not cutoff:
             missing.append(symbol)
 
+    assert enabled_symbols == ["A888", "RB888", "ZN888"]
     assert missing == []
 
 

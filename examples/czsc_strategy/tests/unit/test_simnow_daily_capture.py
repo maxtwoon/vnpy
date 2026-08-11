@@ -145,4 +145,4 @@ def test_live_contract_map_excludes_ap888_from_formal_observation_set():
     data = load_contract_map(CONTRACT_MAP_PATH)
 
     assert "AP888" not in data
-    assert set(data) == {"SC888", "A888", "ZN888", "RB888"}
+    assert set(data) == {"A888", "ZN888", "RB888"}
