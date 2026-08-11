@@ -7,6 +7,7 @@ from typing import Any
 
 from simnow_20d_aggregate import build_20d_aggregate
 from declassify_historical_reports import build_banner
+from simnow_action_summary import build_action_summary
 from simnow_observation_window import load_observation_start_date
 
 

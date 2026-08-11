@@ -12,7 +12,7 @@ from simnow_ledger_summary import (  # noqa: E402
     build_ledger_summary,
     load_ledger,
 )
-from simnow_observation_window import filter_records_by_start  # noqa: E402
+from simnow_observation_window import filter_records_by_start, load_observation_start_date  # noqa: E402
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -207,8 +207,11 @@ def test_cli_writes_summary_json(tmp_path):
     ledger_path = tmp_path / "simnow_observation_ledger.jsonl"
     # This CLI invocation does not pass --start-date, so it falls back to the
     # repo's default simnow_observation_window.json. The record date must stay
-    # on/after that config's observation_start_date or it gets filtered out.
-    _write_jsonl(ledger_path, [_pending_record("2026-07-28", "historical_db_lag")])
+    # on/after that config's observation_start_date or it gets filtered out,
+    # so derive the record date from the current config instead of hardcoding
+    # (observation-window resets move the start date forward over time).
+    start_date = load_observation_start_date() or "2026-07-28"
+    _write_jsonl(ledger_path, [_pending_record(start_date, "historical_db_lag")])
     out_path = tmp_path / "simnow_ledger_summary.json"
 
     result = subprocess.run(

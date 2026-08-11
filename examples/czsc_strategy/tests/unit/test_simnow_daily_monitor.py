@@ -14,6 +14,7 @@ from simnow_daily_monitor import (  # noqa: E402
     compare_simnow_replay,
     evaluate_thresholds,
     load_json,
+    load_monitor_baseline,
     load_thresholds_config,
     make_record,
     normalize_daily_metrics,
@@ -111,6 +112,31 @@ def test_load_json_accepts_utf8_bom(tmp_path):
     payload = load_json(path)
 
     assert payload["meta"]["replay_available"] is False
+
+
+def test_load_monitor_baseline_allows_missing_baseline_when_thresholds_exist(tmp_path):
+    thresholds_path = tmp_path / "thresholds.json"
+    thresholds_path.write_text(
+        """
+        {
+          "schema_version": 1,
+          "metrics": {
+            "gross_exposure": {
+              "baseline": 0.5,
+              "warning": 0.4,
+              "halt": 0.5,
+              "direction": "high",
+              "unit": ""
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    baseline = load_monitor_baseline(tmp_path / "missing-baseline.json", thresholds_path)
+
+    assert baseline == {}
 
 
 def test_compare_simnow_replay_requires_exact_event_surface_match():

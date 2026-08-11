@@ -184,6 +184,15 @@ def load_thresholds_config(path: Path) -> dict[str, Threshold]:
     return thresholds
 
 
+def load_monitor_baseline(path: Path, thresholds_path: Path | None = None) -> dict[str, Any]:
+    """Load the baseline JSON unless thresholds already make it optional."""
+    if path.exists():
+        return load_json(path)
+    if thresholds_path and thresholds_path.exists():
+        return {}
+    return load_json(path)
+
+
 def normalize_daily_metrics(raw: dict[str, Any]) -> dict[str, float]:
     """Normalize daily/rolling risk fields for threshold checks."""
     if not raw:
@@ -771,8 +780,8 @@ def main() -> None:
     monitor_config["risk_priority"] = args.risk_priority
     monitor_config["consistency_source_mode"] = args.consistency_source_mode
 
-    baseline = load_json(args.baseline)
     thresholds = load_thresholds_config(args.thresholds) if args.thresholds and args.thresholds.exists() else None
+    baseline = load_monitor_baseline(args.baseline, args.thresholds if thresholds is not None else None)
     simnow = load_json(args.simnow_json) if args.simnow_json else None
     replay = load_json(args.replay_json) if args.replay_json else None
     kline = load_json(args.kline_json) if args.kline_json else None
