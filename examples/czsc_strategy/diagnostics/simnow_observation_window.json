@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observation_start_date": "2026-07-28",
-  "reason": "Reset per simnow_risk_halt_decision_2026-07-27.json (selected_decision=reset_observation_window_after_strategy_change, operator=hanabeatrisa): the 2026-07-27 warning/halt metrics came from the same stale cumulative scan (upto=daily.loc[:day]) over the fixed 2023-06-19~06-28 segment as the 2026-07-24 halt. Root cause fixed in 0.2.49: replay risk metrics are now measured inside the observation window (risk_window_start in snapshot meta), so the counting window restarts from 2026-07-28 under the corrected measurement semantics.",
+  "observation_start_date": "2026-08-12",
+  "reason": "Manual reset requested on 2026-08-11: restart the formal daily observation acceptance window from 2026-08-12 and preserve older ledger rows as audit-only history.",
   "previous_ledger_policy": "preserve_and_ignore_before_start"
 }
