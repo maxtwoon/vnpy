@@ -133,10 +133,14 @@ def validate_artifacts(
 
     if report_md_path.exists():
         report = report_md_path.read_text(encoding="utf-8")
-        expected_row_prefix = (
-            f"| {date} | {bool(record.get('valid_observation'))} | {record.get('status')} | {_record_reason(record)} |"
+        observation_start_date = str(
+            run_summary.get("promotion", {}).get("observation_start_date") or ""
         )
-        _expect_line(report, expected_row_prefix, "report_md", errors)
+        if not observation_start_date or date >= observation_start_date:
+            expected_row_prefix = (
+                f"| {date} | {bool(record.get('valid_observation'))} | {record.get('status')} | {_record_reason(record)} |"
+            )
+            _expect_line(report, expected_row_prefix, "report_md", errors)
     else:
         errors.append(f"report_md missing: {report_md_path}")
 

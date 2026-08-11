@@ -10713,6 +10713,166 @@ gate can clear; until then, keep `2026-08-11` as
 `pending/kline_coverage_incomplete` and do not count it toward the 20-day
 valid-observation gate.
 
+## 2026-08-11 Automatic SimNow Contract Rollover Resolution
+
+### Goal
+
+Stop relying on a stale static SimNow contract mapping when a research symbol
+has already rolled to a newer live contract, and apply the same automatic
+resolution rule across all formal observation symbols.
+
+### Changes
+
+- Updated `simnow_daily_capture.py`.
+  - Added a generic contract-resolution step before subscriptions are sent.
+  - The resolver now applies one shared priority order for every enabled
+    research symbol:
+    1. same-prefix account activity (`positions` / `orders` / `trades`)
+    2. default symbol when it still appears in SimNow contract-query candidates
+    3. highest available same-prefix contract-query candidate when the default
+       symbol is missing
+    4. static contract-map fallback when neither live signal exists
+  - The resolved subscription map is now written into the export metadata, plus
+    a machine-readable `contract_map_resolution` block that records source,
+    default symbol, resolved symbol, query candidates, and account-activity
+    evidence for each research symbol.
+- Updated `test_simnow_daily_capture.py`.
+  - Added TDD coverage for:
+    - `SC888`: static `sc2608` overridden by live account activity on `sc2609`
+    - `A888`: keep the configured default when the contract query still
+      contains it
+    - `ZN888`: roll forward automatically when the configured default is absent
+      from the contract query
+    - export metadata: include `contract_map_resolution`
+
+### Verification
+
+Passed:
+
+```powershell
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py -q
+python -m py_compile .\examples\czsc_strategy\diagnostics\simnow_daily_capture.py
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_daily_capture.py .\examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py -q
+```
+
+Results:
+
+- `test_simnow_daily_capture.py`: `9 passed`
+- `py_compile simnow_daily_capture.py`: exit code `0`
+- combined capture/wrapper regression suite: `118 passed`
+
+### Next Action
+
+Run the next formal SimNow observation with the new resolver enabled and check
+whether `SC888` now auto-switches to the live contract when account-side or
+contract-query evidence indicates a rollover.
+
+## 2026-08-11 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-11`, finish the artifact chain, and determine the authoritative
+outcome from `simnow_run_summary_2026-08-11.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-11T21:06:43.8722914+08:00`,
+  inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `350 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6731`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live capture itself completed and produced the expected capture, kline,
+  replay, record, report, run-summary, and daily-brief artifacts, but the
+  wrapper exited non-zero at the final summary-consistency gate.
+- Root cause was local post-process validation drift, not SimNow runtime
+  failure: `simnow_summary_consistency.py` always required the daily markdown
+  report to contain a `Recent Records` row for the observation date, while the
+  current `simnow_observation_window.json` intentionally resets
+  `observation_start_date` to `2026-08-12`, so the 20-day report correctly
+  excludes the `2026-08-11` row from its filtered statistics.
+- Added a minimal validator fix so the report-row assertion only applies when
+  `date >= promotion.observation_start_date`, and added a regression test for
+  the excluded-pre-window case in
+  `examples/czsc_strategy/tests/unit/test_simnow_summary_consistency.py`.
+- Verified the fix with targeted test and compile checks, then resumed safely
+  with `run_next_work.ps1 -LiveCapture -PostProcessOnly -MinKlineBarsPerSymbol 30`
+  so no second SimNow connection was opened.
+- The resumed post-process completed cleanly with `351 passed` in preflight and
+  `summary consistency: ok`.
+- The authoritative result from `simnow_run_summary_2026-08-11.json` is:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=kline_coverage_incomplete`
+  - `automation_action=resolve pending gate before counting`
+- Daily summary fields from the same run summary:
+  - `ticks=20628`
+  - `contracts_count=17482`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=4`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=["SC888"]`
+  - `record.status=pending`
+  - `record.valid_observation=false`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pending`
+  - `kline.missing_symbols=["SC888"]`
+  - `user_action_needed=false`
+- This day remains a data-readiness wait state rather than a code failure,
+  connection failure, contract-query failure, subscription-completeness
+  failure, or order-safety breach. `SC888` subscribed successfully but produced
+  zero ticks, so the kline coverage gate stayed incomplete and the day does not
+  count toward the 20-day valid-observation total.
+
+### Verification
+
+Passed:
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+python -m pytest .\examples\czsc_strategy\tests\unit\test_simnow_summary_consistency.py -q
+python -m py_compile .\examples\czsc_strategy\diagnostics\simnow_summary_consistency.py
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -MinKlineBarsPerSymbol 30
+```
+
+Results:
+
+- Initial preflight passed: `350 passed`.
+- Initial live capture ran through the `21:05` formal night window and wrote
+  the authoritative daily artifacts, but failed at final consistency validation.
+- Targeted validator regression tests passed: `5 passed`.
+- Compile check passed for `simnow_summary_consistency.py`.
+- Post-process rerun preflight passed: `351 passed`.
+- Post-process rerun completed with `summary consistency: ok`.
+- Final authoritative artifacts exist and are internally consistent:
+  - `simnow_export_2026-08-11.json`
+  - `simnow_record_2026-08-11.json`
+  - `simnow_report_2026-08-11.md`
+  - `simnow_run_summary_2026-08-11.json`
+  - `simnow_daily_brief_2026-08-11.md`
+
+### Next Action
+
+Wait for an active session where `SC888` contributes ticks so the missing-kline
+gate can clear; until then, keep `2026-08-11` as
+`pending/kline_coverage_incomplete` and do not count it toward the 20-day
+valid-observation gate.
+
 ## 2026-08-11 Remove SC888 From Formal Observation Set
 
 ### Goal

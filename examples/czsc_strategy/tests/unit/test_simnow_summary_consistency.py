@@ -118,6 +118,69 @@ def test_validate_artifacts_accepts_consistent_summary_and_reports(tmp_path):
     )
 
 
+def test_validate_artifacts_allows_report_to_exclude_pre_window_record(tmp_path):
+    date = "2026-08-11"
+    files = _make_files(tmp_path, date)
+    capture = {
+        "meta": {"read_only": True, "orders_sent_by_workflow": 0},
+        "raw": {"ticks": [], "contracts_count": 10, "accounts": [], "positions": [], "orders": [], "trades": [], "subscribed": []},
+    }
+    record = _base_record(date)
+    ledger_summary = {
+        "generated_at": "2026-08-11T21:30:00+08:00",
+        "min_days": 20,
+        "observation_start_date": "2026-08-12",
+        "excluded_before_start_count": 1,
+        "total_rows": 0,
+        "valid_observation_days": 0,
+        "pending_days": 0,
+        "skipped_days": 0,
+        "halt_days": 0,
+        "failed_days": 0,
+        "latest_date": "",
+        "latest_valid_date": "",
+        "consecutive_valid_days": 0,
+        "ready_to_expand": False,
+        "promotion_blockers": ["need_20_more_valid_observation_days"],
+        "reason_counts": {},
+        "automation_status_counts": {},
+        "latest_action": {},
+        "next_action": "continue daily observation",
+    }
+    promotion = {
+        "ready_to_expand": False,
+        "valid_observation_days": 0,
+        "observed_days": 0,
+        "observation_start_date": "2026-08-12",
+        "excluded_before_start_count": 1,
+        "promotion_blockers": ["need_20_more_valid_observation_days"],
+        "top_blocking_actions": [],
+    }
+
+    _write_json(files["capture_json"], capture)
+    _write_json(files["record_json"], record)
+    summary = build_run_summary(date, files, promotion_summary=promotion, ledger_summary=ledger_summary)
+    run_summary_path = tmp_path / f"simnow_run_summary_{date}.json"
+    ledger_summary_path = tmp_path / "simnow_ledger_summary.json"
+    daily_brief_path = tmp_path / f"simnow_daily_brief_{date}.md"
+    report_path = files["observation_report_md"]
+    _write_json(run_summary_path, summary)
+    _write_json(ledger_summary_path, ledger_summary)
+    daily_brief_path.write_text(build_daily_brief(summary), encoding="utf-8")
+    report_summary = build_20d_report([record], observation_start_date="2026-08-12")
+    write_20d_markdown(report_summary, report_path)
+
+    validate_artifacts(
+        date=date,
+        run_summary_path=run_summary_path,
+        record_path=files["record_json"],
+        ledger_summary_path=ledger_summary_path,
+        daily_brief_path=daily_brief_path,
+        report_md_path=report_path,
+        kline_path=files["kline_json"],
+    )
+
+
 def test_validate_artifacts_rejects_stale_run_summary_record_status(tmp_path):
     date = "2026-07-15"
     files = _make_files(tmp_path, date)
