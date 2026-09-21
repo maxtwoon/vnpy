@@ -2,7 +2,7 @@
 
 > **本地研究项目分工（2026-09-15）**：本仓库作为量化研究与回测基础；缠论择时统一使用
 > [D:\repo\czsc-timing-engine](D:/repo/czsc-timing-engine/README.md)。
-> `examples/czsc_strategy` 已[原地归档](examples/czsc_strategy/ARCHIVED.md)，仅保留历史源码与证据。
+> `examples/czsc_strategy` 已于 2026-09-21 从工作区移除；历史源码、证据与归档说明保留在 git 历史（提交 `35dfca4b2`）。
 > 新项目的信号接入尚未实施。
 
 > **本地数据接入（2026-09-16）**：已通过独立`vnpy_datasource`插件连接

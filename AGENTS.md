@@ -5,7 +5,8 @@
 The user has archived `examples/czsc_strategy` in place. Its source, evidence,
 tests, and existing CI/sync paths are retained for historical compatibility.
 Do not treat its historical HANDOFF items or launch instructions as current work.
-See [the archive notice](examples/czsc_strategy/ARCHIVED.md).
+The directory was removed from the working tree on 2026-09-21; the archive notice and all
+historical files remain in git history (commit `35dfca4b2`).
 The active Chan-theory timing project is `D:\repo\czsc-timing-engine`.
 Use that project's current instructions and signal semantics for future timing
 research; its integration with VeighNa has not yet been implemented.
