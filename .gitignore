@@ -139,3 +139,6 @@ a80_codex_manual.db-journal
 
 # Local dataSource research downloads (source code lives in integrations/).
 /research_data/
+
+# Directory junction to the ETF research repo (D:/repo/quant/strategies/vnpy-etf); content is tracked there.
+/research/
