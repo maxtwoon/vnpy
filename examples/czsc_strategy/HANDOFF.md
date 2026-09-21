@@ -12,6 +12,12 @@ deliverables:
 blockers: []
 ---
 
+## 当前决定：原地归档（2026-09-15）
+
+用户明确将本目录归档，当前缠论择时项目改为 `D:\repo\czsc-timing-engine`。
+归档细则见 [ARCHIVED.md](ARCHIVED.md)。以下 A106 阶段、验收记录、未完成项和下一棒说明
+保留为历史，不再作为当前任务入口；本次不重开或推进已经处于 done 的历史任务。
+
 ## 背景与目标
 
 《缠论》书摘 ⇄ 代码对照核查表（`docs/theory_code_crosscheck.md`，0.2.58 立项，

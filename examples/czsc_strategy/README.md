@@ -1,4 +1,9 @@
-# 缠论期货 CTA 策略（当前实现）
+# 缠论期货 CTA 策略（已归档）
+
+> **ARCHIVED · 2026-09-15**：本目录原地归档，保留历史源码与证据。
+> 当前缠论择时统一使用 [D:\repo\czsc-timing-engine](D:/repo/czsc-timing-engine/README.md)。
+> 下文中的“当前实现”“生产路径”和运行步骤均描述归档时的历史代码，不再作为新研究入口。
+> 归档范围与后续项目分工见 [ARCHIVED.md](ARCHIVED.md)。
 
 <!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->
 
@@ -10,7 +15,7 @@
 > - `research_only`: True
 > - `note`: 请勿将本仓库中的回测数字、参数默认值或诊断报告作为投资建议使用。
 
-## 快速开始
+## 历史运行说明（仅供明确指定的复核）
 
 1. **安装依赖**：本项目基于 VeighNa（vnpy）框架，环境安装请参考仓库根目录 `AGENTS.md` / `install.bat`；本目录额外依赖见 `requirements.txt`（核心为 `czsc==1.0.0rc8`、`pyecharts==2.1.0`）。
 2. **验证环境**：

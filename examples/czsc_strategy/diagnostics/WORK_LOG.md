@@ -10713,6 +10713,2131 @@ gate can clear; until then, keep `2026-08-11` as
 `pending/kline_coverage_incomplete` and do not count it toward the 20-day
 valid-observation gate.
 
+## 2026-08-12 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-12`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-12.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-12T09:07:23.5610411+08:00`,
+  still inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8496`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain without `-PostProcessOnly` recovery:
+  - `simnow_export_2026-08-12.json`
+  - `simnow_record_2026-08-12.json`
+  - `simnow_report_2026-08-12.md`
+  - `simnow_run_summary_2026-08-12.json`
+- The authoritative result from `simnow_run_summary_2026-08-12.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=25033`
+  - `contracts_count=17482`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set was the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), so `SC888` no longer blocked the
+  daily gate.
+- This day counts toward the restarted 20-day observation window beginning on
+  `2026-08-12`; the updated ledger summary now reports
+  `valid_observation_days=1`, `consecutive_valid_days=1`, and
+  `promotion_blockers=["need_19_more_valid_observation_days"]`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics\simnow_*_2026-08-12*
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=25033`,
+  `contracts_count=17482`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts:
+  - `simnow_export_2026-08-12.json`
+  - `simnow_record_2026-08-12.json`
+  - `simnow_report_2026-08-12.md`
+  - `simnow_run_summary_2026-08-12.json`
+- Final conclusion is taken from `simnow_run_summary_2026-08-12.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-31 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-31`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-31.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-31T21:07:23.8754777+08:00`,
+  still close enough for the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6666`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-31.json`
+  - `simnow_record_2026-08-31.json`
+  - `simnow_report_2026-08-31.md`
+  - `simnow_run_summary_2026-08-31.json`
+- The authoritative result from `simnow_run_summary_2026-08-31.json` is:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=no_captured_session_data_only_replay_derived`
+  - `automation_action=resolve pending gate before counting`
+- Daily summary fields from the same run summary:
+  - `ticks=23429`
+  - `contracts_count=16772`
+  - `accounts=1`
+  - `positions=0`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pending`
+  - `record.valid_observation=false`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pending`
+  - `delayed_replay.reason=no_captured_session_data_only_replay_derived`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=true`
+- This is not a connection failure, query failure, subscription failure,
+  historical-DB failure, no-tick skip, or order-safety breach. The pending
+  status comes from the run summary's delayed replay / environment observation
+  classification: the live side captured ticks successfully, but the strategy
+  event surface for the capture window remained empty while delayed replay
+  still reported replay-derived signals/positions, so the day does not count
+  toward the 20-day valid-observation total.
+- The formal ledger summary now reports `valid_observation_days=10`,
+  `pending_days=2`, `consecutive_valid_days=0`, and the blockers
+  `need_10_more_valid_observation_days`, `pending_days_present`,
+  `non_pass_days_present`, and `consistency_not_fully_matched`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-31*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=23429`,
+  `contracts_count=16772`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-31.json`, not
+  from markdown narration.
+
+### Next Action
+
+Treat `2026-08-31` as `pending/no_captured_session_data_only_replay_derived`,
+inspect why the night-session live strategy surface stayed empty while delayed
+replay reported signals/positions, and do not count this day toward the 20-day
+valid-observation gate until that pending reason is cleared.
+
+## 2026-08-28 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-28`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-28.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-28T21:06:53.7574475+08:00`,
+  still inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6727`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-28.json`
+  - `simnow_record_2026-08-28.json`
+  - `simnow_report_2026-08-28.md`
+  - `simnow_run_summary_2026-08-28.json`
+- The authoritative result from `simnow_run_summary_2026-08-28.json` is:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=kline_coverage_incomplete`
+  - `automation_action=resolve pending gate before counting`
+- Daily summary fields from the same run summary:
+  - `ticks=4041`
+  - `contracts_count=16569`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=["ZN888"]`
+  - `record.status=pending`
+  - `record.valid_observation=false`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pending`
+  - `kline.missing_symbols=["ZN888"]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained `A888`, `RB888`, `ZN888`, but `ZN888`
+  stayed subscribed with zero ticks during this night window, so same-day
+  kline coverage remained incomplete and the day does not count toward the
+  20-day valid-observation total.
+- The formal ledger summary now reports `valid_observation_days=10`,
+  `consecutive_valid_days=0`, and blockers
+  `need_10_more_valid_observation_days` plus `pending_days_present`.
+- One external active position (`sc2609`) remained visible as contamination
+  audit evidence only; there were no captured external orders/trades and no
+  workflow orders.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-28*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=4041`,
+  `contracts_count=16569`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-28.json`, not
+  from markdown narration.
+
+### Next Action
+
+Wait for a session where `ZN888` contributes ticks so the missing-kline gate
+can clear; until then, keep `2026-08-28` as
+`pending/kline_coverage_incomplete` and do not count it toward the 20-day
+valid-observation gate.
+
+## 2026-08-28 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-28`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-28.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-28T13:38:30.0992871+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4878`, ending at the afternoon
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-28.json`
+  - `simnow_record_2026-08-28.json`
+  - `simnow_report_2026-08-28.md`
+  - `simnow_run_summary_2026-08-28.json`
+- The authoritative result from `simnow_run_summary_2026-08-28.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=19010`
+  - `contracts_count=16431`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The formal ledger summary now reports `valid_observation_days=11`,
+  `consecutive_valid_days=11`, and the only remaining promotion blocker is
+  `need_9_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-28*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=19010`,
+  `contracts_count=16431`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-28.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-28 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-28`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-28.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-28 09:06:22 +08:00`,
+  still inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8530`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The initial wrapper invocation completed the historical DB update and
+  read-only live capture side, writing:
+  - `simnow_export_2026-08-28.json`
+  - `simnow_historical_db_update_2026-08-28.json`
+  - `simnow_kline_update_2026-08-28.json`
+  - `simnow_replay_readiness_2026-08-28.json`
+- The first wrapper invocation did not finish the downstream artifact chain
+  before the client-side timeout; `simnow_replay_2026-08-28.json`,
+  `simnow_record_2026-08-28.json`, `simnow_report_2026-08-28.md`, and
+  `simnow_run_summary_2026-08-28.json` were still missing at that point.
+- Root-cause evidence matched the prior replay-export timeout/orphan path:
+  `simnow_replay_readiness_2026-08-28.json` reported `ready=true`, but an
+  orphaned `export_simnow_replay_snapshot.py --out-json simnow_replay_2026-08-28.json`
+  process remained running without producing the replay JSON.
+- Stopped only that orphaned replay-export process, then resumed safely with:
+  `run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600 -MinKlineBarsPerSymbol 30 -Date 2026-08-28`
+  so no second SimNow live connection was opened.
+- `-PostProcessOnly` replay refresh succeeded and generated the missing
+  same-day artifact chain:
+  - `simnow_replay_2026-08-28.json`
+  - `simnow_record_2026-08-28.json`
+  - `simnow_report_2026-08-28.md`
+  - `simnow_run_summary_2026-08-28.json`
+  - `simnow_daily_brief_2026-08-28.md`
+- The authoritative result from `simnow_run_summary_2026-08-28.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=17024`
+  - `contracts_count=16431`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- Formal readiness stayed green after recovery:
+  - `replay_db_ready=true`
+  - `kline_coverage_ready=true`
+  - `overall_ready=true`
+  - `blocking_reasons=[]`
+- Account contamination remained external only:
+  - `active_positions=1`
+  - `position_symbols=["sc2609"]`
+  - workflow `orders=0`
+  - workflow `trades=0`
+- The formal ledger summary now reports `valid_observation_days=11`,
+  `consecutive_valid_days=11`, and the only remaining promotion blocker is
+  `need_9_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600 -MinKlineBarsPerSymbol 30 -Date 2026-08-28
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-28*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=17024`,
+  `contracts_count=16431`, `orders=0`, and `trades=0`.
+- The initial wrapper invocation hit a client/runtime timeout after capture;
+  the recovery path finished from existing artifacts without a second live
+  SimNow connection.
+- `-PostProcessOnly -RefreshReplay -ReplayTimeoutSeconds 3600` completed with
+  `summary consistency: ok` and generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-28.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-27 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-27`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-27.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-27T21:06:20.2894852+08:00`,
+  still inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6756`, ending at the night close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-27.json`
+  - `simnow_record_2026-08-27.json`
+  - `simnow_report_2026-08-27.md`
+  - `simnow_run_summary_2026-08-27.json`
+- The authoritative result from `simnow_run_summary_2026-08-27.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=24586`
+  - `contracts_count=16431`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- Contract query and subscription gates passed for the enabled formal symbol
+  set (`A888`, `RB888`, `ZN888`), and no automatic order placement was
+  observed.
+- The formal ledger summary now reports `valid_observation_days=10`,
+  `consecutive_valid_days=10`, and the only remaining promotion blocker is
+  `need_10_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-27*'
+Get-Content -Raw .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-08-27.json
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=24586`,
+  `contracts_count=16431`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-27.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-26 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-26`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-26.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-26T09:07:44+08:00`, still
+  inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8449`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-26.json`
+  - `simnow_record_2026-08-26.json`
+  - `simnow_report_2026-08-26.md`
+  - `simnow_run_summary_2026-08-26.json`
+- The authoritative result from `simnow_run_summary_2026-08-26.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=28500`
+  - `contracts_count=16077`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The formal ledger summary now reports `valid_observation_days=9`,
+  `consecutive_valid_days=9`, and the only remaining promotion blocker is
+  `need_11_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-26*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=28500`,
+  `contracts_count=16077`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-26.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-25 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-25`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-25.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-25T21:07:42.8732172+08:00`,
+  still inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6669`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-25.json`
+  - `simnow_record_2026-08-25.json`
+  - `simnow_report_2026-08-25.md`
+  - `simnow_run_summary_2026-08-25.json`
+- The authoritative result from `simnow_run_summary_2026-08-25.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=18110`
+  - `contracts_count=16077`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- One external active position (`sc2609`) remained visible as contamination
+  audit evidence only; there were no captured external orders/trades and no
+  workflow orders.
+- The formal ledger summary now reports `valid_observation_days=8`,
+  `consecutive_valid_days=8`, and the only remaining promotion blocker is
+  `need_12_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-25*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=18110`,
+  `contracts_count=16077`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-25.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-25 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-25`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-25.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-25T09:06:56.1991085+08:00`,
+  still inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8522`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-25.json`
+  - `simnow_record_2026-08-25.json`
+  - `simnow_report_2026-08-25.md`
+  - `simnow_run_summary_2026-08-25.json`
+- The authoritative result from `simnow_run_summary_2026-08-25.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=37465`
+  - `contracts_count=17029`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The formal ledger summary now reports `valid_observation_days=8`,
+  `consecutive_valid_days=8`, and the only remaining promotion blocker is
+  `need_12_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-25*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=37465`,
+  `contracts_count=17029`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-25.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-25 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-25`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-25.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-25T13:37:17.6944083+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4884`, ending at the afternoon
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-25.json`
+  - `simnow_record_2026-08-25.json`
+  - `simnow_report_2026-08-25.md`
+  - `simnow_run_summary_2026-08-25.json`
+- The authoritative result from `simnow_run_summary_2026-08-25.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=23253`
+  - `contracts_count=17029`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The formal ledger summary remains at `valid_observation_days=8`,
+  `consecutive_valid_days=8`, and the only remaining promotion blocker is
+  `need_12_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-25*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=23253`,
+  `contracts_count=17029`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-25.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-24 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-24`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-24.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-24T21:07:22.3825813+08:00`,
+  still inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6688`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-24.json`
+  - `simnow_record_2026-08-24.json`
+  - `simnow_report_2026-08-24.md`
+  - `simnow_run_summary_2026-08-24.json`
+- The authoritative result from `simnow_run_summary_2026-08-24.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=33470`
+  - `contracts_count=17029`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The formal ledger summary remains at `valid_observation_days=7`,
+  `consecutive_valid_days=7`, and the only remaining promotion blocker is
+  `need_13_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-24*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=33470`,
+  `contracts_count=17029`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-24.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-24 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-24`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-24.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-24T13:36:06.4634677+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4972`, ending at the afternoon
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-24.json`
+  - `simnow_record_2026-08-24.json`
+  - `simnow_report_2026-08-24.md`
+  - `simnow_run_summary_2026-08-24.json`
+- The authoritative result from `simnow_run_summary_2026-08-24.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=21249`
+  - `contracts_count=16859`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  `83` one-minute bars for the configured `30`-bar gate.
+- The formal ledger summary now reports `valid_observation_days=7`,
+  `consecutive_valid_days=7`, and the only remaining promotion blocker is
+  `need_13_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-24*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=21249`,
+  `contracts_count=16859`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-24.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-20 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-20`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-20.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-20T21:06:42.0205195+08:00`,
+  inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- No pending `simnow_risk_halt_decision_*.json` gate was present before the
+  live run.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6735`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-20.json`
+  - `simnow_record_2026-08-20.json`
+  - `simnow_report_2026-08-20.md`
+  - `simnow_run_summary_2026-08-20.json`
+- The authoritative result from `simnow_run_summary_2026-08-20.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=34125`
+  - `contracts_count=16953`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The account-contamination snapshot still recorded one external active
+  position (`sc2609`), but there were no captured external orders or trades,
+  and no workflow orders were sent.
+- This night-session run counts as a valid formal observation day under the
+  restarted window beginning on `2026-08-12`; the day-level conclusion stays
+  `valid` and the only promotion blocker is
+  `need_15_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-20*'
+@'
+import json
+from pathlib import Path
+p = Path(r"examples/czsc_strategy/diagnostics/simnow_run_summary_2026-08-20.json")
+obj = json.loads(p.read_text(encoding="utf-8"))
+print(obj["automation_status"], obj["automation_exit_code"], obj["automation_reason"], obj["automation_action"])
+'@ | python -
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=34125`,
+  `contracts_count=16953`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Python JSON verification confirmed the run-summary authority fields:
+  `valid 0 no_actionable_events_on_either_side counts_for_20d`.
+- Final conclusion is taken from `simnow_run_summary_2026-08-20.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-20 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-20`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-20.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-20T13:37:39.4472978+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4877`, ending at the afternoon close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-20.json`
+  - `simnow_record_2026-08-20.json`
+  - `simnow_report_2026-08-20.md`
+  - `simnow_run_summary_2026-08-20.json`
+- The authoritative result from `simnow_run_summary_2026-08-20.json` is:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=kline_coverage_incomplete`
+  - `automation_action=resolve pending gate before counting`
+- Daily summary fields from the same run summary:
+  - `ticks=15983`
+  - `contracts_count=16889`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=["ZN888"]`
+  - `record.status=pending`
+  - `record.valid_observation=false`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pending`
+  - `kline.missing_symbols=["ZN888"]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- This day remains a data-readiness wait state rather than a code failure,
+  connection failure, contract-query failure, subscription-completeness
+  failure, or order-safety breach. `ZN888` subscribed successfully but produced
+  zero ticks, so the kline coverage gate stayed incomplete and the day does not
+  count toward the 20-day valid-observation total.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-20*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=15983`,
+  `contracts_count=16889`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-20.json`, not
+  from markdown narration.
+
+### Next Action
+
+Wait for an active session where `ZN888` contributes ticks so the missing-kline
+gate can clear; until then, keep `2026-08-20` as
+`pending/kline_coverage_incomplete` and do not count it toward the 20-day
+valid-observation gate.
+
+## 2026-08-17 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-17`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-17.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-17T21:06:55.4152916+08:00`,
+  inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6711`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-17.json`
+  - `simnow_record_2026-08-17.json`
+  - `simnow_report_2026-08-17.md`
+  - `simnow_run_summary_2026-08-17.json`
+- The authoritative result from `simnow_run_summary_2026-08-17.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=32666`
+  - `contracts_count=17057`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- Contract query and enabled-symbol subscriptions both completed successfully
+  for the formal three-symbol set (`A888`, `RB888`, `ZN888`).
+- No automatic orders were sent by the workflow, and the account-side
+  `sc2609` position remained contamination evidence only, not strategy PnL.
+- This run counts toward the restarted 20-day observation window beginning on
+  `2026-08-12`; the current promotion blocker is
+  `need_16_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-17*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=32666`,
+  `contracts_count=17057`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-17.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-17 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-17`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-17.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-17T13:36:47.9497416+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4930`, ending at the afternoon close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-17.json`
+  - `simnow_record_2026-08-17.json`
+  - `simnow_report_2026-08-17.md`
+  - `simnow_run_summary_2026-08-17.json`
+- The authoritative result from `simnow_run_summary_2026-08-17.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=17236`
+  - `contracts_count=16900`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- Connection, contract query, and enabled-symbol subscriptions all succeeded
+  for the current three-symbol formal set (`A888`, `RB888`, `ZN888`).
+- No workflow order actions were emitted. The external SimNow account still had
+  one active `sc2609` position, but the run summary classified it as account
+  contamination/audit evidence only, not strategy PnL.
+- This afternoon run counts toward the restarted observation window beginning
+  on `2026-08-12`; promotion remains blocked only by
+  `need_16_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-17*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=17236`,
+  `contracts_count=16900`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-17.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-17 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-17`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-17.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-17T09:06:03.4455297+08:00`,
+  inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8568`, ending at the day-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-17.json`
+  - `simnow_record_2026-08-17.json`
+  - `simnow_report_2026-08-17.md`
+  - `simnow_run_summary_2026-08-17.json`
+- The authoritative result from `simnow_run_summary_2026-08-17.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=27376`
+  - `contracts_count=16900`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This morning run remains a valid formal observation day under the restarted
+  window beginning on `2026-08-12`; the day-level conclusion stays `valid`
+  and the promotion blocker is now only `need_16_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-17*'
+python -c "import json, pathlib; p=pathlib.Path(r'D:\repo\vnpy\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-08-17.json'); d=json.loads(p.read_text(encoding='utf-8')); print(json.dumps({'automation_status': d['automation_status'], 'automation_exit_code': d['automation_exit_code'], 'automation_reason': d['automation_reason'], 'automation_action': d['automation_action']}, ensure_ascii=False, indent=2))"
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=27376`,
+  `contracts_count=16900`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-17.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-14 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-14`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-14.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-14T21:06:30.8991345+08:00`,
+  inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6731`, ending at the night-session
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the same-day
+  authoritative artifact chain:
+  - `simnow_export_2026-08-14.json`
+  - `simnow_record_2026-08-14.json`
+  - `simnow_report_2026-08-14.md`
+  - `simnow_run_summary_2026-08-14.json`
+- Session-scoped mirror artifacts were also generated for the formal night
+  window:
+  - `simnow_record_2026-08-14_night_open.json`
+  - `simnow_report_2026-08-14_night_open.md`
+  - `simnow_run_summary_2026-08-14_night_open.json`
+  - `simnow_daily_brief_2026-08-14_night_open.md`
+- The authoritative result from `simnow_run_summary_2026-08-14.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=23363`
+  - `contracts_count=16900`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- Contract query and subscription completeness both passed for the enabled
+  formal set (`A888`, `RB888`, `ZN888`), and all enabled symbols met the
+  configured `30`-bar 1M coverage gate.
+- No workflow orders were sent. Account-side `sc2609` position evidence remains
+  external contamination/audit evidence only and did not affect the strategy
+  validity decision.
+- This night-session run counts toward the restarted 20-day window beginning on
+  `2026-08-12`; `promotion.valid_observation_days=3` and the remaining blocker
+  is `need_17_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-14*night_open*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=23363`,
+  `contracts_count=16900`, `orders=0`, and `trades=0`.
+- Summary consistency validation passed: `summary consistency: ok`.
+- The same wrapper invocation generated the authoritative same-day artifacts and
+  the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-14.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-14 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-14`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-14.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-14T13:36:48.8278863+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4928`, ending at the afternoon close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-14.json`
+  - `simnow_record_2026-08-14.json`
+  - `simnow_report_2026-08-14.md`
+  - `simnow_run_summary_2026-08-14.json`
+- The authoritative result from `simnow_run_summary_2026-08-14.json` is:
+  - `automation_status=pending`
+  - `automation_exit_code=20`
+  - `automation_reason=kline_coverage_too_short`
+  - `automation_action=resolve pending gate before counting`
+- Daily summary fields from the same run summary:
+  - `ticks=7246`
+  - `contracts_count=16898`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pending`
+  - `record.valid_observation=false`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pending`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=["RB888"]`
+  - `user_action_needed=false`
+- Kline coverage was the only blocking gate. `RB888` subscribed successfully
+  but produced only `2` ticks / `2` one-minute bars, below the configured
+  `30`-bar threshold; `A888` and `ZN888` both cleared the kline gate with `82`
+  and `79` bars respectively.
+- This day remains a data-readiness wait state rather than a code failure,
+  connection failure, contract-query failure, subscription-completeness
+  failure, historical-DB failure, or order-safety breach. The wrapper, replay
+  export, summary generation, and consistency validation all completed.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-14*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=7246`,
+  `contracts_count=16898`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-14.json`, not
+  from markdown narration.
+
+### Next Action
+
+Wait for a later valid session where `RB888` can accumulate enough live ticks
+to clear the `30`-bar minimum; until then, keep `2026-08-14` as
+`pending/kline_coverage_too_short` and do not count it toward the 20-day
+valid-observation gate.
+
+## 2026-08-14 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-14`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-14.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-14T09:07:43.1190972+08:00`,
+  still inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8479`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-14.json`
+  - `simnow_record_2026-08-14.json`
+  - `simnow_report_2026-08-14.md`
+  - `simnow_run_summary_2026-08-14.json`
+  - `simnow_daily_brief_2026-08-14.md`
+- The authoritative result from `simnow_run_summary_2026-08-14.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=26220`
+  - `contracts_count=16898`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The SimNow account still showed one external active position (`sc2609`), but
+  `orders=0`, `trades=0`, and `orders_sent_by_workflow=0`, so the read-only
+  safety gate remained intact and the position was treated as contamination
+  audit evidence only.
+- This morning run counts as the third valid formal observation day under the
+  restarted window beginning on `2026-08-12`; the promotion blocker is now
+  only `need_17_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-14*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=26220`,
+  `contracts_count=16898`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including `simnow_run_summary_2026-08-14.json` and
+  `simnow_daily_brief_2026-08-14.md`.
+- Final conclusion is taken from `simnow_run_summary_2026-08-14.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-13 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-13`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-13.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-13T21:08:00.0762194+08:00`,
+  still inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6662`, ending at the night close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-13.json`
+  - `simnow_record_2026-08-13.json`
+  - `simnow_report_2026-08-13.md`
+  - `simnow_run_summary_2026-08-13.json`
+- The authoritative result from `simnow_run_summary_2026-08-13.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=22318`
+  - `contracts_count=16898`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This night-session run counts as the second valid formal observation day
+  under the restarted window beginning on `2026-08-12`; the day-level
+  conclusion stays `valid` and the promotion blocker is now only
+  `need_18_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=22318`,
+  `contracts_count=16898`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including `simnow_run_summary_2026-08-13.json` and
+  `simnow_daily_brief_2026-08-13.md`.
+- Final conclusion is taken from `simnow_run_summary_2026-08-13.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-13 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-13`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-13.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-13 13:36:19 +08:00`, still
+  inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4966`, ending at the afternoon close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-13.json`
+  - `simnow_record_2026-08-13.json`
+  - `simnow_report_2026-08-13.md`
+  - `simnow_run_summary_2026-08-13.json`
+- The authoritative result from `simnow_run_summary_2026-08-13.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=19243`
+  - `contracts_count=17030`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The SimNow account still showed one external active position (`sc2609`), but
+  `orders=0`, `trades=0`, and `orders_sent_by_workflow=0`, so the read-only
+  safety gate remained intact and the position was treated as contamination
+  audit evidence only.
+- This afternoon run counts as the second valid formal observation day under
+  the restarted window beginning on `2026-08-12`; the day-level conclusion
+  stays `valid` and the promotion blocker is still only
+  `need_18_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-13*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=19243`,
+  `contracts_count=17030`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-13.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-13 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-13`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-13.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-13T09:07:06.4925889+08:00`,
+  inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8510`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-13.json`
+  - `simnow_record_2026-08-13.json`
+  - `simnow_report_2026-08-13.md`
+  - `simnow_run_summary_2026-08-13.json`
+  - `simnow_daily_brief_2026-08-13.md`
+- The authoritative result from `simnow_run_summary_2026-08-13.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=26710`
+  - `contracts_count=17030`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This morning run counts as the second valid formal observation day under the
+  restarted window beginning on `2026-08-12`; the promotion blocker is now
+  only `need_18_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-Content .\examples\czsc_strategy\diagnostics\simnow_run_summary_2026-08-13.json
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=26710`,
+  `contracts_count=17030`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-13.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-12 21:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow for
+`2026-08-12`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-12.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-12T21:07:48.3996878+08:00`,
+  still inside the allowed `21:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `night_open` formal window and
+  auto-computed `capture_duration_seconds=6674`, ending at the night close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-12.json`
+  - `simnow_record_2026-08-12.json`
+  - `simnow_report_2026-08-12.md`
+  - `simnow_run_summary_2026-08-12.json`
+- The authoritative result from `simnow_run_summary_2026-08-12.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=22537`
+  - `contracts_count=17030`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This night-session run remains a valid formal observation day under the
+  restarted window beginning on `2026-08-12`; the day-level conclusion stays
+  `valid` and the promotion blocker is still only
+  `need_19_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-12*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=22537`,
+  `contracts_count=17030`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_night_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-12.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
 ## 2026-08-11 Automatic SimNow Contract Rollover Resolution
 
 ### Goal
@@ -11040,3 +13165,395 @@ Wait for an active session where `SC888` contributes ticks so the missing-kline
 gate can clear; until then, keep `2026-08-11` as
 `pending/kline_coverage_incomplete` and do not count it toward the 20-day
 valid-observation gate.
+
+## 2026-08-12 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-12`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-12.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-12 13:37:21 +08:00`, still
+  inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4882`, ending at the afternoon close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-12.json`
+  - `simnow_record_2026-08-12.json`
+  - `simnow_report_2026-08-12.md`
+  - `simnow_run_summary_2026-08-12.json`
+- The authoritative result from `simnow_run_summary_2026-08-12.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=15601`
+  - `contracts_count=17482`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This afternoon run remains a valid formal observation day under the restarted
+  window beginning on `2026-08-12`; the day-level conclusion stays `valid`
+  and the promotion blocker is still only
+  `need_19_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-12*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=15601`,
+  `contracts_count=17482`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-12.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-21 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-21`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-21.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-21T09:07:34.2918656+08:00`,
+  still inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8484`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-21.json`
+  - `simnow_record_2026-08-21.json`
+  - `simnow_report_2026-08-21.md`
+  - `simnow_run_summary_2026-08-21.json`
+- The authoritative result from `simnow_run_summary_2026-08-21.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=35834`
+  - `contracts_count=16953`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This morning run remains a valid formal observation day under the restarted
+  window beginning on `2026-08-12`; the day-level conclusion stays `valid`
+  and the promotion blocker is still only
+  `need_14_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-21*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=35834`,
+  `contracts_count=16953`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-21.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-21 13:35 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `13:35` formal read-only SimNow observation workflow for
+`2026-08-21`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-21.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-21T13:36:06.3001315+08:00`,
+  still inside the allowed `13:35` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_afternoon` formal window and
+  auto-computed `capture_duration_seconds=4975`, ending at the afternoon
+  close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-21.json`
+  - `simnow_record_2026-08-21.json`
+  - `simnow_report_2026-08-21.md`
+  - `simnow_run_summary_2026-08-21.json`
+- The authoritative result from `simnow_run_summary_2026-08-21.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=24993`
+  - `contracts_count=16953`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- This afternoon run remains a valid formal observation day under the restarted
+  window beginning on `2026-08-12`; the day-level conclusion stays `valid`
+  and the promotion blocker is still only
+  `need_14_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-21*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=24993`,
+  `contracts_count=16953`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_afternoon.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-21.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.
+
+## 2026-08-21 21:05 Formal SimNow Observation Late Wakeup
+
+### Goal
+
+Execute the scheduled `21:05` formal read-only SimNow observation workflow and
+determine the authoritative outcome for this automation run.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- The preflight command passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- When the formal live-capture command was launched, the local machine clock
+  seen by the wrapper was already `2026-08-22 00:43:18 +08:00`.
+- Because formal auto-start is allowed only in the `09:05`, `13:35`, or
+  `21:05` windows with a 5-minute grace window, `run_next_work.ps1` rejected
+  the run before any SimNow connection attempt.
+- No new same-day formal capture artifacts were generated for `2026-08-22`:
+  - no `simnow_export_2026-08-22.json`
+  - no `simnow_record_2026-08-22.json`
+  - no `simnow_report_2026-08-22.md`
+  - no `simnow_run_summary_2026-08-22.json`
+- Because `simnow_run_summary_2026-08-22.json` does not exist, there is no new
+  machine-readable daily conclusion for this late wakeup. This is a scheduling
+  / launch-window miss, not a SimNow code or order-safety failure.
+- The most recent existing authoritative summary in the diagnostics directory
+  remains `simnow_run_summary_2026-08-21.json` from the earlier `13:35` formal
+  run, but it is not the source of truth for this missed `21:05` attempt.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-22*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Formal live capture was rejected before SimNow connection with:
+  `Formal observation window rejected ... Current local time is 2026-08-22 00:43:18 +08:00.`
+- No `2026-08-22` run-summary artifact exists, so no new automation-layer
+  status (`automation_status`, `automation_exit_code`, `automation_reason`,
+  `automation_action`) was produced for this missed window.
+
+### Next Action
+
+Run the next scheduled formal observation inside its allowed start window; do
+not treat this late wakeup as a strategy/workflow code regression.
+
+## 2026-08-24 09:05 Formal SimNow Observation
+
+### Goal
+
+Execute the scheduled `09:05` formal read-only SimNow observation workflow for
+`2026-08-24`, complete the daily artifact chain, and determine the
+authoritative outcome from `simnow_run_summary_2026-08-24.json`.
+
+### Findings
+
+- Read `NEXT_WORK.md`, `ACCEPTANCE.md`, and `WORK_LOG.md` before execution.
+- Current local time before preflight was `2026-08-24T09:07:27.6942127+08:00`,
+  still inside the allowed `09:05` formal start window.
+- `run_next_work.ps1 -Preflight` passed with `355 passed` and
+  `pending_historical_db_lag_days: 0`.
+- The required formal live-capture command was launched in read-only mode:
+  `run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb`.
+- The wrapper accepted the run as the `day_open` formal window and
+  auto-computed `capture_duration_seconds=8491`, ending at the morning close.
+- Historical DB auto update passed with exit code `0`.
+- The live workflow completed in one pass and generated the full same-day
+  artifact chain:
+  - `simnow_export_2026-08-24.json`
+  - `simnow_record_2026-08-24.json`
+  - `simnow_report_2026-08-24.md`
+  - `simnow_run_summary_2026-08-24.json`
+- The authoritative result from `simnow_run_summary_2026-08-24.json` is:
+  - `automation_status=valid`
+  - `automation_exit_code=0`
+  - `automation_reason=no_actionable_events_on_either_side`
+  - `automation_action=counts_for_20d`
+- Daily summary fields from the same run summary:
+  - `ticks=36819`
+  - `contracts_count=16859`
+  - `accounts=1`
+  - `positions=1`
+  - `orders=0`
+  - `trades=0`
+  - `subscribed_count=3`
+  - `environment_capture.read_only=true`
+  - `environment_capture.orders_sent_by_workflow=0`
+  - `environment_capture.zero_tick_subscribed_symbols=[]`
+  - `record.status=pass`
+  - `record.valid_observation=true`
+  - `record.threshold_status=pass`
+  - `record.order_safety_status=pass`
+  - `historical_db_update.status=passed`
+  - `delayed_replay.available=true`
+  - `delayed_replay.status=pass`
+  - `kline.missing_symbols=[]`
+  - `kline.short_symbols=[]`
+  - `user_action_needed=false`
+- The enabled formal symbol set remained the reduced three-symbol set from the
+  contract map (`A888`, `RB888`, `ZN888`), and all enabled symbols produced
+  enough ticks and 1M bars for the configured `30`-bar gate.
+- The formal ledger summary now reports `valid_observation_days=7`,
+  `consecutive_valid_days=7`, and the only remaining promotion blocker is
+  `need_13_more_valid_observation_days`.
+
+### Verification
+
+```powershell
+Get-Date -Format o
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -Preflight
+powershell -ExecutionPolicy Bypass -File .\examples\czsc_strategy\diagnostics\run_next_work.ps1 -LiveCapture -MinKlineBarsPerSymbol 30 -UpdateHistoricalDb
+Get-ChildItem .\examples\czsc_strategy\diagnostics -Filter 'simnow_*_2026-08-24*'
+```
+
+Results:
+
+- Preflight passed: `355 passed`.
+- Historical DB auto update passed with exit code `0`.
+- Formal read-only capture completed with `ticks=36819`,
+  `contracts_count=16859`, `orders=0`, and `trades=0`.
+- The same wrapper invocation generated the authoritative same-day artifacts,
+  including the session-scoped `*_day_open.*` mirrors.
+- Final conclusion is taken from `simnow_run_summary_2026-08-24.json`, not
+  from markdown narration.
+
+### Next Action
+
+Continue the next formal observation window and accumulate the restarted
+20-day valid-observation count from `2026-08-12` onward.

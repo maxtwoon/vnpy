@@ -3,6 +3,13 @@
 版本单一真相：`VERSION` 文件。每个对外可见改动 = 代码 + 版本 bump + 本文件一条 + 相关文档，同一提交完成。
 
 
+## 归档决定（2026-09-15，非代码发布）
+
+- 按用户指令原地归档本项目，保留历史源码、配置、测试与研究证据。
+- 缠论择时的当前项目与后续信号来源改为 `D:\repo\czsc-timing-engine`。
+- README、AGENTS、HANDOFF 标明历史说明的适用范围，详细边界见 `ARCHIVED.md`。
+- 策略代码、运行配置与最后代码版本不变；本记录不代表新项目与 VeighNa 已接通。
+
 ## 0.2.67（2026-08-01）- A109 audit remediation：CI 门禁与 SimNow 晋级口径修复
 
 - 修复 `simnow_20d_aggregate.py` 的自动化状态口径：`status=pass` 但 `valid_observation=false`

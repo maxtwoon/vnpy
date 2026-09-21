@@ -1,5 +1,28 @@
 # AGENTS.md — VeighNa Quantitative Trading Framework
 
+## Current local research decision (2026-09-15)
+
+The user has archived `examples/czsc_strategy` in place. Its source, evidence,
+tests, and existing CI/sync paths are retained for historical compatibility.
+Do not treat its historical HANDOFF items or launch instructions as current work.
+See [the archive notice](examples/czsc_strategy/ARCHIVED.md).
+The active Chan-theory timing project is `D:\repo\czsc-timing-engine`.
+Use that project's current instructions and signal semantics for future timing
+research; its integration with VeighNa has not yet been implemented.
+References to the local Chan example below describe the archived workspace.
+
+## Local dataSource integration (2026-09-16)
+
+`integrations/vnpy_datasource/` is a separate editable plugin installed in
+`D:\veighna_studio\python.exe`. It reads `D:\repo\dataSource` through that
+project's current ledger and `registry/ds.py run` runtime. See its README and
+VERIFICATION.md before changing provider mappings, units, or time semantics.
+Do not merge provider dependencies into vnpy core or edit the dataSource ledger
+from this consumer. Credentials stay in the dataSource root `.env`.
+Chinese Yahoo minute bars currently fail real quality checks and are explicitly
+unsupported; Tencent intraday points are not OHLCV. Provider-level verified
+status must not bypass those capability-specific restrictions.
+
 > This file is written for AI coding agents who need to understand and work on the VeighNa (`vnpy`) codebase. The project user-facing documentation (`README.md`, `docs/`, `CHANGELOG.md`) is primarily in Chinese, but code comments, docstrings, and symbol names are in English. This document is therefore written in English.
 
 ---
@@ -33,7 +56,7 @@ The core framework lives in the `vnpy/` package. Trading interfaces (gateways), 
 
 The current working tree also contains local research/audit artifacts that are **not** part of the upstream `vnpy` core:
 
-* `examples/czsc_strategy/` — Chan-theory (`缠论`) strategy workspace with `chan_strategy/`, `diagnostics/`, `skill_build/`, and `tests/`.
+* `examples/czsc_strategy/` — Archived Chan-theory (`缠论`) workspace with historical source, diagnostics, and tests. Current timing research uses `D:\repo\czsc-timing-engine`.
 * `docs/chanlunnew/` — Local documentation and audit pack for the Chan-theory strategy (has its own `AGENTS.md`).
 * Extra top-level files: `analyze_db.py`, `cosmic-ray.signals.toml`, `cosmic-ray.sqlite`, `extract_strategy.py`, `state_machine_strategy.py`, `run_state_machine_backtest.py`, `run_backtest.bat`, `.coveragerc`, `pytest.ini`.
 

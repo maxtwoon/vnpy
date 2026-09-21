@@ -1,4 +1,138 @@
 ---
+task: ETF-20260916 - autonomous ETF research with OpenCode Kimi and Claude Code
+version: 4.4.0
+stage: dev
+owner: kimi-code
+updated: 2026-09-16
+deliverables:
+  - HANDOFF.md
+  - research/etf_autonomous/PROTOCOL.md
+  - research/etf_autonomous/TASKS.md
+  - research/etf_autonomous/data.py
+blockers: []
+---
+
+## Current task: autonomous ETF research (2026-09-16)
+
+User instruction: pursue ETF timing/rotation research until Sharpe exceeds 1.
+The research protocol uses net returns on a held-out period and records failed
+trials honestly. No live trading is authorized.
+
+Latest user role assignment overrides historical automation roles: root Codex owns
+planning and coordination; actual OpenCode and Kimi CLIs own development, with
+GPT-5.3-Codex-Spark additionally authorized for development on 2026-09-16. Actual
+Claude Code owns independent review and tests. The exact Spark slug was probed
+through the installed Codex CLI and the service rejected it as unsupported for the current
+ChatGPT login; it has not performed development. Do not substitute another model
+under this authorization. Existing internal development subagents remain stopped.
+
+This new task is first recorded at dev after Codex prepared the research plan;
+it does not claim historical stage transitions. OpenCode will align the stale
+role/CLI configuration in .synccheck.yml with the user instruction. Kimi is the
+primary dev owner, working in parallel with OpenCode on disjoint files. Codex
+coordinates both and remains the only writer of this handoff while they work.
+
+- [Research protocol](research/etf_autonomous/PROTOCOL.md)
+- [Assignments and current status](research/etf_autonomous/TASKS.md)
+- [OpenCode assignment](research/etf_autonomous/task_opencode.md)
+- [Kimi assignment](research/etf_autonomous/task_kimi.md)
+- [Claude Code initial review](research/etf_autonomous/task_claude_plan.md)
+
+Nine raw ETF histories and the corporate-action corrections have been verified.
+Round 1 completed 72 candidates and 144 train/validation evaluations; none
+qualified. Round 2 completed 36 candidates and 72 evaluations; 28 qualified and
+one candidate was frozen before the first final holdout evaluation.
+The completed dataSource integration and archived Chan project below remain
+historical context. Do not reopen their tasks or alter unrelated dirty files.
+
+Current state (2026-09-16): every Round 1 candidate exceeded the 35% training
+drawdown gate. Exact source and results are preserved under round_01. Claude's
+single-candidate training replay matched all four original metrics exactly and
+found no new defect in its scoped 2015 share-conversion check. The minimum
+drawdown was 35.9927%, from 2015-06-12 to 2019-06-03.
+
+Round 2 is specified in ROUND_02_PROTOCOL.md: 36 candidates using fixed asset
+groups, a 10% estimated risk-asset volatility budget, and an actual bond ETF
+defensive position. Data, costs, windows, eligibility and final criteria remain
+unchanged. OpenCode rounds10 wrote the round-aware runner but exited on quota;
+Kimi recovery12 supplied its missing handoff without further code changes. Kimi
+risk_policy11 and display-only report_counts13 completed successfully. Claude's
+36 relevant tests and scoped production lint checks passed before the search.
+The September 16 13:55 heartbeat actually resumed work. Claude session
+1d612f27-7af7-4e0a-b347-fc789147cb7d completed holdout09 and ledger closeout12,
+explicitly authorized after the frozen candidate and developer exits were checked.
+The first holdout opened at 2026-09-16 14:40:34 Asia/Shanghai. Computed base net
+Sharpe is 1.294884, double-cost Sharpe 1.164228, CAGR 17.1007%, max drawdown
+9.0681%; all runs are status ok. The 898-row ledger reconciles with zero error.
+Separate Claude saved_nav_math13 recomputed all four metrics for all three runs
+with standard-library formulas and zero differences. All four predeclared
+quantitative criteria and the scoped numerical/data reviews passed. The local
+research objective is complete. All actual CLI jobs have exited successfully.
+The HTML report was generated and its numbers checked; screenshot/layout QA
+remains unavailable because Playwright blocks local file URLs. This is disclosed,
+not a claimed visual PASS. Root sync_check passed after a documentation-only
+correction, and all 27 frozen numerical/input paths still match their identities.
+See [the final research summary](research/etf_autonomous/RESULTS.md).
+Latest pointers are in
+[Resume instructions](research/etf_autonomous/RESUME.md) and runtime_sessions.json.
+Preserve all partial work and failed logs; do not infer success from schedules or
+sessions. Preserve the shared holdout observation record; this period is now seen.
+The front-matter dev stage is the existing commit-bound sync workflow; no Git
+delivery or fabricated stage transition is claimed by this local research result.
+
+## Historical completed task metadata: DS-20260915
+
+```yaml
+task: DS-20260915 - dataSource integration for personal A-share and ETF research
+version: 4.4.0
+stage: done
+owner: codex
+updated: 2026-09-16
+deliverables:
+  - HANDOFF.md
+  - integrations/vnpy_datasource/README.md
+  - integrations/vnpy_datasource/VERIFICATION.md
+  - integrations/vnpy_datasource/vnpy_datasource/client.py
+  - integrations/vnpy_datasource/vnpy_datasource/datafeed.py
+  - integrations/vnpy_datasource/vnpy_datasource/worker.py
+  - integrations/vnpy_datasource/vnpy_datasource/providers_sdk.py
+  - integrations/vnpy_datasource/vnpy_datasource/providers_http.py
+  - integrations/vnpy_datasource/vnpy_datasource/storage.py
+  - integrations/vnpy_datasource/tests/test_client.py
+blockers: []
+```
+
+## Completed task: dataSource integration (2026-09-16)
+
+The user requested that this framework and its strategies can call available
+sources in `D:\repo\dataSource`. The implementation is a separate local
+`vnpy_datasource` package with a standard Datafeed, direct research client,
+bounded worker through the maintained dataSource runtime, and SQLite/Alpha
+downloads. This new task was first recorded at review after implementation and a
+bounded independent review, then advanced to done with `tools/handoff.py next`.
+It does not claim historical design/dev transitions.
+
+- Seven provider adapters, 54 implemented branches; 52 are backed by current
+  ledger recipes, with product and interval restrictions. Other registry entries
+  remain discoverable with explicit unsupported or unavailable reasons.
+- Studio plugin installed and runtime datafeed configured; original setting
+  backed up. Existing installed package versions preserved while adding the
+  minimal Alpha import/export and verification dependencies.
+- Real data verified through native SQLite, AlphaLab and CTA `load_bar`.
+- Current Chinese one-minute history is unavailable: Tencent is time-share data;
+  Yahoo sample failed session/volume checks; other candidates lack a usable path.
+- The archived `examples/czsc_strategy` and current `D:\repo\czsc-timing-engine`
+  decision remains in force. No timing-engine signal integration or trading
+  operation is included in this data connection.
+- No edits to dataSource, no core vnpy code edits, no Git commit or push.
+
+See [integration usage](integrations/vnpy_datasource/README.md) and
+[verification](integrations/vnpy_datasource/VERIFICATION.md) for actual scope,
+inputs, results, limitations and local evidence paths.
+
+## Historical completed task metadata: A109
+
+```yaml
 task: A109-audit-remediation - CI 门禁与 SimNow 晋级口径修复
 version: 4.4.0
 stage: done
@@ -21,7 +155,17 @@ last_transition_from_stage: review
 last_transition_to_stage: done
 last_transition_from_owner: codex
 last_transition_to_owner: codex
----
+```
+
+## Current local research decision (2026-09-15)
+
+The user archived `examples/czsc_strategy` in place and designated
+`D:\repo\czsc-timing-engine` as the current Chan-theory timing project.
+See [ARCHIVED.md](examples/czsc_strategy/ARCHIVED.md). Historical source, evidence,
+and CI/test paths remain available for review. The historical tasks below are
+not reopened; their pending items and next-agent instructions are not current
+work. This documentation update does not advance the completed A109 stage or
+claim that the new timing project's integration with VeighNa is implemented.
 
 ## Background (A109)
 
@@ -599,3 +743,4 @@ blocking reason.
 | 2026-07-31 | kimi-code → codex | dev → review | A108 diagnostics 目录重组完成：352 个非 .py 产出文件按前缀分类归档到 diagnostics/research/topic 子目录（9 个），根目录直属文件数从 489 降到 137；安全网 grep 在设计文档已知例外清单外新发现 7 个真实硬编码依赖并追加例外留在根目录；MIGRATION_LOG.md 记录 352 条迁移（161 git mv 保留历史 + 191 未跟踪生成产出普通移动）；同步更新 3 处活跃文档路径引用；补充最小 gitignore 补丁使迁移记录可提交、其余研究产出维持原有 untracked 状态；VERSION 已 bump，CHANGELOG 一条，设计文档阶段更新为 dev implemented 并新增第10节；零 .py 改动、零 chan_strategy 改动；pytest not-realdb 全量与 15 个 import-diagnostics 测试文件均通过、两处 sync_check 均 PASS；commit f3f16cd76 |
 | 2026-07-31 | codex → codex | review → done | 独立复核 PASS：f3f16cd76 精确落地设计文档 §4 分类算法，零 .py/零 chan_strategy 改动，.gitignore 3行补丁判定为必要适配（仅解禁 MIGRATION_LOG.md，实际研究产出仍 gitignored），pytest 1009 passed 与 import-diagnostics 15文件子集 150 passed 均与基线一致，两处 sync_check PASS，AC1-AC8 整体成立 |
 | 2026-08-01 | codex → codex | review → done | A109 audit remediation verified: scoped CI lint, czsc dependency source, SimNow invalid-pass aggregation, replay timeout default, mypy and sync gates fixed. |
+| 2026-09-16 | codex → codex | review → done | DataSource plugin installed; real ETF SQLite/AlphaLab/CTA reads verified; 81 focused tests, Ruff and pip check pass; unsupported CN one-minute data remains explicit. |
