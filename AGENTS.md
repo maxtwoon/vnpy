@@ -1,5 +1,20 @@
 # AGENTS.md — VeighNa Quantitative Trading Framework
 
+## Unified research runtime (2026-09-21)
+
+AlphaLab and CPU factor/model research use the separate `vnpy-alpha` route in
+`D:/repo/quant/runtime-policy.json`, also Python 3.14.7. Do not mix its
+empyrical/peewee dependencies with the `vnpy` SQLite/integration environment.
+Run via `C:/Python314/python.exe D:/repo/quant/scripts/runtime.py run vnpy-alpha -- <args>`.
+
+Research core and local dataSource/researchstore integrations now use the Python
+3.14.7 environment declared in `D:/repo/quant/runtime-policy.json` (`projects.vnpy.python`).
+Use `C:/Python314/python.exe D:/repo/quant/scripts/runtime.py run vnpy -- <args>`.
+The vendor Studio Python 3.13.8 installation remains available for broker gateways;
+its full gateway ecosystem has not been qualified on 3.14. Historical Studio test
+instructions below describe that compatibility environment. See
+`D:/repo/quant/RUNTIMES.md` for current validation and known exceptions.
+
 ## Current local research decision (2026-09-15)
 
 The user has archived `examples/czsc_strategy` in place. Its source, evidence,
