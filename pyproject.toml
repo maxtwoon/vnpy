@@ -60,11 +60,6 @@ dev = [
     "mutmut>=3.6.0",
 ]
 
-[tool.mutmut]
-paths_to_mutate = ["examples/czsc_strategy/chan_strategy"]
-tests_dir = ["examples/czsc_strategy/tests/unit"]
-runner = "pytest examples/czsc_strategy/tests/unit -q"
-
 [project.urls]
 "Homepage" = "https://www.vnpy.com"
 "Documentation" = "https://www.vnpy.com/docs"

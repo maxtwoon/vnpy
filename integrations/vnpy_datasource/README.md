@@ -176,7 +176,7 @@ Yahoo的159915原价日线补测也遇到上游`YFPricesMissingError`，已保�
 - 中国股票／ETF规范化成交量为股／份，成交额为人民币元。腾讯指数和AKShare1.18.94中`sz000`股票的100倍量纲问题已有实测修正及测试；升级SDK后应复核这些样本。
 - 源端缺失成交额时Client保留`None`。转换成BarData／SQLite／Alpha时为兼容既有浮点接口使用0占位，同时回执记录缺失日期。需要成交额的策略应先拒绝`missing_fields`含`turnover`的输入。
 - qfq/hfq是源端复权口径，历史查询结果可能随新公司行动重算。保留抓取时点，更新复权研究快照时使用新目录，避免分批拼接不同基准。原价ETF价格收益不自动包含分红再投资。
-- 此插件没有实现历史逐笔、L2或对新缠论引擎的信号适配。`examples/czsc_strategy`继续归档；缠论择时项目仍是`D:\repo\czsc-timing-engine`。
+- 此插件没有实现历史逐笔、L2或对新缠论引擎的信号适配。`examples/czsc_strategy`已于2026-09-21移除（历史见git提交`35dfca4b2`）；缠论择时项目仍是`D:\repo\czsc-timing-engine`。
 
 ## 安装、依赖与撤回
 

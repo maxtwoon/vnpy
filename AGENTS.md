@@ -57,9 +57,9 @@ The core framework lives in the `vnpy/` package. Trading interfaces (gateways), 
 
 The current working tree also contains local research/audit artifacts that are **not** part of the upstream `vnpy` core:
 
-* `examples/czsc_strategy/` — Archived Chan-theory (`缠论`) workspace with historical source, diagnostics, and tests. Current timing research uses `D:\repo\czsc-timing-engine`.
+* `examples/czsc_strategy/` — removed from the working tree on 2026-09-21 (full history in git, commit `35dfca4b2`). Current timing research uses `D:\repo\czsc-timing-engine`.
 * `docs/chanlunnew/` — Local documentation and audit pack for the Chan-theory strategy (has its own `AGENTS.md`).
-* Extra top-level files: `analyze_db.py`, `cosmic-ray.signals.toml`, `cosmic-ray.sqlite`, `extract_strategy.py`, `state_machine_strategy.py`, `run_state_machine_backtest.py`, `run_backtest.bat`, `.coveragerc`, `pytest.ini`.
+* Extra top-level files: `analyze_db.py`, `extract_strategy.py`, `state_machine_strategy.py`, `run_state_machine_backtest.py`, `run_backtest.bat`, `pytest.ini`.
 
 These additions influence the current test/coverage configuration (see [Testing Strategy](#testing-strategy)) but are separate from the core framework.
 
@@ -69,10 +69,8 @@ These additions influence the current test/coverage configuration (see [Testing 
 
 | File | Purpose |
 | ---- | ------- |
-| `pyproject.toml` | Project metadata, dependencies, optional extras (`alpha`, `dev`), Hatchling build config, Ruff lint rules, mypy strict-mode config, mutmut config. |
+| `pyproject.toml` | Project metadata, dependencies, optional extras (`alpha`, `dev`), Hatchling build config, Ruff lint rules, mypy strict-mode config. |
 | `pytest.ini` | pytest markers (`realdb`, `slow`) and deprecation warning filters. |
-| `.coveragerc` | Coverage scope for the local Chan example (`examples/czsc_strategy/chan_strategy`). |
-| `cosmic-ray.signals.toml` | Mutation-testing config targeting `examples/czsc_strategy/chan_strategy/signals.py`. |
 | `.github/workflows/pythonapp.yml` | CI workflow: lint, type check, build on Windows. |
 | `.github/dependabot.yml` | Weekly pip and GitHub Actions dependency updates targeting `dev`. |
 | `docs/conf.py` | Sphinx documentation config (alabaster theme, recommonmark, autodoc). |
@@ -223,7 +221,6 @@ Example launchers are in `examples/`:
 * `examples/no_ui/` — Headless / server-style usage.
 * `examples/client_server/` / `examples/simple_rpc/` — RPC demos.
 * `examples/data_recorder/` — Data recorder script.
-* `examples/czsc_strategy/` — Local Chan-theory strategy research workspace.
 
 ---
 
@@ -332,15 +329,10 @@ Tests are written with **pytest**.
 | `tests/test_alpha101.py` | Validates Alpha 101 factor expressions via `calculate_by_expression` on a synthetic Polars DataFrame. |
 | `tests/alpha/test_dataproxy.py` | Tests `DataProxy` arithmetic, comparison, and unary operators. |
 
-### Local Chan example tests (`examples/czsc_strategy/tests/`)
+### Local integration tests (`integrations/vnpy_datasource/tests/`)
 
-A larger local test suite for the Chan-theory CZSC strategy, organized into:
-
-* `unit/` — core unit tests
-* `integration/` — integration tests
-* `performance/` — performance smoke tests
-
-Representative areas include signal classification, buy/sell paths, position accounting, data adapter, daily filter / no-lookahead checks, regression tests, state machine replay, and 中枢 (zhongshu) construction.
+The dataSource bridge (local warehouse reader, online providers, storage) has its own
+pytest suite; run it with the Studio interpreter from `integrations/vnpy_datasource`.
 
 ### Running tests
 
@@ -350,9 +342,6 @@ pytest
 
 # Run a specific core test file
 pytest tests/test_alpha101.py
-
-# Run Chan example unit tests (used by mutation testing)
-pytest examples/czsc_strategy/tests/unit -q
 
 # Skip tests that require a local historical database
 pytest -m "not realdb"
@@ -366,16 +355,10 @@ pytest -m "not slow"
 * `realdb` — requires a local historical SQLite database.
 * `slow` — long-running tests.
 
-### Mutation testing
+### Mutation testing and coverage
 
-Mutation testing is configured for the local Chan example:
-
-* `pyproject.toml` `[tool.mutmut]` — targets `examples/czsc_strategy/chan_strategy` with tests in `examples/czsc_strategy/tests/unit`.
-* `cosmic-ray.signals.toml` — targets `examples/czsc_strategy/chan_strategy/signals.py`.
-
-### Coverage
-
-`.coveragerc` is scoped to `examples/czsc_strategy/chan_strategy` with branch coverage enabled. Core `vnpy` coverage is not currently configured.
+The mutmut / cosmic-ray / `.coveragerc` configuration that targeted the removed Chan example
+was deleted on 2026-09-21. Core `vnpy` coverage and mutation testing are not currently configured.
 
 ### CI
 
@@ -389,10 +372,8 @@ Mutation testing is configured for the local Chan example:
 6. `mypy vnpy`
 7. `uv build`
 8. `python tools/sync_check.py`
-9. `python tools/sync_check.py --root examples/czsc_strategy`
-10. `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`
 
-The workflow now runs the czsc_strategy unit-test suite and both sync_check gates in CI.
+The czsc_strategy lint / sync_check / pytest steps were removed with that directory on 2026-09-21.
 
 ---
 
@@ -479,9 +460,6 @@ mypy vnpy
 # Tests
 pytest
 
-# Chan example unit tests
-pytest examples/czsc_strategy/tests/unit -q
-
 # Editable install with all optional deps
 pip install -e ".[alpha,dev]"
 
@@ -501,7 +479,7 @@ python run.py
 * **Keep changes minimal**: VeighNa values stability. Prefer small, focused PRs over large refactors.
 * **Docstrings in English, user text translatable**: New public APIs need English docstrings; UI strings should use `_("...")` for i18n.
 * **Type hints are mandatory**: mypy strict mode is enforced in CI; untyped code will fail the build.
-* **Separate local additions from core changes**: Files such as `examples/czsc_strategy/`, `docs/chanlunnew/`, and the associated coverage/mutation configs are local workspace artifacts. Be careful not to break them, but also do not treat them as upstream `vnpy` core when reasoning about framework behavior.
+* **Separate local additions from core changes**: Files such as `integrations/`, `docs/chanlunnew/` and the top-level research scripts are local workspace artifacts. Be careful not to break them, but also do not treat them as upstream `vnpy` core when reasoning about framework behavior.
 
 ## sync-guardian workflow
 
@@ -512,15 +490,7 @@ This repository uses a root-level `HANDOFF.md` and `.synccheck.yml` to track mul
 * Run `python tools/sync_check.py` before handing work off so version, docs, and handoff state stay aligned
 * Treat `HANDOFF.md` as the single source of truth for cross-agent state
 * Use `tools/handoff.py` for routine stage transitions instead of editing `HANDOFF.md` by hand
-* `project_version_freshness` in `.synccheck.yml` (A60) guards the
-  `examples/czsc_strategy/VERSION`/`CHANGELOG.md` pair: any commit that changes a
-  top-level key in `chan_strategy/config.py`'s `STRATEGY_CONFIG`/`BACKTEST_CONFIG`
-  must also touch `VERSION` or `CHANGELOG.md`. The gate only inspects commits
-  after the block was introduced, so older changes are not retroactively punished.
-* `diagnostics_banner_check` in `.synccheck.yml` (A54) enforces that every
-  `diagnostics/*.md` report carries the `RESEARCH-ONLY / NOT PROMOTION EVIDENCE`
-  banner. Exemptions (including `audit_issue_diagnostics_*.md` and the
-  `diagnostics/archive/` directory) are declared in `.synccheck.yml` via `skip`
-  glob patterns and `exempt_dirs`. Use
-  `examples/czsc_strategy/diagnostics/declassify_historical_reports.py` to
-  backfill missing banners.
+* The `project_version_freshness` (A60) and `diagnostics_banner_check` (A54) gates in
+  `.synccheck.yml` only ever targeted `examples/czsc_strategy`; both blocks were removed
+  with that directory on 2026-09-21. `tools/sync_check.py` still supports them if a
+  future project needs the same guards.
