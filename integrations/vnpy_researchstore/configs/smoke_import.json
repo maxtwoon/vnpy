@@ -1,0 +1,31 @@
+{
+  "_comment": "REPOSITORY TEMPLATE - generic smoke import config for research_store. Copy to an instance location (e.g. D:/quant-data/configs/) and replace every REPLACE_ME with real paths/values from a verified run. Never commit credentials. See README.md 'Import' for the exact command; --frequency/--years/--instruments CLI flags narrow the batch scope without editing this file.",
+  "adapter": "REPLACE_ME_adapter_name/0.1",
+  "source_root": "REPLACE_ME/source/root",
+  "asset": {
+    "origin": "REPLACE_ME/source/root",
+    "format": "REPLACE_ME_format",
+    "note": "formal import hashes each input via its sidecar/manifest before reading"
+  },
+  "repair_index": {
+    "package_dir": "REPLACE_ME/package/dir",
+    "audit_csv": "REPLACE_ME/repair/audit.csv",
+    "rule": "load BEFORE base archives; disputed keys stay flagged, never auto-resolved"
+  },
+  "semantic": {
+    "source_id": "REPLACE_ME",
+    "asset_class": "REPLACE_ME",
+    "record_kind": "bars",
+    "adjustment": "REPLACE_ME (use 'unknown' when not proven)",
+    "timezone": "REPLACE_ME",
+    "source_time_label": "REPLACE_ME (start|end|unknown)",
+    "volume_unit": "REPLACE_ME (use 'unknown' when not proven)",
+    "turnover_unit": "REPLACE_ME (use 'unknown' when not proven)",
+    "origin_method": "source"
+  },
+  "frequencies": ["1m", "1d"],
+  "batches": [
+    {"frequency": "1d", "years": [REPLACE_ME_YEAR], "partitions_by": "year"},
+    {"frequency": "1m", "years": [REPLACE_ME_YEAR], "partitions_by": "year"}
+  ]
+}

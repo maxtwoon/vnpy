@@ -1,0 +1,9 @@
+# Coordinator disposition — qualified04 actual review
+
+Actual Claude resumed session cffef0d9-040e-45f3-aef5-749f667511bc, exec67060, terminal0 at2026-09-17 00:42. Exact final result is QUALIFIED_RECHECK_04.md. FINAL_VERDICT FAIL. All20 review input hashes matched. Core default exclusion is independently confirmed fixed; the whole correction remains OPEN because3accepted regressions violate the approved contract.
+
+1. HIGH: native resolve_bar_dataset scans the entire symbol without range and default reader gap enforcement blocks clean ranges. Actual reviewer repro review-qualified04/repro_wider_scope_clean_range.py shows core clean query succeeds while Database and BOTH Alpha methods fail. Preserve complete exchange-label validation (prior native03 fix); solve discovery/validation scope without disabling actual selected-range quality or exposing excluded rows.
+2. MEDIUM: freeze scans and hashes complete Parquet files while holding catalog transaction/process lock. Capture all heads/files/quality consistently in a SHORT transaction, then operate only on captured immutable file references outside it. Never reread moving current heads or weaken frozen consistency.
+3. MEDIUM: absent legacy policy metadata is indistinguishable from captured-clean. Preserve old snapshot bytes/observational meaning, expose typed qualification state and refuse or explicitly mark legacy unqualified at default qualified/native consumers. Merely documenting permissive old reads does not satisfy the approved requirement.
+
+Actual original core repro,73scoped tests/type/lint and immutable/known-gap behavior remain useful evidence; do not repeat unrelated review. Actual Kimi receives TASK_KIMI_QUALIFIED_FIX_05.md on the existing qualified-fix session. Reviewer-authored original repros stay unchanged. Independent focused Claude recheck05 required afterward. Recording and WP10 continue disjointly; no full delivery claim.

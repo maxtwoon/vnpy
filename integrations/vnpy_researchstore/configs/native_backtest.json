@@ -1,0 +1,16 @@
+{
+  "_comment": "TEMPLATE for the native snapshot bootstrap. Copy and fill in actual values from a verified freeze; never point store_root at anything but an identified research store. range is informational metadata recorded in the run receipt.",
+  "store_root": "D:/quant-data",
+  "snapshot_id": "snap-REPLACE_WITH_FROZEN_SNAPSHOT_ID",
+  "runtime_dir": "D:/quant-data/runtime/native_backtest",
+  "repo_path": "D:/repo/vnpy",
+  "integration_path": "D:/repo/vnpy/integrations/vnpy_researchstore",
+  "allow_missing_auxiliary": false,
+  "exchange_map": null,
+  "database_timezone": null,
+  "backtesters": ["cta"],
+  "range": {
+    "start": "2024-01-01",
+    "end": "2024-12-31"
+  }
+}

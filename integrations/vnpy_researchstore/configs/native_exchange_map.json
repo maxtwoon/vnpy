@@ -1,0 +1,4 @@
+{
+  "_comment": "TEMPLATE: optional extension of the native source exchange-label map. Keys are source exchange labels as stored in the bar rows; values must be native vnpy Exchange values (e.g. SSE, SZSE, SHFE). Unmapped labels are refused, never guessed. Built-in defaults cover XSHG/XSHE/XSGE/XDCE/XCCE/CCFX/XINE/GFEX plus native-value passthrough.",
+  "XSBE": "BSE"
+}

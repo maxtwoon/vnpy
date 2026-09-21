@@ -1,0 +1,16 @@
+{
+  "_comment": "REPOSITORY TEMPLATE - native CTA/Portfolio offline bootstrap for one immutable research snapshot (schema identical to vnpy_researchstore.bootstrap load_config). Copy to an instance location and replace every REPLACE_ME with values from a VERIFIED freeze; never point store_root at anything but an identified research store. backtesters only import the backtesting modules and load bars - no gateway, account, strategy, or network. range is informational metadata recorded in the run receipt.",
+  "store_root": "REPLACE_ME/store/root",
+  "snapshot_id": "snap-REPLACE_WITH_FROZEN_SNAPSHOT_ID",
+  "runtime_dir": "REPLACE_ME/isolated/runtime/dir",
+  "repo_path": "D:/repo/vnpy",
+  "integration_path": "D:/repo/vnpy/integrations/vnpy_researchstore",
+  "allow_missing_auxiliary": false,
+  "exchange_map": null,
+  "database_timezone": "Asia/Shanghai",
+  "backtesters": ["cta", "portfolio"],
+  "range": {
+    "start": "REPLACE_ME_START",
+    "end": "REPLACE_ME_END"
+  }
+}

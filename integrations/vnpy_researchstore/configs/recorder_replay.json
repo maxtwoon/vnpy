@@ -1,0 +1,29 @@
+{
+  "_comment": "REPOSITORY TEMPLATE - offline recorder replay/seal workflow placeholders. There is NO runner that consumes this file directly: replay and seal are public CLI commands. Fill REPLACE_ME values from an ACTUAL recorded session on your own store; a session id that no run produced must never be written into an instance config. Live gateway recording stays LIVE_NOT_RUN unless an authorized capture run exists.",
+  "store_root": "REPLACE_ME/store/root",
+  "record": {
+    "launcher": "vnpy-recorder (console entry; see README.md Recording section)",
+    "note": "offline/synthetic-labelled input only; no gateway, account, or network"
+  },
+  "replay": {
+    "session_id": "REPLACE_WITH_ACTUAL_SESSION_ID",
+    "command": "python -m research_store --root <store_root> replay --session-id <session_id> [--limit N]"
+  },
+  "seal": {
+    "request": {
+      "session_id": "REPLACE_WITH_ACTUAL_SESSION_ID",
+      "committed_seq_start": 0,
+      "committed_seq_end": 0,
+      "transform_version": "REPLACE_ME",
+      "source_spec": "REPLACE_ME",
+      "calendar_spec": "REPLACE_ME_or_empty",
+      "asset_class": "REPLACE_ME (defaults honestly to OTHER + unknown units)",
+      "volume_unit": "unknown",
+      "turnover_unit": "unknown"
+    },
+    "command": "python -m research_store --root <store_root> seal --request <seal_request.json>"
+  },
+  "recover_session": {
+    "command": "python -m research_store --root <store_root> recover-session --session-id <session_id> [--no-successor]"
+  }
+}

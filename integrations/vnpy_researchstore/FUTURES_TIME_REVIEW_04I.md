@@ -1,0 +1,13 @@
+The report wrote correctly and completely. Here is the final response.
+
+# Actual Claude bounded source review — RQ futures time evidence (04I)
+
+Read-only, no product/source edits. Full report saved to `FUTURES_TIME_REVIEW_04I.md` at the package root; evidence/repro scripts and the two bounded-extracted parquet members live under `.coordination/review-futures04i/`. Used `.venv/Scripts/python.exe`; no network; no `extractall`; only the two named `2025/unit_0000.parquet` members were streamed out of the yearly `tar.zst` archives (tarfile+zstandard) and read with pyarrow.
+
+**(1) Label convention: RESOLVED for the inspected member/window, but it contradicts an unverified sidecar claim.** Archive-level sha256/byte counts for `contract_1m_none_2025.tar.zst` and `dominant_1m_none_2025.tar.zst` were recomputed independently and match FUTURES_INPUT_CANDIDATES.md exactly, as does the sidecar's sha256 (859 bytes). For A2505 in `unit_0000`, window [2025-01-02, 2025-01-07), every session-open bar is offset +1 minute from the exchange session open declared in `universe.csv`, while every session-close bar lands exactly on the declared close — the specific, checkable signature of an END label, not a restatement of the code's docstring. The repair sidecar's own `bar_label` field explicitly claims START, but the sidecar is `status: sidecar_only` and ships no row-level trading_date/calendar data — an unverified seller assertion contradicted by the row evidence for this scope. `README_repair.md`'s prose is unrecoverable (literal `0x3F` bytes on disk, not a decode artifact), so it neither confirms nor refutes either side. This resolution is scoped to this exact archive/member/window/contract only — not extrapolated further.
+
+**(2) Trading-date join:** exact key (order_book_id=dominant_id, datetime) between the two `unit_0000` members for A2505 in-window: 1035/1035 matched, 0 unmatched, 0 duplicates, 0 conflicts. Friday-night mapping reproduced exactly (2025-01-03 21:01→2025-01-06; 2025-01-02 21:01→2025-01-03), holding through every night-session row in the window including the boundary row. Limited to one contract, one unit file, one 5-day window.
+
+**(3) Multiplier/units:** `universe.csv` declares multiplier=10 for A2505, DCE, active during the window; a turnover/volume/price cross-check (amount ÷ (volume×10) ≈ close) corroborates it for the sampled rows only — not a historical-versioning proof, not generalized beyond A2505.
+
+**(4) Next real validation scope:** repeat the END-vs-START row-pattern check on other contracts/exchanges/years before any package-wide label decision; resolving the sidecar contradiction itself needs a source-side (RQData) verifying sample, which is out of scope here (no network access authorized).

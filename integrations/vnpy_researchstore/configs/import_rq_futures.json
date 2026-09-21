@@ -1,0 +1,48 @@
+{
+  "adapter": "rq_futures/0.1",
+  "source_root": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_china_futures_research_full_history_20260804",
+  "asset": {
+    "origin": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_china_futures_research_full_history_20260804",
+    "format": "tar_zst_parquet",
+    "range": "1999-01-01..2026-08-03 per instrument actual listing; dominant 1d/1m from 2010-01-04"
+  },
+  "categories": {
+    "import_order": ["contract_1m_none", "dominant_map", "dominant_1d_none", "dominant_1m_none"],
+    "catalog_only_v01": [
+      "basis_1d", "basis_1m", "continuous_contracts", "dominant_ex_factor",
+      "member_rank_long", "member_rank_short", "member_rank_volume",
+      "roll_yield", "trading_parameters", "warehouse_stocks"
+    ]
+  },
+  "universe": {
+    "csv": "universe.csv",
+    "use": "exchange/listing/expiry/multiplier identity; Zhengzhou three-digit codes require UNIQUE universe/date match (never decade guess)",
+    "underlying_symbols": "underlying_symbols.csv"
+  },
+  "semantic": {
+    "source_id": "rqdatac",
+    "asset_class": "futures",
+    "record_kind": "bars",
+    "adjustment": "none",
+    "timezone": "Asia/Shanghai",
+    "source_time_label": "end",
+    "volume_unit": "unknown",
+    "turnover_unit": "CNY",
+    "series_kinds": {"dominant_*": "dominant", "contract_1m_none": "instrument"}
+  },
+  "identity_rules": [
+    "dominant rows keep trading_date + dominant_id + underlying_symbol (member unit_*.json sidecars carry items context)",
+    "contract rows keep order_book_id; trading_date stays unknown without calendar (no guess)",
+    "verified real contracts can backtest; unknown continuous roll rules cannot masquerade as real-contract fills"
+  ],
+  "smoke": {
+    "dataset": "dominant_1d_none",
+    "years": [2025],
+    "note": "run after ETF smoke; parquet spool budget 2 GiB default"
+  },
+  "max_spool_bytes": 2147483648,
+  "known_issues": [
+    "dominant selection/roll rules unverified -> rule_version empty, candidate research data only",
+    "repair_20260810 + RQDataC_customer_feedback_supplement_20260912 overlays exist; catalogued, merge semantics pending"
+  ]
+}

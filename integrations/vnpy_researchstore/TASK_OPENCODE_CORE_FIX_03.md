@@ -1,0 +1,8 @@
+# Actual OpenCode core correction03 — explicit ownership transfer
+
+At2026-09-16 23:03 the resumed Kimi core attempt2 terminated exit1 with quota refusal before model/tool work. Codex transfers exclusive core correction03 ownership to actual OpenCode. All prior Kimi core writers are terminal. A separate actual OpenCode worker owns native correction03 on disjoint files; no core reviewer is active.
+
+Read and execute TASK_KIMI_CORE_FIX_03.md. Its functional scope,3Claude findings, boundaries and tests apply unchanged; this document supersedes only developer identity and output handoff name. Read exact CORE_AUDIT_02 and disposition, INTERFACES and actual reviewer repro. Implement the minimum complete correction of all3findings. Write .coordination/opencode-core-fix03-handoff.md, accurately attributed to actual OpenCode, plus core-fix03-consumer-handoff.md for public gap_ns/tick/API changes. Do not edit coordinator TASKS/plans/tasks/dispositions.
+
+You own only core implementation/tests/public interfaces. No importers/CLI/datasource/native changes; native files belong to the other OpenCode worker, consumers are now separately assigned to actual OpenCode through TASK_OPENCODE_CONSUMERS_02C.md. Preserve their partial work. Shared environment and pyproject changes only if essential to this correction, otherwise leave final packaging for its planned task. No provider/model/account changes, purchases, new market-data network queries, gateway connections, credentials/raw/default settings/ledger/core-vnpy/site-packages/root HANDOFF/git writes. No assistant/project memory writes. Personal local research, practical minimum fixes and proportionate tests. Actual Claude rechecks stable final changes; don't declare whole v0.1 complete.
+

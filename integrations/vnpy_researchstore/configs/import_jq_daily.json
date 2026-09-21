@@ -1,0 +1,47 @@
+{
+  "adapter": "jq_daily/0.1",
+  "source_root": "D:/BaiduNetdiskDownload/全息日线/daily",
+  "asset": {
+    "origin": "D:/BaiduNetdiskDownload/全息日线/daily",
+    "format": "gzip_csv",
+    "note": "18 yearly all_a_daily_YYYY.csv.gz files, 33 columns, 14,525,233 rows, 2009-01-05..2026-06-17"
+  },
+  "semantic": {
+    "source_id": "joinquant",
+    "asset_class": "equity",
+    "record_kind": "bars",
+    "interval": "1d",
+    "adjustment": "unknown",
+    "adjustment_note": "factor is 1.0 across the whole archive: adjustment UNKNOWN, not proven raw",
+    "timezone": "Asia/Shanghai",
+    "source_time_label": "start",
+    "volume_unit": "share",
+    "turnover_unit": "CNY",
+    "origin_method": "source"
+  },
+  "columns": {
+    "canonical": ["open", "close", "high", "low", "volume", "money->turnover"],
+    "extensions_preserved": [
+      "pre_close", "high_limit", "low_limit", "paused", "factor",
+      "market_cap", "circulating_market_cap", "turnover_ratio", "pe_ratio",
+      "pb_ratio", "ps_ratio", "industry_sw_l1", "industry_sw_l2", "is_st",
+      "change_pct", "net_amount_main", "net_pct_main", "net_amount_xl",
+      "net_pct_xl", "net_amount_l", "net_pct_l", "net_amount_m", "net_pct_m",
+      "net_amount_s", "net_pct_s"
+    ],
+    "rules": [
+      "all 33 columns preserved verbatim",
+      "no flow NULL->0 conversion",
+      "suspended/placeholder states preserved",
+      "unknown adjustment blocks default return backtest qualification"
+    ]
+  },
+  "batches": [
+    {"years": [2009, 2010, 2011, 2012]},
+    {"years": [2013, 2014, 2015, 2016]},
+    {"years": [2017, 2018, 2019, 2020]},
+    {"years": [2021, 2022, 2023, 2024]},
+    {"years": [2025, 2026]}
+  ],
+  "chunk_rows": 100000
+}

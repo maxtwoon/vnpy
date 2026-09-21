@@ -1,0 +1,52 @@
+{
+  "adapter": "ssquant/0.1",
+  "source_root": "D:/BaiduNetdiskDownload/新数据库/ssquant数据库_20260425",
+  "asset": {
+    "origin": "D:/BaiduNetdiskDownload/新数据库/ssquant数据库_20260425/kline_data.db",
+    "format": "sqlite",
+    "size_bytes": 10224500736,
+    "backup_same_origin": "kline_data.db.bak_20260707_0730 (9439084544 bytes, do not import from)"
+  },
+  "capture": {
+    "rule": "mode=ro consistent backup into store captures/ + quick_check + sha256; read ONLY the capture thereafter; never the live -wal/-shm files",
+    "wal_state": "kline_data.db-wal present (0 bytes) and -shm present: live DB is mutable"
+  },
+  "table_naming": "{symbol}_{1M|5M|15M}_raw[_staging]",
+  "classification": {
+    "real_contract": "e.g. rb2605 (product+month), import with real_symbol identity",
+    "continuous_888": "e.g. rb888 vendor continuous; selection/roll/adjustment rules UNVERIFIED",
+    "continuous_777": "e.g. rb777 vendor continuous; rules UNVERIFIED",
+    "staging": "*_1M_raw_staging (4 tables, 18,151 rows): isolated simulated source, never merged with main",
+    "meta": "simnow_bar_meta (18,159 rows): diagnostics only"
+  },
+  "simnow_quarantine": {
+    "rule": "main-table key in simnow_bar_meta AND real_symbol IS NULL AND volume==0 AND amount==0",
+    "confirmed_keys_20260701": [
+      "A888 2026-07-01 11:29:00", "A888 2026-07-01 15:04:00",
+      "RB888 2026-07-01 11:30:00", "RB888 2026-07-01 15:16:00",
+      "SC888 2026-07-01 11:30:00", "SC888 2026-07-01 15:16:00",
+      "ZN888 2026-07-01 11:30:00", "ZN888 2026-07-01 15:16:00"
+    ],
+    "warning": "ordinary meta/main time overlaps are NOT contamination; never quarantine by overlap alone"
+  },
+  "semantic": {
+    "source_id": "ssquant",
+    "asset_class": "futures",
+    "record_kind": "bars",
+    "adjustment": "unknown",
+    "timezone": "Asia/Shanghai",
+    "source_time_label": "unknown",
+    "volume_unit": "unknown",
+    "turnover_unit": "unknown",
+    "origin_method": "source"
+  },
+  "field_notes": [
+    "openint can be negative; not total OI",
+    "cumulative_openint is candidate total OI only",
+    "amount untrusted (903/1000 sample VWAP checks outside OHLC); preserve raw, no multiplier guesses",
+    "27 standard columns + 4 drifting tables; infer each table schema",
+    "68,022,890 is LOG-reported rows, not verified COUNT"
+  ],
+  "import_order": "real contracts BEFORE continuous datasets; table x month units; source 1/5/15M stay distinct from own aggregation",
+  "core_blocker": "BARS_SCHEMA_V1 requires non-null bar bounds + trading_date; SSQuant label semantics unknown -> publish via core blocked pending core decision (opencode-core-requests.md #1)"
+}

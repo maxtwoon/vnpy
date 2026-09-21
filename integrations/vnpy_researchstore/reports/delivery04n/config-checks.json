@@ -1,0 +1,73 @@
+{
+  "configs_dir": "D:\\quant-data\\configs",
+  "store_root": "D:\\quant-data",
+  "store_id": "store-398306491d834f99",
+  "snapshots_seen": [
+    "snap-019c4a8ad66640ad",
+    "snap-030369f20bd18303",
+    "snap-9a91d247f34314c8",
+    "snap-9fec3864981e3cc2",
+    "snap-a750edfb954ca96a",
+    "snap-eef49aed824d7fb4"
+  ],
+  "configs_checked": 5,
+  "configs_with_problems": 0,
+  "results": [
+    {
+      "config": "D:\\quant-data\\configs\\backtest_profile.json",
+      "kind": "bootstrap_config",
+      "checks": {
+        "store_id": "store-398306491d834f99",
+        "snapshot_manifest": "present"
+      },
+      "problems": [],
+      "pending_items": []
+    },
+    {
+      "config": "D:\\quant-data\\configs\\delivery_etf_backtest.json",
+      "kind": "bootstrap_config",
+      "checks": {
+        "store_id": "store-398306491d834f99",
+        "snapshot_manifest": "present"
+      },
+      "problems": [],
+      "pending_items": []
+    },
+    {
+      "config": "D:\\quant-data\\configs\\delivery_etf_loop.json",
+      "kind": "loop_config",
+      "checks": {
+        "store_id": "store-398306491d834f99",
+        "dataset_ids.daily": "published",
+        "dataset_ids.minute": "published"
+      },
+      "problems": [],
+      "pending_items": []
+    },
+    {
+      "config": "D:\\quant-data\\configs\\smoke_import.json",
+      "kind": "import_config",
+      "checks": {
+        "store_id": "store-398306491d834f99",
+        "source_root_exists": true,
+        "repair_index_csv_exists": true
+      },
+      "problems": [],
+      "pending_items": []
+    },
+    {
+      "config": "D:\\quant-data\\configs\\smoke_snapshot.json",
+      "kind": "snapshot_request",
+      "checks": {
+        "store_id": "store-398306491d834f99",
+        "selection ds-d939147fd6b633fd348fa62ed1fef74c 2016": "published",
+        "selection ds-b9bbad83ec09f4b9dcef6ea9a81c4b51 XSHG/2016-01/bucket-03": "published",
+        "selection ds-b9bbad83ec09f4b9dcef6ea9a81c4b51 XSHG/2016-01/bucket-05": "published"
+      },
+      "problems": [],
+      "pending_items": []
+    }
+  ],
+  "rule": "read-only checks; pending_items mark real work that has not run yet (e.g. unpublished selections, missing durable recording sessions). No ID is invented and no pending item is counted as a failure of existing evidence.",
+  "elapsed_seconds": 0.228
+}
