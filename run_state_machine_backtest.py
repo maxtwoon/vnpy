@@ -145,8 +145,8 @@ class MockCtaEngine:
 # 数据获取（AKShare + 模拟数据回退）
 # ──────────────────────────────────────────────
 
-def fetch_akshare_daily(symbol: str, exchange: Exchange, start: str, end: str) -> list:
-    """使用 AKShare 获取日线数据，失败则生成模拟数据"""
+def fetch_akshare_daily(symbol: str, exchange: Exchange, start: str, end: str) -> tuple:
+    """使用 AKShare 获取日线数据，失败则生成模拟数据。返回 (bars, 数据来源)，来源为 "akshare" 或 "mock"。"""
     try:
         import akshare as ak
         if exchange == Exchange.SSE:
@@ -178,10 +178,10 @@ def fetch_akshare_daily(symbol: str, exchange: Exchange, start: str, end: str) -
             except Exception:
                 continue
         print(f"  [AKShare] {symbol} 获取 {len(bars)} 根日K线")
-        return bars
+        return bars, "akshare"
     except Exception as e:
-        print(f"  [AKShare] 获取 {symbol} 失败: {e}，将生成模拟数据")
-        return _generate_mock_bars(symbol, exchange, start, end)
+        print(f"  [AKShare] 获取 {symbol} 失败: {e}，将生成模拟数据（结果无研究价值）")
+        return _generate_mock_bars(symbol, exchange, start, end), "mock"
 
 
 def _generate_mock_bars(symbol: str, exchange: Exchange, start: str, end: str) -> list:
@@ -563,6 +563,94 @@ def print_summary(results: list):
 
 
 # ──────────────────────────────────────────────
+# 报告包（供 QuantResearchOS 工作台浏览 / 登记为证据）
+# ──────────────────────────────────────────────
+
+def save_report_bundle(all_results: list, text_report_path: str) -> str:
+    """把本次回测写成一个目录：reports/<run_id>/stats.json、report.md、equity.png。
+
+    stats.json 里每个标的都带 data_source（akshare / mock）；只要有一个标的是 mock，
+    整个报告标题和 stats.json 顶层都会标明，避免把模拟数据当研究结果。
+    """
+    root = os.path.dirname(os.path.abspath(__file__))
+    run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-state-machine"
+    out_dir = os.path.join(root, "reports", run_id)
+    os.makedirs(out_dir, exist_ok=True)
+
+    sources = sorted({r.get("data_source", "unknown") for r in all_results})
+    any_mock = any(r.get("data_source") != "akshare" for r in all_results)
+    meta = {
+        "run_id": run_id,
+        "strategy": "state-machine (专享策略26)",
+        "strategy_file": "state_machine_strategy.py",
+        "runner": "run_state_machine_backtest.py",
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "start_date": START_DATE,
+        "end_date": END_DATE,
+        "capital": CAPITAL,
+        "commission_rate": COMMISSION_RATE,
+        "stamp_tax": STAMP_TAX,
+        "parameters": STRATEGY_SETTING,
+        "data_sources": sources,
+        "contains_mock_data": any_mock,
+        "performance_claim": "none" if any_mock else "backtest-only",
+    }
+    results = []
+    for r in all_results:
+        item = {k: v for k, v in r.items() if k not in ("net_values", "dates")}
+        results.append(item)
+    with open(os.path.join(out_dir, "stats.json"), "w", encoding="utf-8") as f:
+        json.dump({"meta": meta, "results": results}, f, ensure_ascii=False, indent=2, default=str)
+
+    # Markdown report: the summary table first, then the legacy text verbatim.
+    title = "状态机多因子策略 回测报告" + ("（含模拟数据，结果无研究价值）" if any_mock else "")
+    md = [f"# {title}", "", f"- 运行: `{run_id}`  生成于 {meta['generated_at']}",
+          f"- 区间: {START_DATE} ~ {END_DATE}  初始资金 {CAPITAL:,.0f}  手续费 {COMMISSION_RATE}  印花税 {STAMP_TAX}",
+          f"- 数据来源: {', '.join(sources)}", "",
+          "| 标的 | 数据 | 年化 | 最大回撤 | Sharpe | 交易次数 | 胜率 |", "|---|---|---|---|---|---|---|"]
+    for r in all_results:
+        md.append(f"| {r.get('name', r['symbol'])} ({r['symbol']}) | {r.get('data_source')} | {r['annual_return']:+.2%} | "
+                  f"{r['max_drawdown_pct']:.2%} | {r['sharpe_ratio']:.2f} | {r['trade_count']} | {r['win_rate']:.2%} |")
+    md += ["", "## 结论", "", ("数据为模拟生成，本报告只验证流程，不构成任何策略结论。" if any_mock
+                              else "回测结果仅反映历史数据和上述假设下的统计表现，不代表未来表现。"), "",
+           "## 原始文本报告", "", "```"]
+    with open(text_report_path, encoding="utf-8") as f:
+        md.append(f.read().rstrip())
+    md.append("```")
+    with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as f:
+        f.write("\n".join(md) + "\n")
+
+    # Equity curves, one line per symbol, normalised to 1.0.
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(10, 4.5), dpi=120)
+        for r in all_results:
+            nv = r.get("net_values") or []
+            if not nv:
+                continue
+            ax.plot(range(len(nv)), [v / r["capital"] for v in nv], linewidth=1.2,
+                    label=f"{r.get('name', r['symbol'])} [{r.get('data_source')}]")
+        ax.axhline(1.0, color="#999999", linewidth=0.8)
+        ax.set_title(title, fontsize=11)
+        ax.set_xlabel("交易日"); ax.set_ylabel("净值（初始=1）")
+        ax.grid(True, alpha=0.3); ax.legend(fontsize=8)
+        for font in ("Microsoft YaHei", "SimHei"):
+            try:
+                plt.rcParams["font.sans-serif"] = [font]
+                break
+            except Exception:
+                pass
+        fig.tight_layout()
+        fig.savefig(os.path.join(out_dir, "equity.png"))
+        plt.close(fig)
+    except Exception as e:  # charts are optional; the numbers are already in stats.json
+        print(f"  [报告] 未生成净值图: {e}")
+    return out_dir
+
+
+# ──────────────────────────────────────────────
 # 主函数
 # ──────────────────────────────────────────────
 
@@ -588,7 +676,7 @@ def main():
         print(f"\n[{name} ({sym})]")
 
         # 1. 获取数据
-        bars = fetch_akshare_daily(sym, exch, START_DATE, END_DATE)
+        bars, data_source = fetch_akshare_daily(sym, exch, START_DATE, END_DATE)
         if not bars:
             print(f"  无数据，跳过")
             continue
@@ -599,6 +687,9 @@ def main():
         engine = BacktestEngine(sym, exch, CAPITAL)
         stats  = engine.run(bars, STRATEGY_SETTING)
         stats["name"] = name
+        stats["data_source"] = data_source
+        stats["net_values"] = list(engine.net_values)
+        stats["dates"] = sorted({str(b.datetime)[:10] for b in bars})
         all_results.append(stats)
 
         # 3. 打印单标的结果
@@ -609,7 +700,7 @@ def main():
     # 4. 汇总对比
     print_summary(all_results)
 
-    # 5. 保存结果文件
+    # 5. 保存结果文件（兼容旧的 backtest_result.txt）
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backtest_result.txt")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write('专享策略26：基于"状态机"的多因子策略  —  回测报告\n')
@@ -653,6 +744,10 @@ def main():
         f.write("  * 本回测不考虑涨跌停限制和冲击成本\n")
         f.write("  * 不构成投资建议\n")
 
+
+    # 6. 研究工作台用的报告包：reports/<run_id>/（stats.json + report.md + equity.png）
+    bundle = save_report_bundle(all_results, output_path)
+    print(f"\n报告包已写入: {bundle}")
     print(f"\n✅ 回测报告已保存: {output_path}")
     return all_results
 

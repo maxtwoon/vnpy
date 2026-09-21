@@ -142,3 +142,6 @@ a80_codex_manual.db-journal
 
 # Directory junction to the ETF research repo (D:/repo/quant/strategies/vnpy-etf); content is tracked there.
 /research/
+
+# backtest report bundles written by run_state_machine_backtest.py; QROS snapshots the ones that matter
+/reports/
