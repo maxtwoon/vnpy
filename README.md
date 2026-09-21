@@ -1,5 +1,16 @@
 # VeighNa - By Traders, For Traders, AI-Powered.
 
+> **本地研究项目分工（2026-09-15）**：本仓库作为量化研究与回测基础；缠论择时统一使用
+> [D:\repo\czsc-timing-engine](D:/repo/czsc-timing-engine/README.md)。
+> `examples/czsc_strategy` 已[原地归档](examples/czsc_strategy/ARCHIVED.md)，仅保留历史源码与证据。
+> 新项目的信号接入尚未实施。
+
+> **本地数据接入（2026-09-16）**：已通过独立`vnpy_datasource`插件连接
+> `D:\repo\dataSource`，支持标准Datafeed、研究查询、SQLite与Alpha导出。
+> 使用方法、实际验证和一分钟数据限制见[接入说明](integrations/vnpy_datasource/README.md)。
+> 2026-09-21 起 Datafeed 默认先读 dataSource 的本地回测库固定快照（离线、带 `snapshot_id`），
+> `datasource.ps1 load-warehouse` 可把一批标的灌进独立 SQLite 供正式回测。
+
 <p align="center">
   <img src ="https://vnpy.oss-cn-shanghai.aliyuncs.com/veighna-logo.png"/>
 </p>

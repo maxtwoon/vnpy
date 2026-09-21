@@ -136,3 +136,6 @@ a80_codex_manual.db-journal
 
 # Local audit prompts/reports at repo root
 /diagnostics_*.md
+
+# Local dataSource research downloads (source code lives in integrations/).
+/research_data/
