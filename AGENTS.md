@@ -509,3 +509,9 @@ This repository uses a root-level `HANDOFF.md` and `.synccheck.yml` to track mul
   `.synccheck.yml` only ever targeted `examples/czsc_strategy`; both blocks were removed
   with that directory on 2026-09-21. `tools/sync_check.py` still supports them if a
   future project needs the same guards.
+
+## 跨项目架构与知识复用
+
+开发前阅读 [统一架构](D:/repo/quant/ARCHITECTURE.md) 和 [vnpy 能力指南](D:/repo/quant/docs/frameworks/vnpy.md)，再按当前任务查询 QROS knowledge（组件/关键词；必要时跨项目）。按 [复用说明](D:/repo/quant/docs/templates/strategy-reuse.md) 在现有任务设计或交接中记录已有能力、缺口及验证方式；新增基础组件须比较已有实现。
+
+收尾仅对可复用经验拟定知识草稿，引用真实证据与适用条件；无合格证据保持 unverified。发布另建 verified 记录，历史不改写。版本或数据契约变化后只读查询适用性；unknown/needs_review/conflict 不能当作当前有效结论。自动提案不等于保存、研究执行或交易授权。

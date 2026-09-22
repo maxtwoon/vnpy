@@ -91,3 +91,16 @@ def test_live_snapshot_read_is_reproducible() -> None:
     assert result["status"] == "ok" and result["records"]
     pinned = WarehouseReader(LIVE_ROOT, result["snapshot_id"]).history("159915.SZSE", "2026-09-01", "2026-09-11", "d")
     assert pinned["records"] == result["records"]
+
+def test_manifest_changes_during_pinned_read_fail(tmp_path):
+    reader, fake = reader_with(frame([{'timestamp':pd.Timestamp('2026-09-11')}]), {'bars_etf_1d'})
+    fake.root = tmp_path
+    (tmp_path/'snapshots').mkdir()
+    manifest=tmp_path/'snapshots/TEST-SNAP.json';manifest.write_text('{}')
+    original=fake.bars
+    def changed(*args,**kwargs):
+        manifest.write_text('{"tampered":true}')
+        return original(*args,**kwargs)
+    fake.bars=changed
+    with pytest.raises(ValueError,match='manifest changed'):
+        reader.history('159915.SZSE','2026-09-11','2026-09-11','d')

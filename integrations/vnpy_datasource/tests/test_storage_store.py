@@ -147,3 +147,25 @@ def test_store_minute_requires_start_label(tmp_path: Path) -> None:
     }]
     with pytest.raises(ValueError, match="time_label"):
         save_history(payload, "159915.SZSE", "store", tmp_path / "store")
+
+def test_warehouse_mapping_is_idempotent_and_rejects_conflicts(tmp_path):
+    import hashlib
+    payload = history(turnover=None)
+    manifest = tmp_path/'warehouse.json';manifest.write_text('{"snapshot_id":"fixed-source"}')
+    payload['source']='warehouse'
+    payload['metadata']['warehouse_provenance']={'status':'verified','snapshot_id':'fixed-source',
+        'manifest_path':str(manifest),'manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        'query':{'symbol':'159915.SZSE','start':'2025-01-02','end':'2025-01-02','adjust':'none'}}
+    first=save_history(payload,'159915.SZSE','store',tmp_path/'store')
+    second=save_history(payload,'159915.SZSE','store',tmp_path/'store')
+    assert second['snapshot_id']==first['snapshot_id'] and second['idempotent_replay']
+    mapping=json.loads(Path(first['source_mapping']).read_text())
+    assert mapping['input_rows']==mapping['verified_rows']==1
+    rows=readback_rows(tmp_path/'store',first['snapshot_id'],first['dataset_id'])
+    assert rows[0]['turnover'] is None and rows[0]['volume']==10000
+    payload['records'][0]['close']=1.25
+    with pytest.raises(ValueError,match='conflicting records'):
+        save_history(payload,'159915.SZSE','store',tmp_path/'store')
+    manifest.write_text('{}')
+    with pytest.raises(ValueError,match='manifest hash mismatch'):
+        save_history(payload,'159915.SZSE','store',tmp_path/'store')

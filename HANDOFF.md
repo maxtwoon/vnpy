@@ -1,4 +1,36 @@
 ---
+task: AGENT-20260922 - approved workspace entrypoints and snapshot provenance
+version: 4.4.0
+stage: dev
+owner: codex
+updated: 2026-09-22
+deliverables:
+  - HANDOFF.md
+  - integrations/vnpy_datasource/README.md
+  - integrations/vnpy_datasource/vnpy_datasource/warehouse.py
+  - integrations/vnpy_datasource/vnpy_datasource/storage.py
+  - integrations/vnpy_datasource/examples/read_snapshot.py
+  - tools/staged_check.py
+blockers: []
+---
+
+## Current workspace integration
+
+The user explicitly requested implementation of the approved workspace plan.
+Implementation and local verification are recorded in
+[the current workspace guide](../quant/AGENT_WORKFLOWS.md).
+Bridge tests: 94 passed. Existing local ETF snapshot conversion, idempotent replay
+and fixed snapshot readback passed. No new market data or holdout was consumed.
+No commit, push, remote CI, trading, or independent code-review completion is claimed.
+Stage remains dev; this new task does not fabricate a transition from the archived ETF task.
+
+## Archived ETF task — original handoff retained verbatim below
+
+The following record is historical. Its strategy now lives in the archived
+quant/strategies/vnpy-etf workspace. Its roles and conclusions remain unchanged;
+it is not the active task or the source of current deliverable paths.
+
+---
 task: ETF-20260916 - autonomous ETF research with OpenCode Kimi and Claude Code
 version: 4.4.0
 stage: dev

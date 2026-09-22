@@ -8,6 +8,7 @@ result carries the ``snapshot_id`` it was read from. It produces the same envelo
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import sys
 from datetime import datetime, timedelta, timezone
@@ -89,10 +90,25 @@ class WarehouseReader:
         try:
             with self._snapshot() as db:
                 snapshot_id = db.snapshot_id
+                provenance = {"status": "missing", "snapshot_id": snapshot_id}
+                if hasattr(db, "root"):
+                    manifest_path = Path(db.root) / "snapshots" / f"{snapshot_id}.json"
+                    manifest_bytes = manifest_path.read_bytes()
+                    provenance = {
+                        "status": "verified", "snapshot_id": snapshot_id,
+                        "manifest_path": str(manifest_path),
+                        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+                        "query": params,
+                        "parameters_sha256": hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest(),
+                        "transform_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                    }
                 dataset = f"bars_{params['asset']}_{frequency}"
+                provenance["dataset"] = dataset
                 if dataset not in db.datasets():
                     return self._envelope(params, "no_data", reason=f"dataset_not_in_warehouse:{dataset}", snapshot_id=snapshot_id)
                 frame = db.bars([wh_symbol], begin.date(), finish.date(), asset=params["asset"], frequency=frequency)
+                if provenance["status"] == "verified" and hashlib.sha256(manifest_path.read_bytes()).hexdigest() != provenance["manifest_sha256"]:
+                    raise ValueError("Warehouse manifest changed during query")
         except WarehouseUnavailable as exc:
             return self._envelope(params, "error", reason=str(exc))
         if frame.empty:
@@ -132,6 +148,7 @@ class WarehouseReader:
             "paused_rows_dropped": paused_dropped,
             "warehouse_sources": sorted(sources),
             "snapshot_id": snapshot_id,
+            "warehouse_provenance": provenance,
         })
         return validate_bars(result, params)
 

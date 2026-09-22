@@ -208,3 +208,7 @@ Yahoo的159915原价日线补测也遇到上游`YFPricesMissingError`，已保�
 ```
 
 这些测试不调用网络。真实检查脚本会单独执行小窗口取数并写入本插件忽略的`output/`目录。
+
+## 固定快照来源（2026-09-22）
+
+warehouse 转 store 记录源清单哈希、查询、转换代码、目标 snapshot 及读回结果，并复用相同映射。使用 examples/read_snapshot.py 可固定读取及检查来源；缺历史映射明确显示 missing。当前运行入口和本地 ETF 验证见 [Agent 工作流](../../../quant/AGENT_WORKFLOWS.md)。warehouse_backtest.py 为尚未重新验证的 CTA 研究示例，必须指定 --snapshot-id，无缺数据模拟回退。旧根状态机脚本仅为 demo。

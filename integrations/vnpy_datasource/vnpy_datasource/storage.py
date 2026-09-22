@@ -335,6 +335,17 @@ def _save_store(result: dict[str, Any], symbol: str, output: str | Path) -> dict
     into the store root.
     """
     metadata = result.get("metadata", {})
+    provenance = metadata.get("warehouse_provenance")
+    mapping_key = None
+    if result.get("source") == "warehouse":
+        if not provenance or provenance.get("status") != "verified":
+            raise ValueError("Warehouse source mapping missing; re-read a pinned source snapshot")
+        manifest = Path(provenance["manifest_path"])
+        if hashlib.sha256(manifest.read_bytes()).hexdigest() != provenance["manifest_sha256"]:
+            raise ValueError("Warehouse manifest hash mismatch")
+        provenance = {**provenance, "storage_transform_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+        mapping_key = hashlib.sha256(_json_text({"source": provenance, "symbol": symbol,
+            "recipe": result.get("recipe")}).encode()).hexdigest()
     interval = metadata.get("interval")
     if not isinstance(interval, str) or not interval:
         raise ValueError("History metadata must explicitly specify interval")
@@ -360,7 +371,7 @@ def _save_store(result: dict[str, Any], symbol: str, output: str | Path) -> dict
             capture = store.path.captures / (
                 f"datasource-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid4().hex[:12]}.json"
             )
-            _write_json(capture, result)
+            _write_json(capture, {**result, "bridge_provenance": provenance} if mapping_key else result)
             capture_bytes = capture.read_bytes()
             asset_sha256 = hashlib.sha256(capture_bytes).hexdigest()
             asset_id = f"asset-datasource-{asset_sha256[:16]}"
@@ -404,6 +415,14 @@ def _save_store(result: dict[str, Any], symbol: str, output: str | Path) -> dict
             rows = _store_rows(
                 records, symbol, interval, time_label, dataset_id, asset_id, batch_label,
             )
+            mapping_path = store.path.reports / f"warehouse-map-{mapping_key}.json" if mapping_key else None
+            if mapping_path and mapping_path.exists():
+                prior = json.loads(mapping_path.read_text(encoding="utf-8"))
+                records_hash = hashlib.sha256(_json_text(records).encode()).hexdigest()
+                if prior["records_sha256"] != records_hash:
+                    raise ValueError("Same warehouse mapping produced conflicting records")
+                _verify_store_readback(research_store, store, prior["snapshot_id"], dataset_id, rows)
+                return {**prior["result"], "idempotent_replay": True}
             year_of = (
                 (lambda row: row["trading_date"].year) if interval == "d"
                 else (lambda row: datetime.fromtimestamp(
@@ -524,13 +543,23 @@ def _save_store(result: dict[str, Any], symbol: str, output: str | Path) -> dict
             }
             receipt.update(storage_status="verified", storage=saved)
             _write_json(receipt_path, receipt)
-            return {
+            response = {
                 "status": "ok", "source": result.get("source"),
                 "recipe": result.get("recipe"), "symbol": symbol, "target": "store",
                 "output": str(directory), **saved,
                 "receipt": str(receipt_path),
                 "turnover_missing": bool(missing_turnover), "adjustment": adjustment,
             }
+            if mapping_path:
+                response["source_mapping"] = str(mapping_path)
+                mapping = {"schema_version": 1, "source": provenance,
+                    "snapshot_id": snapshot.snapshot_id, "dataset_id": dataset_id,
+                    "input_rows": len(records), "verified_rows": verified,
+                    "records_sha256": receipt["records_sha256"], "result": response}
+                _write_json(mapping_path, mapping)
+                receipt["source_mapping"] = mapping
+                _write_json(receipt_path, receipt)
+            return response
     finally:
         store.close()
 

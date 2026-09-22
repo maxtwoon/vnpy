@@ -27,14 +27,14 @@ deliverables_policy:
 handoff:
   file: HANDOFF.md
   stages: [design, dev, review, done]
-  # 2026-09-16 role assignment (TASKS.md / HANDOFF.md ETF-20260916): Codex owns
+  # Historical ETF context (not current task ownership): 2026-09-16 role assignment (TASKS.md / HANDOFF.md ETF-20260916): Codex owns
   # design/coordination only; Kimi CLI (jointly with OpenCode) owns dev; real
   # Claude Code owns independent review. Commands follow the local CLIs
   # verified on this machine: `opencode run`, `kimi -p`, `claude -p`,
   # `codex exec` (see TASKS.md coordination record 2026-09-16).
   owners:
     design: codex
-    dev: kimi-code
+    dev: codex  # current user-assigned workspace implementation; archived ETF roles remain in HANDOFF.md
     review: claude-code
   no_auto_advance: [review]   # review must explicitly next/reject; pipeline run loop must not
                               # silently treat "agent exited 0 without transitioning" as accept
@@ -45,7 +45,7 @@ handoff:
     # "Cannot combine --prompt with --auto" (recorded in TASKS.md and
     # coordination_update_02.md); do not reintroduce it. If a future kimi-cli
     # changes flags again, re-verify with `kimi --help` before editing here.
-    dev: kimi -p "Read HANDOFF.md and AGENTS.md, finish the dev stage, then run python tools/handoff.py next"
+    dev: codex exec "Read the current task in HANDOFF.md and AGENTS.md. Do not resume the archived ETF task. Finish the assigned implementation; do not claim review or publish without authorization."
     # NOTE (2026-09-16): review moved from `codex exec` (with its Windows
     # sandbox add-dirs) to real Claude Code (`claude -p`). The historical
     # 2026-07-11 codex-sandbox symlink/tmp_path notes applied to the old
