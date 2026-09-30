@@ -45,7 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
     load.add_argument("--interval", default="d")
     load.add_argument("--asset")
     load.add_argument("--snapshot", help="pin a warehouse snapshot id (default: current pointer)")
-    load.add_argument("--target", choices=("sqlite", "alpha"), required=True)
+    load.add_argument("--enrich-etf-amount", action="store_true", help="Explicit observed ETF amount enrichment; requires --snapshot and --as-of")
+    load.add_argument("--as-of", help="Timezone-aware observation cutoff for amount enrichment")
+    load.add_argument("--target", choices=("sqlite", "alpha", "store"), required=True)
     load.add_argument("--output", type=Path, required=True)
     query = commands.add_parser("query", help="Call a registry route")
     query.add_argument("--route", required=True)
@@ -76,17 +78,34 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         readiness = reader.status()
         if not readiness["ready"]:
             return {"status": "error", "reason": readiness.get("reason"), "warehouse": readiness}
-        items, loaded = [], 0
+        items, loaded, failed = [], 0, 0
         for symbol in args.symbols:
-            result = reader.history(symbol, args.start, args.end, args.interval, "none", args.asset)
+            extra = {}
+            if args.enrich_etf_amount:
+                extra = {"enrich_etf_amount": True, "as_of": args.as_of}
+            result = reader.history(symbol, args.start, args.end, args.interval, "none", args.asset, **extra)
             item = {"symbol": symbol, "status": result["status"], "reason": result.get("reason"),
                     "rows": len(result["records"]), "snapshot_id": result.get("snapshot_id")}
             if result["status"] == "ok":
                 saved = save_history(result, symbol, args.target, args.output)
                 item.update(verified_rows=saved.get("verified_rows"), receipt=saved.get("receipt"), turnover_missing=saved.get("turnover_missing"))
-                loaded += 1
+                item.update(status=saved.get("status", "error"))
+                if args.target == "store":
+                    item.update(target_snapshot_id=saved.get("snapshot_id"),
+                                dataset_id=saved.get("dataset_id"),
+                                source_mapping=saved.get("source_mapping"),
+                                idempotent_replay=saved.get("idempotent_replay"))
+                    for field in ("batch_id", "state", "conflicts", "detail", "capture"):
+                        if field in saved:
+                            item[field] = saved[field]
+                if item["status"] == "ok":
+                    loaded += 1
+                else:
+                    failed += 1
             items.append(item)
         status = "ok" if loaded == len(args.symbols) else ("no_data" if loaded == 0 else "partial")
+        if failed:
+            status = "partial" if loaded else "error"
         return {"status": status, "target": args.target, "output": str(args.output), "snapshot_id": readiness.get("pinned_snapshot") or readiness.get("current_snapshot"),
                 "loaded": loaded, "requested": len(args.symbols), "items": items}
     result = client.history(

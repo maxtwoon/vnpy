@@ -151,7 +151,8 @@ def test_store_minute_requires_start_label(tmp_path: Path) -> None:
 def test_warehouse_mapping_is_idempotent_and_rejects_conflicts(tmp_path):
     import hashlib
     payload = history(turnover=None)
-    manifest = tmp_path/'warehouse.json';manifest.write_text('{"snapshot_id":"fixed-source"}')
+    manifest = tmp_path/'warehouse.json'
+    manifest.write_text('{"snapshot_id":"fixed-source"}')
     payload['source']='warehouse'
     payload['metadata']['warehouse_provenance']={'status':'verified','snapshot_id':'fixed-source',
         'manifest_path':str(manifest),'manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest(),

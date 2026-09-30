@@ -82,4 +82,11 @@ store目标的测试只能用researchstore的`.venv`解释器真实运行（该�
 - `get_datafeed()` 实测：510300 日线 / 510050 1 分钟由本地库返回（约 1 秒，`source=warehouse`，有回执）；600519 1 分钟本地无 → 打印"改走在线源"后按原逻辑失败（`unsupported`）。
 - 测试：插件 92 项通过（新增 `tests/test_warehouse.py` 4 项、Datafeed 本地优先/回退 1 项；原在线日期转换测试改为显式关闭本地优先）。
 - 未改动 vnpy 核心、全局 `vt_setting.json`（新键均有默认值）与 dataSource 仓库。
+# 2026-09-30 current-worktree closeout checks
 
+- Registered `vnpy` Python 3.14.7: full plugin suite, 101 passed (7.91s).
+- Root `tools/sync_check.py`: PASS; missing historical archive directory remains a warning.
+- `examples/warehouse_backtest.py` now releases the working database and temporary directory on early return and exceptions using an exit stack.
+- Actual fixed-input CTA replay: `research_data/wh_etf_sqlite`, snapshot `20260920T173637Z-c6cc6b2e`, 159915.SZSE, 659 daily bars and 47 simulated trades. Source and initialized working-copy hashes remained unchanged; command exit 0.
+- Artifacts: `output/closeout-20260930-cta/result.json`, `daily.csv`, and isolated `runtime-database.db`. This verifies the example's engineering path only; its short-selling and missing ETF market/account constraints remain unchanged.
+- ResearchStore final acceptance subsequently completed for the agreed personal offline research scope: independent final audit PASS. See `../vnpy_researchstore/.coordination/claude-delivery04n-final/REVIEW.md` and `../vnpy_researchstore/.coordination/completion-audit-20260930.json`. Live gateway recording remains LIVE_NOT_RUN.

@@ -211,4 +211,30 @@ Yahoo的159915原价日线补测也遇到上游`YFPricesMissingError`，已保�
 
 ## 固定快照来源（2026-09-22）
 
-warehouse 转 store 记录源清单哈希、查询、转换代码、目标 snapshot 及读回结果，并复用相同映射。使用 examples/read_snapshot.py 可固定读取及检查来源；缺历史映射明确显示 missing。当前运行入口和本地 ETF 验证见 [Agent 工作流](../../../quant/AGENT_WORKFLOWS.md)。warehouse_backtest.py 为尚未重新验证的 CTA 研究示例，必须指定 --snapshot-id，无缺数据模拟回退。旧根状态机脚本仅为 demo。
+warehouse 转 store 记录源清单哈希、查询、转换代码、目标 snapshot 及读回结果，并复用相同映射。使用 examples/read_snapshot.py 可固定读取及检查来源；缺历史映射明确显示 missing。当前运行入口和本地 ETF 验证见 [Agent 工作流](../../../quant/AGENT_WORKFLOWS.md)。warehouse_backtest.py 必须指定 --snapshot-id，无缺数据模拟回退；2026-09-30 已用固定本地输入重新验证，659 根日线完整回放、47 笔模拟成交，输入哈希未变，详见 VERIFICATION.md。该示例验证工程链路，不代表 ETF 现货策略可执行性。旧根状态机脚本仅为 demo。
+
+### 固定 warehouse 快照直接转 researchstore（2026-09-23）
+
+`load-warehouse` 现支持 `--target store`，例如：
+
+```powershell
+& D:/repo/quant/.runtime/envs/vnpy-py314/Scripts/python.exe -m vnpy_datasource.cli load-warehouse --symbols 159915.SZSE --start 2026-09-01 --end 2026-09-11 --snapshot 20260923T005103Z-a7d6c9db --asset etf --target store --output D:/repo/quant/.runtime/verification/warehouse-union-etf-20260923
+```
+
+结果分别返回源 snapshot_id、目标 target_snapshot_id、dataset_id 和 source_mapping。9行真实数据重复执行复用snap-29c5d596c2f90a84，idempotent_replay=true。存储冲突不计为成功加载，返回非零状态。12项存储及命令测试通过；不表示策略收益验证。
+
+统一load-warehouse的store结果现保留batch_id、冲突条目、状态详情及capture路径，失败时agent可直接定位原始输入和存储批次。12项相关测试通过；不自动覆盖冲突记录。
+
+### CTA示例输入隔离（2026-09-23）
+
+warehouse_backtest.py使用SQLite backup建立运行副本，包含已提交WAL内容，框架初始化只作用于副本；原始输入哈希继续核验，初始化后的运行副本也在回放结束后核验。固定快照20260923T005103Z-a7d6c9db、159915在2024年1月至4月78根行情，以新生成SQLite实跑exit0，结果在D:/repo/quant/.runtime/verification/warehouse-union-cta-20260923/fresh-result/result.json。78根完整回放、源输入与运行副本均未改变；0笔交易，只证明数据消费/回放和输入保护，不证明成交路径或策略有效。此前失败保留。
+
+### CTA成交路径工程验证（2026-09-23）
+
+同一固定warehouse快照及未改变的DoubleMa参数，用已有2024全年159915日线242根完成标准vnpy_ctastrategy回放，15笔模拟成交，exit0；源数据库及初始化后运行副本哈希检查通过。产物D:/repo/quant/.runtime/verification/warehouse-union-cta-20260923/year-result/result.json。读取安装的DoubleMa源码确认含short/cover，故此项仅验证数据消费、框架撮合与结果输出，不是ETF现货可执行性或策略有效性证明；ETF借券、最小交易单位、T+1/涨跌停等约束未实现。入口未来结果约束文字已补明确做空限制，既有结果不改写。
+
+### ETF 成交额显式补缺（2026-09-24）
+
+`load-warehouse` 增加 `--enrich-etf-amount --as-of <带时区时间>`，必须同时指定 `--snapshot`，仅支持 ETF 日线。默认读取不变。补缺先核对同窗口价格、成交量及至少三条已有金额，冲突或证据不足直接失败；只补缺失金额，来源版本、观察截止时间和转换代码哈希保存到来源回执。该视图不提供历史 PIT 资格。
+
+实际验证：固定快照 `20260924T002553Z-d35ddb04`，159915.SZSE、510300.SSE，2026-09-01 至 09-23，34 行中补齐 28 个金额、保留原有 6 个；researchstore 各 17 行校验通过，turnover_missing=false。独立产物：`D:/repo/quant/.runtime/verification/warehouse-union-etf-amount-20260924`。适用范围仅本次观察核对窗口，不代表所有 ETF 单位已核验。

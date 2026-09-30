@@ -15,11 +15,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sqlite3
+import tempfile
+from contextlib import ExitStack, closing
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 def main() -> int:
+    with ExitStack() as resources:
+        return run(resources)
+
+
+def run(resources: ExitStack) -> int:
+    """Run the example and release databases on success or failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('research_dir', nargs='?', default='D:/repo/vnpy/research_data/wh_etf_sqlite')
     parser.add_argument('--snapshot-id', required=True, help='fixed warehouse snapshot; never current/latest')
@@ -40,7 +49,6 @@ def main() -> int:
     database_hash = hashlib.sha256(database_path.read_bytes()).hexdigest()
     from vnpy.trader.setting import SETTINGS
     SETTINGS['database.name'] = 'sqlite'
-    SETTINGS['database.database'] = str(database_path)
     from vnpy.trader.constant import Exchange, Interval
     from vnpy.trader.database import get_database
     from vnpy_ctastrategy.backtesting import BacktestingEngine
@@ -53,10 +61,25 @@ def main() -> int:
         raise ValueError('Receipts do not identify exactly the requested verified warehouse snapshot')
     if args.output:
         args.output.mkdir(parents=True, exist_ok=False)
+    if args.output:
+        runtime_dir = args.output.resolve()
+    else:
+        runtime_dir = Path(resources.enter_context(
+            tempfile.TemporaryDirectory(prefix='warehouse-cta-')
+        ))
+    runtime_database = runtime_dir / 'runtime-database.db'
+    # SQLite backup includes committed WAL content. Adapter schema/index setup
+    # is confined to this working copy, never the source research database.
+    with closing(sqlite3.connect(database_path.as_uri() + '?mode=ro', uri=True)) as source:
+        with closing(sqlite3.connect(runtime_database)) as destination:
+            source.backup(destination)
+    SETTINGS['database.database'] = str(runtime_database)
     print("research dir:", RESEARCH_DIR)
     print("adjustment:", manifest["adjustment"], "| warehouse snapshot(s):", snapshots)
 
     db = get_database()
+    resources.callback(db.db.close)
+    runtime_hash = hashlib.sha256(runtime_database.read_bytes()).hexdigest()
     overview = {(o.symbol, o.exchange.value, o.interval.value): (o.count, o.start, o.end) for o in db.get_bar_overview()}
     print("database overview:", overview)
     bars = db.load_bar_data("159915", Exchange.SZSE, Interval.DAILY, start, end)
@@ -86,16 +109,21 @@ def main() -> int:
     print("record in results ->", {"warehouse_snapshot_id": snapshots, "adjustment": manifest["adjustment"], "database": SETTINGS["database.database"]})
     if hashlib.sha256(database_path.read_bytes()).hexdigest() != database_hash:
         raise ValueError('Research input changed during backtest')
+    if hashlib.sha256(runtime_database.read_bytes()).hexdigest() != runtime_hash:
+        raise ValueError('Runtime database changed during backtest')
     if args.output:
         payload = {'warehouse_snapshot_id': args.snapshot_id, 'database_sha256': database_hash,
                    'adjustment': manifest['adjustment'], 'metrics': {k: stats.get(k) for k in keys},
                    'engine': 'vnpy_ctastrategy.BacktestingEngine',
-                   'constraints': 'Daily limit-order bar matching; no exchange queue or ETF T+1/limit-up/down model. Research example only.',
+                   'constraints': 'Daily limit-order bar matching; standard DoubleMa permits short positions. No ETF borrow/lot-size, exchange queue or T+1/limit-up/down model. Engineering example, not an executable ETF spot strategy.',
                    'fee_rate': 0.0001, 'slippage': 0.001}
         payload.update(input_rows=len(bars), replay_rows=len(engine.history_data),
                        actual_start=bars[0].datetime.isoformat(), actual_end=bars[-1].datetime.isoformat(),
                        strategy='DoubleMaStrategy', contains_mock_data=False,
                        backtest_framework='vnpy', position_size=1, capital=100000)
+        payload.update(runtime_database_sha256=runtime_hash, source_database_unchanged=True,
+                       runtime_database_unchanged=True,
+                       database_isolation='SQLite backup; framework schema initialization on working copy only')
         payload['input_adapter'] = 'single fixed SQLite read; bypass chunk boundary omission'
         payload['metrics'] = {k: v.item() if hasattr(v, 'item') else v for k, v in payload['metrics'].items()}
         daily.to_csv(args.output / 'daily.csv')

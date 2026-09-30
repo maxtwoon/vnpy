@@ -11,6 +11,20 @@ import pytest
 from vnpy_datasource.warehouse import WarehouseReader
 
 
+@pytest.mark.parametrize('snapshot,asset,interval,cutoff', [
+    (None, 'etf', 'd', '2026-09-24T00:00:00+00:00'),
+    ('fixed', 'stock', 'd', '2026-09-24T00:00:00+00:00'),
+    ('fixed', 'etf', '1m', '2026-09-24T00:00:00+00:00'),
+    ('fixed', 'etf', 'd', None),
+    ('fixed', 'etf', 'd', '2026-09-24T00:00:00'),
+])
+def test_amount_enrichment_requires_explicit_identity(snapshot, asset, interval, cutoff):
+    reader = WarehouseReader('D:/nonexistent', snapshot)
+    with pytest.raises(ValueError):
+        reader.history('159915.SZSE', '2026-09-01', '2026-09-23', interval,
+                       asset=asset, enrich_etf_amount=True, as_of=cutoff)
+
+
 class FakeSnapshot:
     """Stand-in for warehouse.query.Snapshot returning canned frames."""
 
@@ -96,7 +110,8 @@ def test_manifest_changes_during_pinned_read_fail(tmp_path):
     reader, fake = reader_with(frame([{'timestamp':pd.Timestamp('2026-09-11')}]), {'bars_etf_1d'})
     fake.root = tmp_path
     (tmp_path/'snapshots').mkdir()
-    manifest=tmp_path/'snapshots/TEST-SNAP.json';manifest.write_text('{}')
+    manifest=tmp_path/'snapshots/TEST-SNAP.json'
+    manifest.write_text('{}')
     original=fake.bars
     def changed(*args,**kwargs):
         manifest.write_text('{"tampered":true}')

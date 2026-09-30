@@ -69,7 +69,8 @@ class WarehouseReader:
 
     # -- query ---------------------------------------------------------------------
     def history(self, symbol: str, start: str, end: str, interval: str = "d",
-                adjust: str = "none", asset: str | None = None) -> dict[str, Any]:
+                adjust: str = "none", asset: str | None = None, *,
+                enrich_etf_amount: bool = False, as_of: str | None = None) -> dict[str, Any]:
         """Return closed bars from the local warehouse in the client envelope.
 
         Unadjusted only; warehouse ``adjusted=True`` is deliberately not exposed here
@@ -77,6 +78,13 @@ class WarehouseReader:
         refused by ``save_history``.
         """
         params = history_params(symbol, start, end, interval, adjust, asset)
+        if enrich_etf_amount:
+            if params['asset'] != 'etf' or interval != 'd' or not as_of or not self.snapshot_id:
+                raise ValueError('ETF amount enrichment requires ETF daily bars, fixed snapshot and as_of')
+            cutoff = datetime.fromisoformat(as_of.replace('Z', '+00:00'))
+            if cutoff.tzinfo is None:
+                raise ValueError('as_of must include timezone')
+            params.update(enrich_etf_amount=True, as_of=as_of)
         if adjust != "none":
             return self._envelope(params, "unsupported", reason="warehouse_serves_unadjusted_only")
         if interval not in INTERVAL_TO_WH:
@@ -106,7 +114,24 @@ class WarehouseReader:
                 provenance["dataset"] = dataset
                 if dataset not in db.datasets():
                     return self._envelope(params, "no_data", reason=f"dataset_not_in_warehouse:{dataset}", snapshot_id=snapshot_id)
-                frame = db.bars([wh_symbol], begin.date(), finish.date(), asset=params["asset"], frequency=frequency)
+                if enrich_etf_amount:
+                    frame = db.etf_bars_with_amount([wh_symbol], begin.date(), finish.date(), as_of=as_of)
+                    provenance['amount_enrichment'] = {
+                        'checks': frame.attrs.get('amount_checks'),
+                        'historical_PIT': False,
+                        'scope': frame.attrs.get('scope'),
+                        'code_sha256': {
+                            name: hashlib.sha256((self.root / 'warehouse' / name).read_bytes()).hexdigest()
+                            for name in ('etf_amount.py', 'sina_history.py', 'query.py')
+                        },
+                        'fields': [
+                            {'date': str(row.date)[:10], 'source': row.amount_source,
+                             'version_id': row.amount_version_id}
+                            for row in frame.itertuples() if row.amount_source == 'sina_native_etf'
+                        ],
+                    }
+                else:
+                    frame = db.bars([wh_symbol], begin.date(), finish.date(), asset=params["asset"], frequency=frequency)
                 if provenance["status"] == "verified" and hashlib.sha256(manifest_path.read_bytes()).hexdigest() != provenance["manifest_sha256"]:
                     raise ValueError("Warehouse manifest changed during query")
         except WarehouseUnavailable as exc:

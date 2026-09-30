@@ -160,3 +160,32 @@ def test_cli_json_export_refuses_overwrite(
     assert cli.main(["capabilities", "--output", str(protected)]) == 1
     assert json.loads(capsys.readouterr().out)["status"] == "error"
     assert protected.read_text(encoding="utf-8") == "original"
+
+@pytest.mark.parametrize('saved_status,expected', [('ok',0),('conflict',1)])
+def test_cli_warehouse_store_preserves_target_and_write_failure(monkeypatch, capsys, tmp_path, saved_status, expected):
+    from vnpy_datasource import cli, warehouse, storage
+    class Reader:
+        def __init__(self, root, snapshot):
+            assert snapshot == 'fixed-source'
+        def status(self):
+            return {'ready':True, 'pinned_snapshot':'fixed-source'}
+        def history(self, *args):
+            return {'status':'ok','records':[{}],'snapshot_id':'fixed-source'}
+    monkeypatch.setattr(warehouse, 'WarehouseReader', Reader)
+    monkeypatch.setattr(storage, 'save_history', lambda *args: {
+        'status':saved_status,'snapshot_id':'fixed-target','dataset_id':'dataset',
+        'source_mapping':'mapping.json','verified_rows':1,'idempotent_replay':True,
+        'batch_id':'batch','conflicts':[{'conflict_id':'collision'}] if saved_status=='conflict' else [],
+        'capture':'capture.json'})
+    result=cli.main(['load-warehouse','--symbols','159915.SZSE','--start','2026-09-01',
+        '--end','2026-09-11','--snapshot','fixed-source','--target','store','--output',str(tmp_path)])
+    assert result == expected
+    report=json.loads(capsys.readouterr().out)
+    assert report['loaded'] == (1 if saved_status=='ok' else 0)
+    assert report['items'][0]['target_snapshot_id']=='fixed-target'
+    assert report['items'][0]['snapshot_id']=='fixed-source'
+    assert report['items'][0]['status']==saved_status
+    assert report['items'][0]['capture']=='capture.json'
+    assert report['items'][0]['batch_id']=='batch'
+    if saved_status=='conflict':
+        assert report['items'][0]['conflicts']==[{'conflict_id':'collision'}]
