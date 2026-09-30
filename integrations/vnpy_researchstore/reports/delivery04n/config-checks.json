@@ -5,12 +5,16 @@
   "snapshots_seen": [
     "snap-019c4a8ad66640ad",
     "snap-030369f20bd18303",
+    "snap-0d3404a3803d93cf",
+    "snap-7914084cde1ff139",
     "snap-9a91d247f34314c8",
     "snap-9fec3864981e3cc2",
     "snap-a750edfb954ca96a",
+    "snap-ab182160a7c6eb31",
+    "snap-ec86298119e47e9c",
     "snap-eef49aed824d7fb4"
   ],
-  "configs_checked": 5,
+  "configs_checked": 6,
   "configs_with_problems": 0,
   "results": [
     {
@@ -45,6 +49,17 @@
       "pending_items": []
     },
     {
+      "config": "D:\\quant-data\\configs\\recorder_replay.json",
+      "kind": "recording_replay",
+      "checks": {
+        "store_id": "store-398306491d834f99",
+        "journal_present": true,
+        "snapshot_manifest": "present"
+      },
+      "problems": [],
+      "pending_items": []
+    },
+    {
       "config": "D:\\quant-data\\configs\\smoke_import.json",
       "kind": "import_config",
       "checks": {
@@ -69,5 +84,5 @@
     }
   ],
   "rule": "read-only checks; pending_items mark real work that has not run yet (e.g. unpublished selections, missing durable recording sessions). No ID is invented and no pending item is counted as a failure of existing evidence.",
-  "elapsed_seconds": 0.228
+  "elapsed_seconds": 0.246
 }

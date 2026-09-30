@@ -264,3 +264,190 @@ def test_junction_or_symlink_escape_refused_or_precise_not_run(
             os.rmdir(link)
         else:
             link.unlink(missing_ok=True)
+
+
+# -- recording02K: raw-coverage gate (fail-closed retention) ------------------
+
+
+def _closed_session_with(store, source_spec, events):
+    """Admit and close a session. events: list of (source_event_id,
+    event_ts_ns) where event_ts_ns=None means the source never supplied an
+    event time (unknown-time event). Returns session_id."""
+
+    session = create_session(store, source_spec, "Asia/Shanghai")
+    for source_event_id, event_ts_ns in events:
+        session.admit(
+            JournalEvent(
+                kind="tick",
+                instrument="IF2403.CFFEX",
+                event_ts_ns=event_ts_ns,
+                source_event_id=source_event_id,
+                payload={"last_price": 10.0, "volume": 100, "turnover": 1000},
+            )
+        )
+    drain(session, len(events))
+    result = session.close_at_cutoff(timeout=5.0)
+    assert result.state.value == "CLOSED"
+    session.close()
+    return session.session_id
+
+
+def _seal_range(store, session_id, end, source_spec, start=1):
+    return seal(
+        store,
+        SealRequest(
+            session_id=session_id,
+            committed_seq_start=start,
+            committed_seq_end=end,
+            transform_version="t0",
+            source_spec=source_spec,
+            calendar_spec="Asia/Shanghai",
+            asset_class=AssetClass.FUTURES,
+            volume_unit="contracts",
+            turnover_unit="currency",
+        ),
+    )
+
+
+def _strip_coverage_fields(store, session_id) -> None:
+    """Downgrade durable seal records to the pre-02K shape (no coverage
+    evidence) to prove legacy records never authorize deletion."""
+    import json as _json
+    import sqlite3 as _sq
+
+    journal_path = store.path.journals / f"{session_id}.sqlite"
+    conn = _sq.connect(str(journal_path), timeout=5.0, isolation_level=None)
+    conn.row_factory = _sq.Row
+    try:
+        row = conn.execute(
+            "SELECT value FROM session_meta WHERE key='seals'"
+        ).fetchone()
+        seals = _json.loads(row["value"])
+        for rec in seals:
+            for field in ("lossless", "unknown_time_excluded", "input_events"):
+                rec.pop(field, None)
+        with conn:
+            conn.execute(
+                "UPDATE session_meta SET value=? WHERE key='seals'",
+                (_json.dumps(seals, sort_keys=True),),
+            )
+    finally:
+        conn.close()
+
+
+def test_02k_mixed_unknown_time_refused_and_journal_kept(store) -> None:
+    """A seal that EXCLUDED a committed event (missing event time) must never
+    become cleanup eligible: after 15 days evaluate_retention refuses and
+    apply_retention keeps the journal and the raw event row."""
+    sid = _closed_session_with(
+        store,
+        "futures:02k-mixed",
+        [("known-1", BASE), ("unknown-time-2", None)],
+    )
+    receipt = _seal_range(store, sid, 2, "futures:02k-mixed")
+    assert receipt.lossless is False
+    assert receipt.unknown_time_excluded == 1
+    _age_seals_to(store, sid, days=15)
+    decision = evaluate_retention(store, sid)
+    assert not decision.eligible
+    assert "no seal proves lossless raw coverage" in decision.reason
+    applied = apply_retention(store, sid)
+    assert not applied.eligible
+    journal_file = store.path.journals / f"{sid}.sqlite"
+    assert journal_file.exists()  # the only raw copy survives
+    import sqlite3 as _sq
+
+    conn = _sq.connect(str(journal_file))
+    try:
+        raw = conn.execute("SELECT event_ts_ns FROM events WHERE seq=2").fetchone()
+    finally:
+        conn.close()
+    assert raw == (None,)  # excluded raw event still present
+
+
+def test_02k_all_unknown_time_cannot_certify_complete(store) -> None:
+    """All-unknown-time input publishes nothing losslessly; the seal must
+    never certify complete raw coverage, even fully batch-published."""
+    sid = _closed_session_with(
+        store,
+        "futures:02k-all-unknown",
+        [("u1", None), ("u2", None)],
+    )
+    receipt = _seal_range(store, sid, 2, "futures:02k-all-unknown")
+    assert receipt.lossless is False
+    assert receipt.unknown_time_excluded == 2
+    _age_seals_to(store, sid, days=15)
+    decision = evaluate_retention(store, sid)
+    assert not decision.eligible
+    assert "no seal proves" in decision.reason
+    assert (store.path.journals / f"{sid}.sqlite").exists()
+
+
+def test_02k_legacy_seal_record_refused(store) -> None:
+    """A pre-02K durable seal record (no coverage evidence) must never
+    authorize deletion; re-sealing with the current code re-proves it."""
+    sid = sealed_session(store)
+    _strip_coverage_fields(store, sid)
+    _age_seals_to(store, sid, days=15)
+    decision = evaluate_retention(store, sid)
+    assert not decision.eligible
+    assert "no seal proves lossless raw coverage" in decision.reason
+    assert (store.path.journals / f"{sid}.sqlite").exists()
+    # Re-seal with the current version: truthful coverage is re-proven.
+    _seal_range(store, sid, 3, "futures:retention-sim")
+    _age_seals_to(store, sid, days=15)
+    assert evaluate_retention(store, sid).eligible
+
+
+def test_02k_partial_range_refused_until_covered(store) -> None:
+    """Sealing only part of the committed range leaves the tail journal-only:
+    retention refuses until a lossless seal covers the full watermark."""
+    sid = _closed_session_with(
+        store,
+        "futures:02k-partial",
+        [
+            ("e1", BASE),
+            ("e2", BASE + 60_000_000_000),
+            ("e3", BASE + 120_000_000_000),
+            ("e4", BASE + 180_000_000_000),
+        ],
+    )
+    _seal_range(store, sid, 2, "futures:02k-partial")
+    _age_seals_to(store, sid, days=15)
+    decision = evaluate_retention(store, sid)
+    assert not decision.eligible
+    assert "cover committed events only through seq 2 of 4" in decision.reason
+    assert (store.path.journals / f"{sid}.sqlite").exists()
+
+    # Covering the remainder makes the whole session clean-up eligible.
+    _seal_range(store, sid, 4, "futures:02k-partial")
+    _age_seals_to(store, sid, days=15)
+    final = evaluate_retention(store, sid)
+    assert final.eligible, final.reason
+    applied = apply_retention(store, sid)
+    assert applied.eligible
+    assert not (store.path.journals / f"{sid}.sqlite").exists()
+
+
+def test_02k_multi_seal_union_covers_and_cleans_up(store) -> None:
+    """Two lossless seals whose ranges jointly cover the watermark are
+    sufficient: normal fully preserved aged seals can still clean up."""
+    sid = _closed_session_with(
+        store,
+        "futures:02k-union",
+        [
+            ("e1", BASE),
+            ("e2", BASE + 60_000_000_000),
+            ("e3", BASE + 120_000_000_000),
+            ("e4", BASE + 180_000_000_000),
+        ],
+    )
+    first = _seal_range(store, sid, 2, "futures:02k-union")
+    second = _seal_range(store, sid, 4, "futures:02k-union", start=3)
+    assert first.lossless and second.lossless
+    _age_seals_to(store, sid, days=15)
+    decision = evaluate_retention(store, sid)
+    assert decision.eligible, decision.reason
+    applied = apply_retention(store, sid)
+    assert applied.eligible
+    assert not (store.path.journals / f"{sid}.sqlite").exists()

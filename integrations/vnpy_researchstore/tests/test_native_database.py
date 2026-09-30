@@ -5,7 +5,8 @@ overview."""
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,22 @@ class TestReadOnlyContract:
 
 
 class TestInclusiveEnd:
+    @pytest.mark.parametrize("zone", [ZoneInfo("Asia/Shanghai"), timezone.utc])
+    def test_aware_daily_window_matches_local(self, daily_snapshot, zone) -> None:
+        store, snapshot_id, _ = daily_snapshot
+        db = make_database(store.root, snapshot_id)
+        try:
+            local = ZoneInfo("Asia/Shanghai")
+            start, end = datetime(2024, 1, 3), datetime(2024, 1, 5)
+            expected = db.load_bar_data("000001", Exchange.SZSE, VtInterval.DAILY, start, end)
+            actual = db.load_bar_data("000001", Exchange.SZSE, VtInterval.DAILY,
+                start.replace(tzinfo=local).astimezone(zone),
+                end.replace(tzinfo=local).astimezone(zone))
+            assert [b.datetime for b in actual] == [b.datetime for b in expected]
+            assert len(actual) == 3
+        finally:
+            db.close()
+
     def test_daily_final_bar_equals_end(self, daily_snapshot) -> None:
         store, snapshot_id, _ = daily_snapshot
         db = make_database(store.root, snapshot_id)
@@ -124,6 +141,15 @@ class TestInclusiveEnd:
         )
         assert len(bars) == 4  # no padding of an extra bar
         assert bars[-1].datetime == exact_end
+        # Equivalent aware boundaries must retain inclusive-end semantics,
+        # including a non-bar-aligned endpoint and mixed input conventions.
+        local = ZoneInfo("Asia/Shanghai")
+        aware_end = nonaligned.replace(tzinfo=local).astimezone(timezone.utc)
+        for query_start in (start, start.replace(tzinfo=local).astimezone(timezone.utc)):
+            aware_bars = db.load_bar_data(
+                "000001", Exchange.SZSE, VtInterval.MINUTE, query_start, aware_end
+            )
+            assert [b.datetime for b in aware_bars] == [b.datetime for b in bars]
         db.close()
 
 

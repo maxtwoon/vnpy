@@ -29,17 +29,19 @@ Usage::
 
 ``--status`` verifies the probe never recorded (IDLE, no attached session,
 no accepted work), prints one JSON status snapshot, performs the plain
-parent close and exits (no Qt). ``--stop`` starts recording, waits for a
-console line, then runs the binding stop protocol: on STOP_FAILED the
-parent close and the event engine are NOT touched — each further input
-line retries the SAME accepted cutoff until the journal durably reports
-committed==cutoff CLOSED. stdin EOF is NOT an exit authorization: the
-launcher prints truthful guidance and parks with everything alive (the
-journal session stays exactly as-is). With no flag the Qt status window
-opens (offscreen-capable via the normal Qt platform env vars); if the Qt
-loop ever returns while RECORDING or STOP_FAILED, a fresh status window is
-restored so the Retry control stays usable — the launcher only exits after
-CLOSED (or a verified never-recorded probe).
+parent close and exits (no Qt); attached work would be closed through the
+binding protocol instead. ``--stop`` starts recording, waits for a console
+line, then runs the binding stop protocol: on STOP_FAILED the parent close
+and the event engine are NOT touched — each further input line retries the
+SAME accepted cutoff until the journal durably reports committed==cutoff
+CLOSED. stdin EOF is not an exit authorization: the launcher then issues
+the same public retries itself in a visible, individually bounded series
+with backoff (dispatch and journal writer keep running) until CLOSED. With
+no flag the Qt status window opens (offscreen-capable via the normal Qt
+platform env vars); if the Qt loop ever returns while RECORDING or
+STOP_FAILED, a fresh status window is restored so the Retry control stays
+usable — the launcher only exits after CLOSED (or a verified
+never-recorded probe).
 """
 
 from __future__ import annotations
@@ -48,7 +50,7 @@ import argparse
 import json
 import os
 import sys
-import threading
+import time
 from pathlib import Path
 
 
@@ -122,30 +124,76 @@ def _stop_report_payload(report: object) -> dict[str, object]:
     }
 
 
-#: Park latch for paths where the binding stop contract (B1) forbids ANY
-#: teardown: the launcher process simply stays alive. Tests may ``set()`` the
-#: event to unblock a parked launcher; production never does.
-_PARK = threading.Event()
+#: Backoff for the automatic retry series when stdin is unavailable (EOF).
+#: Each attempt stays individually bounded by the journal close bound inside
+#: the barrier; the backoff only spaces the attempts — never a busy spin.
+EOF_RETRY_BACKOFF_START_S = 1.0
+EOF_RETRY_BACKOFF_CAP_S = 5.0
 
 
-def _park_no_teardown(detail: str) -> None:
-    """B1-compliant hold when the launcher must not exit or tear down.
+def _verified_no_work(snapshot: object) -> bool:
+    """True only for a status probe that never recorded: IDLE, no attached
+    session, zero accepted and zero committed work."""
 
-    A failed stop withholds the parent close AND ``EventEngine.stop``; stdin
-    EOF is not authorization to hard-exit, claim success, or drop the
-    accepted work. There is therefore NO clean way for this process to exit
-    on its own — so it parks the calling thread indefinitely: the event
-    dispatch and controller stay alive, the journal session stays exactly
-    as-is (OPEN / STOP_FAILED), and a retry against the SAME accepted cutoff
-    remains possible. External termination of the whole process (console
-    close, task manager) is the operating system's action, not a production
-    teardown path, and releases the journal OS lock for public recovery.
+    return (
+        snapshot.state.value == "IDLE"  # type: ignore[attr-defined]
+        and snapshot.session_id is None  # type: ignore[attr-defined]
+        and snapshot.accepted_seq == 0  # type: ignore[attr-defined]
+        and snapshot.committed_seq == 0  # type: ignore[attr-defined]
+    )
+
+
+def _binding_stop_loop(app: object, *, first_prompt: bool) -> int:
+    """Run the binding stop protocol until the SAME cutoff is CLOSED.
+
+    Interactive control: every ``input()`` line is one public ``retry_stop``
+    through the original engine barrier (same fixed accepted cutoff; the
+    journal's ``retry_close`` re-attempts that exact cutoff). When stdin is
+    unavailable (EOFError), the launcher itself keeps issuing the same
+    public retries in a visible, individually bounded series with backoff —
+    the event dispatch and the journal writer keep running and nothing is
+    torn down before the journal durably reports committed==cutoff CLOSED.
+    There is no hard exit, no silent success, and no unreachable wait: every
+    attempt prints its truthful JSON report on stdout.
     """
 
-    print(detail, file=sys.stderr)
-    sys.stdout.flush()
-    sys.stderr.flush()
-    _PARK.wait()  # no timeout: B1 forbids self-teardown on a failed stop
+    if first_prompt:
+        try:
+            input("recording; press Enter to run the stop-barrier close...")
+        except EOFError:
+            # Initial EOF still requests the NORMAL stop through the
+            # barrier — it never skips or abandons the session.
+            print(
+                "stdin closed; running the normal stop-barrier close",
+                file=sys.stderr,
+            )
+    report = app.stop_recording()  # type: ignore[attr-defined]
+    backoff = EOF_RETRY_BACKOFF_START_S
+    while report.result.value == "STOP_FAILED":
+        print(
+            json.dumps(_stop_report_payload(report), indent=2, sort_keys=True)
+        )
+        print(
+            "STOP_FAILED: journal did not drain to the exact cutoff in "
+            "time; parent close withheld. Press Enter to retry the SAME "
+            "accepted cutoff now (stdin EOF: automatic bounded retries "
+            "continue until committed==cutoff and CLOSED).",
+            file=sys.stderr,
+        )
+        try:
+            input()
+        except EOFError:
+            time.sleep(backoff)
+            backoff = min(backoff * 2.0, EOF_RETRY_BACKOFF_CAP_S)
+        report = app.retry_stop()  # type: ignore[attr-defined]
+    print(
+        json.dumps(_stop_report_payload(report), indent=2, sort_keys=True)
+    )
+    if report.result.value != "CLOSED":
+        # NOT_RECORDING (already closed / never recording): truthful
+        # nonzero through the NORMAL exit path only.
+        return 2
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -196,70 +244,26 @@ def main(argv: list[str] | None = None) -> int:
         if args.status:
             snapshot = app.status()
             print(json.dumps(_status_dict(app), indent=2, sort_keys=True))
-            if (
-                snapshot.state.value == "IDLE"
-                and snapshot.session_id is None
-                and snapshot.accepted_seq == 0
-                and snapshot.committed_seq == 0
-            ):
+            if _verified_no_work(snapshot):
                 # Verified: this probe never recorded, no journal session is
                 # attached, and no work was accepted — the plain parent
                 # close is safe and releases the engine.
                 app.stop_recording()
                 return 0
-            _park_no_teardown(
-                "status probe found attached work; per the binding stop "
-                "contract nothing is torn down and the process stays alive"
+            # Defensive: a status probe cannot start recording in-process,
+            # so attached work here means the process was reconfigured
+            # mid-flight. Close it through the binding protocol — never a
+            # teardown skip, never a silent success.
+            print(
+                "status probe found attached work; closing it through the "
+                "binding stop protocol",
+                file=sys.stderr,
             )
+            return _binding_stop_loop(app, first_prompt=False)
         session_id = app.start_recording()
         print(f"recording session {session_id} (vnpy={vnpy_file})")
         if args.stop:
-            try:
-                input("recording; press Enter to run the stop-barrier close...")
-            except EOFError:
-                _park_no_teardown(
-                    "stdin closed before the stop request; the recording "
-                    f"session {session_id} stays OPEN, event dispatch stays "
-                    "alive, and the launcher parks (no teardown, no exit, "
-                    "stop still pending operator action)"
-                )
-            report = app.stop_recording()
-            # Binding contract: on STOP_FAILED the parent close and the
-            # event engine are NOT touched; each further input line is one
-            # retry_stop against the SAME fixed accepted cutoff until the
-            # journal durably reaches committed==cutoff CLOSED.
-            while report.result.value == "STOP_FAILED":
-                print(
-                    json.dumps(_stop_report_payload(report), indent=2,
-                               sort_keys=True)
-                )
-                print(
-                    "STOP_FAILED: journal did not drain to the exact cutoff "
-                    "in time; parent close withheld. Press Enter to retry "
-                    "the SAME cutoff until committed==cutoff and CLOSED.",
-                    file=sys.stderr,
-                )
-                try:
-                    input()
-                except EOFError:
-                    # EOF is NOT permission to hard-exit or drop the retry
-                    # state: park with everything alive.
-                    _park_no_teardown(
-                        "stdin closed while STOP_FAILED; parent close and "
-                        "engine stop remain withheld, the session stays "
-                        "as-is, and the launcher parks so a retry against "
-                        "the SAME accepted cutoff stays possible"
-                    )
-                report = app.retry_stop()
-            print(
-                json.dumps(_stop_report_payload(report), indent=2,
-                           sort_keys=True)
-            )
-            if report.result.value != "CLOSED":
-                # NOT_RECORDING (already closed/never recording): truthful
-                # nonzero through the NORMAL exit path only.
-                return 2
-            return 0
+            return _binding_stop_loop(app, first_prompt=True)
         # Qt status window (offscreen-capable via QT_QPA_PLATFORM).
         from vnpy.trader.ui import create_qapp
 

@@ -441,7 +441,15 @@ class SealRequest:
 
 @dataclass(frozen=True)
 class SealReceipt:
-    """Receipt of a sealed session output publication."""
+    """Receipt of a sealed session output publication.
+
+    recording02K raw-coverage truthfulness: ``lossless`` is True only when
+    EVERY committed event in the sealed range was published verbatim
+    (``unknown_time_excluded == 0``). The conservative default is False —
+    an unproven seal never claims losslessness (retention therefore never
+    deletes on it). Bars are a derived representation and never count
+    toward raw coverage.
+    """
 
     session_id: str
     seal_id: str
@@ -451,3 +459,7 @@ class SealReceipt:
     input_events: int = 0
     accepted_rows: int = 0
     detail: str = ""
+    # recording02K raw-coverage truthfulness (appended after the original
+    # fields to preserve positional construction compatibility).
+    unknown_time_excluded: int = 0
+    lossless: bool = False

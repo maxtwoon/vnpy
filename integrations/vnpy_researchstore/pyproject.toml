@@ -13,6 +13,11 @@ dependencies = [
     "pyarrow>=19",
     "duckdb>=1.0",
     "zstandard>=0.22",
+    # Windows CPython ships no IANA timezone database; the core CLI imports
+    # ZoneInfo("Asia/Shanghai") eagerly (importers.normalize) and sealing/
+    # retention validate calendar_spec zones. Linux/macOS get the database
+    # from the OS.
+    "tzdata>=2024.1; sys_platform == 'win32'",
 ]
 
 [project.scripts]

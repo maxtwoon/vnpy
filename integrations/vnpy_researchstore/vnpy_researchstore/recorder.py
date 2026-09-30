@@ -82,6 +82,39 @@ def _validate_calendar(calendar_spec: str) -> None:
         ) from None
 
 
+def build_source_spec(config: RecorderConfig) -> str:
+    """Assemble the durable, seal-grammar-conformant ``source_spec``.
+
+    Format: ``rec-<source_kind>-<gateway_type|nogw>-<source_id>`` — a bare
+    seal-grammar name (kind "unknown": the seal declares the asset class and
+    units explicitly; the sealer keeps validating them). The explicit
+    simulated/production identity, the declarative gateway type, and the
+    configured source id all stay VISIBLE in the stored string, so simulated
+    and production identities remain separate — never merged, never inferred
+    from symbol naming. Config fields that would break the grammar are
+    refused here, at configuration time, instead of producing a journal that
+    can never be sealed.
+    """
+
+    from research_store.sealing import SealError, validate_source_spec
+
+    assembled = (
+        f"rec-{config.source_kind}-"
+        f"{config.gateway_type.strip().lower() or 'nogw'}-"
+        f"{config.source_id.strip()}"
+    )
+    try:
+        validate_source_spec(assembled)
+    except SealError as exc:
+        raise RecorderConfigError(
+            f"recorder identity fields assemble into an invalid durable "
+            f"source_spec {assembled!r} (sealing grammar v1); give a "
+            f"source_id/gateway_type of [A-Za-z0-9._-] within the 64-char "
+            f"name bound — {exc}"
+        ) from None
+    return assembled
+
+
 class RecorderState(str, Enum):
     """Bridge lifecycle state."""
 
@@ -213,6 +246,7 @@ class ResearchRecorder:
         config.validate()
         self._store = store
         self.config = config
+        self._source_spec = build_source_spec(config)
         self._session: JournalSession | None = None
         self._state = RecorderState.IDLE
         self._state_lock = threading.Lock()
@@ -244,13 +278,26 @@ class ResearchRecorder:
             return session.session_id
 
     def _build_source_spec(self) -> str:
-        # Simulated and production identities stay separate in the durable
-        # source spec as well, not just in process memory.
-        return (
-            f"source_id={self.config.source_id};"
-            f"source_kind={self.config.source_kind};"
-            f"gateway_type={self.config.gateway_type or 'none'}"
-        )
+        """Durable journal ``source_spec`` for this recorder.
+
+        The string MUST satisfy the sealing grammar (v1: ``<name>`` or
+        ``<kind>:<name>[@<version>]``, name charset ``[A-Za-z0-9._-]{1,64}``)
+        so a recorded session can be sealed without any metadata repair. The
+        explicit simulated/production identity stays visible inside the name
+        (``rec-<source_kind>-<gateway_type>-<source_id>``), so simulated and
+        production identities remain separate in the durable spec — never
+        merged, never inferred from symbol naming, and no asset class is
+        pinned here (bare name = kind "unknown"; the seal declares the asset
+        class/units explicitly and the sealer keeps validating them).
+        """
+
+        return self._source_spec
+
+    @property
+    def stored_source_spec(self) -> str:
+        """The exact ``source_spec`` this recorder stores on ``start()``."""
+
+        return self._source_spec
 
     def stop(self, *, timeout: float = 10.0) -> bool:
         """Fix the accepted cutoff and drain; True only on exact CLOSED.

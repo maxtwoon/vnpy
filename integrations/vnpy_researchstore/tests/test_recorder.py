@@ -259,3 +259,143 @@ def test_no_gateway_connect_side_effect(store, monkeypatch) -> None:
     recorder.admit_tick(make_tick())
     assert recorder.stop(timeout=10.0) is True
     recorder.release()
+
+
+# -- installed-finding regressions: seal-grammar-conformant stored source_spec
+
+
+def test_stored_source_spec_is_seal_conformant_and_identity_visible(store) -> None:
+    """Regression (installed-review F1): the durable source_spec written by
+    the recorder MUST satisfy the sealing grammar while keeping the explicit
+    simulated/production identity visible. Simulated and production specs
+    stay distinct — never merged, never inferred from symbol naming."""
+
+    from research_store.sealing import validate_source_spec
+    from research_store.store import open_store
+
+    sim = make_recorder(store)
+    prod = make_recorder(
+        store, source_id="ctp-live", source_kind=SOURCE_PRODUCTION,
+        gateway_type="ctp",
+    )
+    sim_id = sim.start()
+    prod_id = prod.start()
+    sim.stop(timeout=10.0)
+    prod.stop(timeout=10.0)
+
+    sim_spec = sim.stored_source_spec
+    prod_spec = prod.stored_source_spec
+    assert sim_spec == "rec-simulated-ctp-sim-test"
+    assert prod_spec == "rec-production-ctp-ctp-live"
+    assert sim_spec != prod_spec  # identities never merged
+    # Grammar-conformant: the sealer's own public validator accepts both.
+    sem_sim = validate_source_spec(sim_spec)
+    sem_prod = validate_source_spec(prod_spec)
+    assert sem_sim.kind == "unknown"  # no asset class inferred from naming
+    assert sem_prod.kind == "unknown"
+
+    sim.release()
+    prod.release()
+
+    # The value DURABLY stored in the journals equals the bridge value.
+    store2 = open_store(store.root)
+    try:
+        for sid, expected in (
+            (sim_id, sim_spec),
+            (prod_id, prod_spec),
+        ):
+            session = open_store_session(store2, sid)
+            try:
+                assert session.source_spec == expected
+            finally:
+                session.close()
+    finally:
+        store2.close()
+
+
+def open_store_session(store, session_id: str):
+    from research_store.journal import open_session
+
+    return open_session(store, session_id, readonly=True)
+
+
+def test_invalid_identity_fields_refused_at_config(store) -> None:
+    """Config fields that would break the seal grammar are refused at
+    configuration time instead of producing an unsealable journal."""
+
+    with pytest.raises(RecorderConfigError, match="invalid durable source_spec"):
+        make_recorder(store, source_id="sim=test")
+    with pytest.raises(RecorderConfigError, match="invalid durable source_spec"):
+        make_recorder(store, source_id="sim;injected")
+    with pytest.raises(RecorderConfigError, match="invalid durable source_spec"):
+        make_recorder(store, source_id="x" * 80)
+
+
+def test_recorded_session_seals_end_to_end(store) -> None:
+    """The exact installed-review F1 flow, now green: ticks recorded through
+    the REAL bridge → clean stop → the durably stored source_spec passed
+    VERBATIM to the public seal API → receipt. No metadata repair."""
+
+    from research_store.models import AssetClass, SealRequest
+    from research_store.sealing import seal
+    from research_store.store import open_store
+
+    recorder = make_recorder(store)
+    session_id = recorder.start()
+    # 30 s spacing across two wall-clock minutes: minute A gains completion
+    # evidence from the minute-B tick; minute B stays an unevidenced tail.
+    for i, (m, s) in enumerate(((0, 20), (0, 50), (1, 20))):
+        recorder.admit_tick(
+            make_tick(when=datetime(2026, 9, 30, 9, m, s))
+        )
+        assert recorder.snapshot().accepted_seq == i + 1
+    assert recorder.stop(timeout=10.0) is True
+    recorder.release()
+    stored_spec = recorder.stored_source_spec
+
+    store2 = open_store(store.root)
+    try:
+        session = open_store_session(store2, session_id)
+        stored_on_disk = session.source_spec
+        session.close()
+        assert stored_on_disk == stored_spec
+
+        receipt = seal(
+            store2,
+            SealRequest(
+                session_id=session_id,
+                committed_seq_start=1,
+                committed_seq_end=3,
+                transform_version="agg-v1",
+                source_spec=stored_on_disk,  # verbatim stored identity
+                calendar_spec="tz:Asia/Shanghai",
+                asset_class=AssetClass.FUTURES,
+                volume_unit="lots",
+                turnover_unit="CNY",
+            ),
+        )
+        assert receipt.session_id == session_id
+        assert receipt.input_events == 3
+        # 3 verbatim ticks + 1 evidenced minute bar (tail stays partial).
+        assert receipt.accepted_rows == 4
+        assert receipt.dataset_id
+        # Repeat seal: idempotent replay, same identity.
+        repeat = seal(
+            store2,
+            SealRequest(
+                session_id=session_id,
+                committed_seq_start=1,
+                committed_seq_end=3,
+                transform_version="agg-v1",
+                source_spec=stored_on_disk,
+                calendar_spec="tz:Asia/Shanghai",
+                asset_class=AssetClass.FUTURES,
+                volume_unit="lots",
+                turnover_unit="CNY",
+            ),
+        )
+        assert repeat.idempotent_replay is True
+        assert repeat.seal_id == receipt.seal_id
+        assert repeat.dataset_id == receipt.dataset_id
+    finally:
+        store2.close()

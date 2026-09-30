@@ -1,0 +1,57 @@
+{
+  "task": "TASK_OPENCODE_SS_REPRESENTATIVE_04M",
+  "config_name": "delivery_ss_rb2605",
+  "created_at": "2026-09-30",
+  "source": {
+    "adapter": "ssquant/0.1",
+    "capture": "D:/quant-data/captures/kline_data_capture_20260916T164711Z.db",
+    "capture_sha256": "17a10a78f3a0214c07eeb1a36c46391a50386e6b62b2a3d21955530c97e9517e",
+    "capture_receipt": "D:/quant-data/captures/kline_data_capture_20260916T164711Z.db.receipt.json",
+    "receipt_validation_kind": "current_recovery_validation",
+    "captured_at": null,
+    "captured_at_note": "UNKNOWN by validated receipt; never invented",
+    "source_main_db": "D:/BaiduNetdiskDownload/新数据库/ssquant数据库_20260425/kline_data.db",
+    "source_sha256": "ed37503064248f79073130fa3b22950a1c96fdfa62f53876cc7b09044bb05ae5"
+  },
+  "symbol": "rb2605",
+  "series_kind": "instrument",
+  "tables": {
+    "1": "rb2605_1M_raw",
+    "5": "rb2605_5M_raw",
+    "15": "rb2605_15M_raw"
+  },
+  "evidenced_windows": {
+    "W1": ["2026-03-02 09:00:00", "2026-03-02 10:00:00"],
+    "W2": ["2026-03-02 13:30:00", "2026-03-02 14:30:00"]
+  },
+  "label_evidence": {
+    "conclusion": "start",
+    "method": "public build_label_evidence OHLCV comparison per window/frequency pair",
+    "scope": "capture sha + real-contract table family + exact window only",
+    "interval_policy": "1m/5m/15m stay distinct datasets; 5m/15m never masquerade as native MINUTE"
+  },
+  "semantic": {
+    "source_id": "ssquant",
+    "asset_class": "futures",
+    "adjustment": "unknown",
+    "timezone": "Asia/Shanghai",
+    "volume_unit": "unknown",
+    "turnover_unit": "unknown",
+    "trading_date": "NULL without calendar evidence (source_time_label_unknown_no_calendar)"
+  },
+  "source_caveats_preserved": {
+    "simnow_quarantine": "exact 8 keys via public detector; ordinary overlaps are diagnostics only",
+    "ma_amount": "raw amount untrusted; canonical turnover NULL; no multiplier guesses",
+    "openint": "source OI, not total; cumulative_openint candidate total OI",
+    "staging": "separate simulated source; never qualified by real-contract label profiles"
+  },
+  "store": {
+    "root": "D:/quant-data",
+    "policy": "existing unified store; open only, never reinitialize or delete"
+  },
+  "locator_reference": ".coordination/ss04m-locator-20260930.json",
+  "gate": {
+    "futures04L": "released (importer ownership transferred to 04M per coordinator)",
+    "guard_correction": "capture/table-kind binding enforced via verify_profile_capture + LabelProfile.covers series-kind guard (2026-09-30)"
+  }
+}

@@ -5,12 +5,26 @@ quality issues/conflicts, recording status and disk usage. Missing, unknown
 and partial states are reported faithfully — nothing is smoothed into a PASS.
 No bulk market data is embedded; only catalog metadata and manifest coverage
 ranges are read.
+
+Recording sessions (read-only, journal-authoritative): the durable
+``<journals>/<session>.sqlite`` files are the authority for session
+identity/status/watermarks; catalog-only rows (no journal file) are retained
+honestly with the missing journal marked as an error. Journal reads open
+SQLite in read-only URI mode — they never touch the ``.lock`` file, never
+write, never run recovery, and never interrupt an active writer. Only
+``session_meta``, the watermark row and ``MAX(seq)`` are read (metadata /
+watermark reads, never a full event scan). Journal content is never
+modified; a read-only connection to a WAL database may let SQLite create
+empty ``-wal``/``-shm`` read sidecars, which carry no journal mutation.
+Live in-memory admission counters (accepted/backlog/rejected/errors) are
+NOT durable and are reported as ``null`` — never inferred as zero.
 """
 
 from __future__ import annotations
 
 import html
 import json
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,6 +46,199 @@ def _dir_size(path: Path) -> int:
     if not path.is_dir():
         return 0
     return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+
+
+def _read_journal_summary(journal_path: Path) -> dict[str, Any]:
+    """Read-only metadata/watermark summary of one journal SQLite file.
+
+    Returns a dict with durable fields and, when individual reads fail
+    (e.g. a legacy journal without ``session_meta``), the missing fields as
+    ``None`` plus a ``read_note``. Raises ``sqlite3.Error`` only when the
+    file cannot be read as SQLite at all (corrupt/foreign file).
+    """
+
+    conn = sqlite3.connect(f"file:{journal_path.resolve().as_posix()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    notes: list[str] = []
+    meta: dict[str, str] = {}
+    committed_seq: int | None = None
+    durable_last_seq: int | None = None
+    try:
+        try:
+            meta = {
+                str(row["key"]): str(row["value"])
+                for row in conn.execute("SELECT key, value FROM session_meta")
+            }
+        except sqlite3.OperationalError as exc:
+            notes.append(f"session_meta unreadable: {exc}")
+        try:
+            row = conn.execute("SELECT committed_seq FROM watermark").fetchone()
+            committed_seq = int(row["committed_seq"]) if row is not None else None
+        except sqlite3.OperationalError as exc:
+            notes.append(f"watermark unreadable: {exc}")
+        try:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) AS m FROM events"
+            ).fetchone()
+            durable_last_seq = int(row["m"])
+        except sqlite3.OperationalError as exc:
+            notes.append(f"events unreadable: {exc}")
+    finally:
+        conn.close()
+    return {
+        "session_id": meta.get("session_id"),
+        "state": meta.get("state"),
+        "source_spec": meta.get("source_spec"),
+        "calendar_spec": meta.get("calendar_spec"),
+        "predecessor_session_id": meta.get("predecessor_session_id") or None,
+        "created_at": meta.get("created_at"),
+        "updated_at": meta.get("updated_at"),
+        "committed_seq": committed_seq,
+        "durable_last_seq": durable_last_seq,
+        "read_note": "; ".join(notes) if notes else None,
+    }
+
+
+def _collect_recording(store: Store) -> dict[str, Any]:
+    """Build the recording section: durable journals + catalog, reconciled.
+
+    Durable journals are the authority; catalog-only historical sessions are
+    retained with their missing journal marked as an error; duplicate ids
+    merge into one entry whose ``status`` comes from the journal, with the
+    catalog status kept visible as ``catalog_status``.
+    """
+
+    journals_dir = store.path.journals
+    journal_files = (
+        sorted(journals_dir.glob("*.sqlite")) if journals_dir.is_dir() else []
+    )
+
+    catalog_rows: dict[str, sqlite3.Row] = {}
+    for row in store.catalog.query_all(
+        "SELECT * FROM recording_sessions ORDER BY created_at"
+    ):
+        catalog_rows[str(row["session_id"])] = row
+
+    summaries: dict[Path, dict[str, Any]] = {}
+    for journal_path in journal_files:
+        try:
+            summaries[journal_path] = _read_journal_summary(journal_path)
+        except sqlite3.Error as exc:
+            summaries[journal_path] = {
+                "error": f"unreadable journal: {type(exc).__name__}: {exc}"
+            }
+
+    entries: dict[str, dict[str, Any]] = {}
+    for journal_path, summary in summaries.items():
+        stem = journal_path.stem
+        session_id = summary.get("session_id") or stem
+        error = summary.get("error")
+        if error is None and summary.get("session_id") is None:
+            error = f"journal has no session_id metadata; using file name {stem!r}"
+        catalog_row = catalog_rows.get(str(session_id))
+        entry: dict[str, Any] = {
+            "session_id": str(session_id),
+            "authority": "journal",
+            "status": (
+                "unreadable_journal"
+                if summary.get("error")
+                else summary.get("state") or "unknown_journal_format"
+            ),
+            "durable_state": summary.get("state"),
+            "catalog_status": (
+                str(catalog_row["status"]) if catalog_row is not None else None
+            ),
+            "source_spec": summary.get("source_spec"),
+            "calendar_spec": summary.get("calendar_spec"),
+            "committed_seq": summary.get("committed_seq"),
+            "durable_last_seq": summary.get("durable_last_seq"),
+            "accepted_seq": None,
+            "backlog": None,
+            "rejected": None,
+            "errors": None,
+            "counters_note": (
+                "live in-memory admission counters are not durable; null, "
+                "never inferred zero"
+            ),
+            "predecessor_session_id": summary.get("predecessor_session_id"),
+            "successor_session_ids": [],
+            "created_at": summary.get("created_at"),
+            "updated_at": summary.get("updated_at"),
+            "journal_path": str(journal_path),
+            "error": error,
+            "read_note": summary.get("read_note"),
+        }
+        entries[str(session_id)] = entry
+
+    for session_id, row in catalog_rows.items():
+        if session_id in entries:
+            continue  # duplicate: journal authority already carries catalog_status
+        journal_path_value = str(row["journal_path"]) if row["journal_path"] else None
+        entries[session_id] = {
+            "session_id": session_id,
+            "authority": "catalog_only",
+            "status": str(row["status"]),
+            "durable_state": None,
+            "catalog_status": str(row["status"]),
+            "source_spec": str(row["source_spec"]) if row["source_spec"] else None,
+            "calendar_spec": str(row["calendar_spec"]) if row["calendar_spec"] else None,
+            "committed_seq": None,
+            "durable_last_seq": None,
+            "accepted_seq": None,
+            "backlog": None,
+            "rejected": None,
+            "errors": None,
+            "counters_note": (
+                "live in-memory admission counters are not durable; null, "
+                "never inferred zero"
+            ),
+            "predecessor_session_id": (
+                str(row["predecessor_session_id"])
+                if row["predecessor_session_id"]
+                else None
+            ),
+            "successor_session_ids": [],
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+            "journal_path": journal_path_value,
+            "error": f"journal file missing for catalog-only session"
+            f" (expected near {journal_path_value or store.path.journals})",
+            "read_note": None,
+        }
+
+    # Successor lineage for EVERY entry (either authority): any other entry
+    # whose predecessor_session_id names THIS session is its child. Compared
+    # against entry.session_id with no predecessor prerequisite, so root
+    # parents (including catalog-only ones) keep their children and a
+    # non-root parent never lists its siblings.
+    for entry in entries.values():
+        entry["successor_session_ids"] = sorted(
+            other["session_id"]
+            for other in entries.values()
+            if other is not entry
+            and other["predecessor_session_id"] == entry["session_id"]
+        )
+
+    sessions = sorted(
+        entries.values(),
+        key=lambda e: (e.get("created_at") or "", e["session_id"]),
+    )
+    journal_count = sum(1 for e in sessions if e["authority"] == "journal")
+    catalog_only_count = len(sessions) - journal_count
+    error_count = sum(1 for e in sessions if e.get("error"))
+    return {
+        "status": "sessions_present" if sessions else "no_recording_sessions",
+        "sessions": sessions,
+        "counts": {
+            "journal_sessions": journal_count,
+            "catalog_only_sessions": catalog_only_count,
+            "sessions_with_errors": error_count,
+        },
+        "note": "durable journals are the recording authority; catalog-only "
+        "rows are retained with their missing journal marked as an error; "
+        "accepted/backlog/rejected/errors are live in-memory counters and "
+        "stay null from durable state, never inferred zero",
+    }
 
 
 def build_report(store: Store) -> dict[str, Any]:
@@ -108,18 +315,7 @@ def build_report(store: Store) -> dict[str, Any]:
         else:
             issues["resolved_count"] += 1
 
-    sessions = catalog.query_all(
-        "SELECT session_id, status FROM recording_sessions ORDER BY created_at"
-    )
-    recording = {
-        "status": "no_recording_sessions" if not sessions else "sessions_present",
-        "sessions": [
-            {"session_id": str(s["session_id"]), "status": str(s["status"])}
-            for s in sessions
-        ],
-        "note": "recording/journal/aggregation land in WP08/WP09; an empty "
-        "session table is reported, never a fabricated status",
-    }
+    recording = _collect_recording(store)
 
     assets = [
         {
@@ -190,12 +386,22 @@ def render_html(report: dict[str, Any]) -> str:
     def esc(value: Any) -> str:
         return html.escape("" if value is None else str(value))
 
+    def esc_unknown(value: Any) -> str:
+        """Render unknown (None) live counters explicitly as UNKNOWN.
+
+        True values are preserved; ``null`` in the machine report renders as
+        the visible text UNKNOWN instead of a blank cell.
+        """
+
+        return "UNKNOWN" if value is None else html.escape(str(value))
+
     parts = [
         "<!DOCTYPE html><html><head><meta charset='utf-8'>",
         "<title>research_store report</title>",
         "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:2em}"
-        "table{border-collapse:collapse;margin-bottom:1.5em}"
-        "td,th{border:1px solid #bbb;padding:3px 8px;text-align:left}"
+        "table{border-collapse:collapse;margin-bottom:1.5em;width:100%}"
+        "td,th{border:1px solid #bbb;padding:3px 8px;text-align:left;"
+        "overflow-wrap:anywhere;word-break:break-word}"
         "th{background:#eee}h1,h2{font-weight:600}</style>",
         "</head><body>",
         "<h1>research_store report</h1>",
@@ -241,6 +447,44 @@ def render_html(report: dict[str, Any]) -> str:
         f"<p>status: {esc(report['recording']['status'])} — "
         f"{esc(report['recording']['note'])}</p>"
     )
+    counts = report["recording"].get("counts")
+    if counts:
+        parts.append(
+            "<p>journals: "
+            f"{counts['journal_sessions']}; catalog-only: "
+            f"{counts['catalog_only_sessions']}; with errors: "
+            f"{counts['sessions_with_errors']}</p>"
+        )
+    parts.append(
+        "<table><tr><th>session</th><th>authority</th><th>status</th>"
+        "<th>catalog status</th><th>committed seq</th><th>durable last seq</th>"
+        "<th>accepted</th><th>backlog</th><th>rejected</th><th>errors</th>"
+        "<th>source spec</th>"
+        "<th>calendar spec</th>"
+        "<th>predecessor</th><th>successors</th><th>created</th><th>error</th></tr>"
+    )
+    for session in report["recording"]["sessions"]:
+        parts.append(
+            "<tr>"
+            f"<td>{esc(session['session_id'])}</td>"
+            f"<td>{esc(session['authority'])}</td>"
+            f"<td>{esc(session['status'])}</td>"
+            f"<td>{esc(session.get('catalog_status'))}</td>"
+            f"<td>{esc_unknown(session.get('committed_seq'))}</td>"
+            f"<td>{esc_unknown(session.get('durable_last_seq'))}</td>"
+            # live in-memory counters: None renders as explicit UNKNOWN
+            f"<td>{esc_unknown(session.get('accepted_seq'))}</td>"
+            f"<td>{esc_unknown(session.get('backlog'))}</td>"
+            f"<td>{esc_unknown(session.get('rejected'))}</td>"
+            f"<td>{esc_unknown(session.get('errors'))}</td>"
+            f"<td>{esc(session.get('source_spec'))}</td>"
+            f"<td>{esc(session.get('calendar_spec'))}</td>"
+            f"<td>{esc(session.get('predecessor_session_id'))}</td>"
+            f"<td>{esc(', '.join(session.get('successor_session_ids') or []))}</td>"
+            f"<td>{esc(session.get('created_at'))}</td>"
+            f"<td>{esc(session.get('error'))}</td></tr>"
+        )
+    parts.append("</table>")
     parts.append("<h2>Assets</h2><table><tr><th>asset</th><th>origin</th><th>format</th><th>size</th><th>sha256</th><th>discovery</th></tr>")
     for asset in report["assets"]:
         parts.append(

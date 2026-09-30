@@ -23,9 +23,13 @@ Rules enforced here (from the execution contract):
 
 * Missing values stay ``None``; they are NEVER filled with 0 or forward fill.
 * Non-finite floats (NaN/inf) become ``None`` plus an explicit quality flag.
-* RQ minute labels are END labels: 09:31 covers 09:30-09:31, so
-  ``bar_end = label`` and ``bar_start = label - interval``. No midday or
-  overnight filler bars are generated.
+* RQ futures minute labels default to UNKNOWN (FUTURES_TIME_REVIEW_04IB:
+  neither START nor END is established for the supplied archives): bounds
+  stay ``None`` with the ``source_time_label_unknown`` flag and the row
+  routes to the candidate path. Only an explicit scoped
+  ``FuturesLabelScope`` (END: ``[label-interval, label)``; START:
+  ``[label, label+interval)``) produces canonical bounds for the rows it
+  covers. No midday or overnight filler bars are ever generated.
 * Daily bars key on ``trading_date`` (the source date), never UTC midnight.
 * SSQuant label semantics are UNVERIFIED: bar bounds stay ``None`` and the
   ``source_time_label_unknown`` flag is set; no conversion is guessed.
@@ -314,7 +318,11 @@ _SSQUANT_NUMERIC = {
     "low": "low",
     "close": "close",
     "volume": "volume",
-    "turnover": "amount",
+    # ``turnover`` intentionally NOT mapped: the vendor amount is untrusted
+    # with unknown units, so the standardized measure stays MISSING (None)
+    # per TASK_OPENCODE_DELIVERY_04 ("MA untrusted amount remains raw
+    # evidence with normalized missing turnover and VWAP rejection"). The
+    # raw value is preserved verbatim in extensions.
     "open_interest": "openint",
 }
 
@@ -354,8 +362,11 @@ def normalize_ssquant_row(
     preserved in extensions exactly as stored, including their original
     (possibly GBK-decoded) names. ``openint`` is source OI, not total OI;
     ``cumulative_openint`` is the candidate total OI, both kept separately.
-    ``amount`` is untrusted per vendor audit; it is preserved raw, never
-    multiplied by a guessed factor.
+    The vendor ``amount`` is untrusted with unknown units: the standardized
+    ``turnover`` stays MISSING (``None``) while the raw amount is preserved
+    verbatim in extensions with the ``amount_untrusted`` marker — raw
+    evidence with normalized missing turnover and VWAP rejection, never a
+    guessed multiplier or monetary value.
     """
     instrument = str(raw.get("symbol", ""))
     label = str(raw.get("datetime", ""))
@@ -397,7 +408,10 @@ def normalize_ssquant_row(
     for key, value in raw.items():
         if key not in {"symbol", "datetime"} and key not in _SSQUANT_NUMERIC and key not in _SSQUANT_PASSTHROUGH:
             row["extensions"][key] = value
-    if "amount" in raw and row["turnover"] is not None:
+    if "amount" in raw:
+        # standardized turnover stays MISSING for the untrusted vendor
+        # amount; the raw value itself is preserved verbatim above and the
+        # marker records why canonical VWAP-dependent fields are refused.
         row["extensions"]["amount_untrusted"] = True
     return row
 

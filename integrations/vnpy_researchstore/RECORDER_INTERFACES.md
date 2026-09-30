@@ -57,8 +57,17 @@ Behaviour contract:
 * Only explicitly configured instruments on explicit real exchanges are
   admitted; `Exchange.LOCAL` synthetic contracts are refused at config time.
 * Simulated and production source identities are separate configs and
-  separate sessions; the durable `source_spec` records
-  `source_id;source_kind;gateway_type`.
+  separate sessions. The durable `source_spec` is a seal-grammar-v1
+  conformant name `rec-<source_kind>-<gateway_type|nogw>-<source_id>`
+  (e.g. `rec-simulated-ctp-simnow-test`), so every recorded session can be
+  sealed with an explicit `SealRequest` (asset class/units declared at
+  seal; the sealer keeps validating them). Identity fields that would
+  break the grammar are refused at configuration time — never repaired
+  later. Sessions recorded before this format (kv-style
+  `source_id=...;source_kind=...;gateway_type=...` source_spec) can still
+  be recovered/replayed but can NEVER be sealed (typed `SealError` at
+  `plan_seal`); there is no silent journal rewriting — any migration needs
+  a separately reviewed design.
 * A CTP (or any provider) `TickData` is recorded as kind `"tick"` with
   `payload["observation"] == "quote_snapshot"` — never trade-by-trade.
 * Payloads are deep-copied by the bridge before admission and by the journal
@@ -182,22 +191,25 @@ under the configured repo path → only then build the app/engine. No gateway
 is connected, no strategy loaded, no settings file edited, no `~/.vntrader`
 / SQLite fallback.
 
-Binding stop contract in the launcher (B1):
+Binding stop contract in the launcher (B1 + production EOF retry):
 
 * `--status` tears down ONLY after verifying the probe never recorded
   (IDLE, no attached session, accepted==committed==0); the plain parent
-  close then releases the engine. With any attached work the launcher
-  parks — nothing is torn down.
+  close then releases the engine. With any attached work the status is
+  closed through the binding protocol instead — never a teardown skip.
 * `--stop` runs the binding protocol: STOP_FAILED withholds the parent
-  close AND `EventEngine.stop`; each further input line is one public
-  `retry_close` against the SAME accepted cutoff until the journal
-  durably reports committed==cutoff CLOSED. stdin EOF is NOT an exit
-  authorization: the launcher prints truthful guidance and parks with the
-  dispatch/controller alive and the session exactly as-is (retryable).
-  There is no `os._exit`/`SystemExit`/engine-stop/parent-close shortcut on
-  a failed stop; only the operator/OS can terminate a parked process, and
-  normal exits happen solely after CLOSED (exit 0) or a verified
-  never-recorded probe.
+  close AND `EventEngine.stop`. Interactive stdin lines each issue one
+  public `retry_close` against the SAME accepted cutoff. When stdin is
+  unavailable (EOF — including at the initial prompt, which still requests
+  the NORMAL stop), the launcher itself keeps issuing the same public
+  retries in a visible, individually bounded series with backoff
+  (1 s doubling to a 5 s cap; dispatch and journal writer keep running)
+  until the journal durably reports committed==cutoff CLOSED. Every
+  attempt prints its truthful JSON report on stdout. There is no
+  `os._exit`/`SystemExit`/engine-stop/parent-close shortcut before
+  CLOSED, no busy spin, and no unreachable wait: normal exits happen
+  solely after CLOSED (exit 0), a truthful NOT_RECORDING (exit 2), or a
+  verified never-recorded probe.
 * Qt mode: while the recorder is RECORDING or STOP_FAILED, a returned Qt
   loop is re-entered with a restored status window so the Retry control
   stays usable; the launcher exits only after CLOSED or a verified probe.

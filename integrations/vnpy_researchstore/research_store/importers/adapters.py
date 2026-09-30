@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import csv
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -42,6 +42,7 @@ from .sqlite_source import (
     parse_table_name,
     table_time_span,
 )
+from .time_evidence import verify_profile_capture
 
 
 @dataclass
@@ -241,12 +242,22 @@ def import_ssquant_table(
 
     ``label_profile`` is an optional scoped
     :class:`~research_store.importers.time_evidence.LabelProfile`: rows inside
-    its capture/symbol/range scope receive evidenced bar bounds; rows outside
-    stay honest candidates with original labels preserved.
+    its capture/symbol/family/range scope receive evidenced bar bounds; rows
+    outside stay honest candidates with original labels preserved. When a
+    profile is supplied, the opened capture is first bound to the profile's
+    evidence through
+    :func:`~research_store.importers.time_evidence.verify_profile_capture`
+    (validated receipt path + content/stat identity); a mismatch raises
+    :class:`~research_store.importers.time_evidence.LabelEvidenceError` and
+    the import fails safely instead of qualifying a different capture.
     """
     plan = parse_table_name(table)
     if plan is None:
         raise ValueError(f"not a bar table: {table}")
+    if label_profile is not None:
+        # Fail-safe capture binding BEFORE any row is read: the receipt-
+        # verified capture identity must match the file actually opened.
+        verify_profile_capture(capture_db, label_profile)
     con = connect_read_only(capture_db)
     try:
         first, last = table_time_span(con, table)
@@ -294,7 +305,7 @@ def _iter_scoped_member_parquet(
     members: set[str],
     max_spool_bytes: int,
     slice_rows: int = 500_000,
-) -> Iterator[tuple[MemberStats, list[dict[str, Any]] | None]]:
+) -> Generator[tuple[MemberStats, list[dict[str, Any]] | None], None, None]:
     """Yield ``(MemberStats, rows | None)`` for exactly the named members.
 
     Built from the same public safeio primitives the full reader applies
@@ -341,6 +352,7 @@ def _iter_scoped_member_parquet(
             except Exception as exc:  # noqa: BLE001 - isolated per member
                 stats.parse_failed = True
                 stats.error = f"scoped member read failed: {exc}"
+                budget.release(member.size)
                 yield stats, None
             finally:
                 if spool_path is not None:
@@ -454,10 +466,18 @@ def import_rq_futures(
         receipt.extras["label_conclusion"] = label_scope.conclusion
     if members is not None:
         receipt.extras["members_filter"] = sorted(members)
+    # Stable mapping identity computed ONCE at the import boundary: hashing
+    # the whole mapping per matched row made the transfer O(rows x entries)
+    # (futures04l-map-version-profile-20260930). A mapping mutated before a
+    # LATER import produces its new identity there; no global cache exists.
+    map_version = date_mapper.mapping.version if date_mapper is not None else ""
     resolution_stats: dict[str, int] = {"resolved": 0, "ambiguous": 0, "unmatched": 0}
     for archive in archives:
         receipt.archives.append(archive.name)
         seen: set[str] = set()
+        member_iter: Generator[
+            tuple[MemberStats, list[dict[str, Any]] | None], None, None
+        ]
         if members is not None:
             member_iter = _iter_scoped_member_parquet(
                 archive,
@@ -466,41 +486,52 @@ def import_rq_futures(
                 max_spool_bytes,
             )
         else:
-            member_iter = iter_tar_zst_parquet(
+            member_iter = iter_tar_zst_parquet(  # type: ignore[assignment]
                 archive,
                 staging_dir=Path(staging_dir) / archive.stem,
                 max_spool_bytes=max_spool_bytes,
             )
-        for stats, rows in member_iter:
-            if rows is None:
-                if stats.parse_failed:
-                    sink.fail_member(
-                        f"{archive.name}:{stats.member}", stats.error or "unknown"
+        try:
+            for stats, rows in member_iter:
+                if rows is None:
+                    if stats.parse_failed:
+                        sink.fail_member(
+                            f"{archive.name}:{stats.member}",
+                            stats.error or "unknown",
+                        )
+                        receipt.members_failed += 1
+                    continue
+                if stats.member not in seen:
+                    seen.add(stats.member)
+                    sink.open_member(f"{archive.name}:{stats.member}", {})
+                normalized = []
+                for record in rows:
+                    row = normalize_rq_futures_row(
+                        record,
+                        dataset=dataset,
+                        archive=archive.name,
+                        member=stats.member,
+                        batch_id=batch_id,
+                        interval_minutes=interval_minutes,
+                        label_scope=label_scope,
                     )
-                    receipt.members_failed += 1
-                continue
-            if stats.member not in seen:
-                seen.add(stats.member)
-                sink.open_member(f"{archive.name}:{stats.member}", {})
-            normalized = []
-            for record in rows:
-                row = normalize_rq_futures_row(
-                    record,
-                    dataset=dataset,
-                    archive=archive.name,
-                    member=stats.member,
-                    batch_id=batch_id,
-                    interval_minutes=interval_minutes,
-                    label_scope=label_scope,
-                )
-                if not dataset.startswith("dominant_"):
-                    if date_mapper is not None:
-                        _apply_date_mapper(row, date_mapper)
-                    if universe is not None:
-                        _apply_universe_resolution(row, universe, resolution_stats)
-                normalized.append(row)
-            receipt.rows_read += len(normalized)
-            receipt.rows_accepted += sink.accept(normalized)
+                    if not dataset.startswith("dominant_"):
+                        if date_mapper is not None:
+                            _apply_date_mapper(row, date_mapper, map_version)
+                        if universe is not None:
+                            _apply_universe_resolution(row, universe, resolution_stats)
+                    normalized.append(row)
+                receipt.rows_read += len(normalized)
+                receipt.rows_accepted += sink.accept(normalized)
+        finally:
+            # Deterministic cleanup: both streaming iterators delete their
+            # spool files in a finally that only runs when the generator is
+            # closed; a generator left suspended after its last yield (the
+            # normal end of a fully consumed member) would otherwise keep
+            # its spool file until garbage collection, and a rerun would
+            # then fail loudly on the spool_member staging collision. Close
+            # it right now, on every path, including failures.
+            member_iter.close()
         receipt.members_ok += len(seen)
     if date_mapper is not None:
         receipt.extras["trading_date_transfer"] = date_mapper.stats()
@@ -509,15 +540,22 @@ def import_rq_futures(
     return receipt
 
 
-def _apply_date_mapper(row: dict[str, Any], date_mapper: Any) -> None:
-    """Transfer a source trading_date by exact dominant-map key, or not."""
+def _apply_date_mapper(
+    row: dict[str, Any], date_mapper: Any, map_version: str
+) -> None:
+    """Transfer a source trading_date by exact dominant-map key, or not.
+
+    ``map_version`` is the stable identity of the mapping computed ONCE per
+    import boundary (see :func:`import_rq_futures`); computing it here would
+    re-sort and re-hash the whole mapping for every matched row.
+    """
     trading_date = date_mapper.lookup(row["instrument"], str(row["source_label"]))
     if trading_date is None:
         return
     row["trading_date"] = trading_date
     row["extensions"]["trading_date_source"] = {
         "method": "dominant_map_exact_key",
-        "map_version": date_mapper.mapping.version,
+        "map_version": map_version,
         "key": [row["instrument"], str(row["source_label"])],
     }
     if "trading_date_unknown_no_calendar" in row["quality_flags"]:

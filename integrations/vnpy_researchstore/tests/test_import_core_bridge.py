@@ -157,6 +157,11 @@ def test_specs_carry_verified_semantics() -> None:
     ssquant = build_ssquant_spec("1m", "continuous_888")
     assert ssquant.source_time_label.value == "unknown"
     assert ssquant.turnover_unit == "unknown"
+    # missing-standardized-turnover transform identity (SS-only bump): the
+    # rule version participates in the dataset id, so pre-fix (numeric
+    # flagged turnover) and post-fix (missing turnover) datasets never
+    # share a dataset id and historical revisions stay intact
+    assert ssquant.rule_version == "norm-missing-turnover-1"
     # discriminating semantics produce distinct dataset ids
     assert compute_dataset_id(etf) != compute_dataset_id(jq)
     assert compute_dataset_id(etf) != compute_dataset_id(ssquant)

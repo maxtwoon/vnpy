@@ -1,24 +1,49 @@
 {
-  "phase": 1,
-  "generated_at": "2026-09-17T02:29:50Z",
+  "phase": "final",
+  "generated_at": "2026-09-30T14:45:08Z",
   "generator": "tools/delivery_finalize.py report",
-  "generator_sha256": "82538cd807150fec6b2d6df10b420d4c511ee1a2a498bb29754b87ce53befd5c",
+  "generator_sha256": "3f015339eb007352783d76a1a49cc47c5fde1104bb29798f0b99e65959788711",
   "rule": "facts are extracted from the bound evidence files at run time; a missing/unreadable evidence file degrades MEASURED/PARTIAL to EVIDENCE_MISSING. Prose claims are never upgraded to facts.",
   "status_counts": {
-    "MEASURED": 7,
+    "MEASURED": 14,
+    "HISTORICAL": 2,
     "PARTIAL": 1,
-    "PENDING": 3,
-    "NOT_RUN": 1,
     "LIVE_NOT_RUN": 1,
     "UNKNOWN": 1
   },
   "entries": [
     {
       "wp": "WP04",
-      "check_id": "etf-same-snapshot-consumer-loop",
-      "dimension": "real-data consumer loop (core + Database + both Alpha + CTA/Portfolio)",
+      "check_id": "etf-same-snapshot-consumer-loop-current-runtime",
+      "dimension": "real-data consumer loop on the CURRENT registered runtime (core + Database + both Alpha + CTA/Portfolio)",
       "status": "MEASURED",
-      "note": "16/16 checks PASS on snap-030369f20bd18303 (checks.length is the runner's check count; the per-check names/passes are in the file). Bare native symbols only; compound-symbol workaround never used.",
+      "note": "16/16 checks PASS, 27.927s, on snap-030369f20bd18303 in the registered vnpy-alpha 3.14 runtime with hash-pinned local duckdb/zstandard/CTA/portfolio overlays only (no shared-env merge). Original source import/repeat/repair receipts are reused and re-checked by the loop. Bare native symbols only.",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/etf-current-runtime-20260930/utf8-run/result.json",
+          "exists": true,
+          "sha256": "7d3b0dbb470fd9368d90118bb44565484d03033be05f71949b114e5e08d85bbe",
+          "size": 868062,
+          "json": true
+        }
+      ],
+      "facts": {
+        "status": "PASS",
+        "checks_total": 16,
+        "store_id": "store-398306491d834f99",
+        "snapshot_id": "snap-030369f20bd18303",
+        "dataset_daily": "ds-d939147fd6b633fd348fa62ed1fef74c",
+        "dataset_minute": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
+        "elapsed_seconds": 27.927
+      },
+      "degradation": []
+    },
+    {
+      "wp": "WP04",
+      "check_id": "etf-same-snapshot-consumer-loop-first-plugin-runtime",
+      "dimension": "historical: first delivery04f loop run in the plugin .venv runtime",
+      "status": "HISTORICAL",
+      "note": "Historical 16/16 PASS retained for lineage; superseded as the current claim by etf-same-snapshot-consumer-loop-current-runtime. The 13/16 first run stays preserved at opencode-loop.preserved-FAIL.stdout.json (runner assertion defects, review-dispositioned; never overwritten).",
       "evidence": [
         {
           "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04f-dev/opencode-loop.rerun.stdout.json",
@@ -31,14 +56,7 @@
       "facts": {
         "status": "PASS",
         "checks_total": 16,
-        "store_id": "store-398306491d834f99",
-        "snapshot_id": "snap-030369f20bd18303",
-        "dataset_daily": "ds-d939147fd6b633fd348fa62ed1fef74c",
-        "dataset_minute": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
-        "runner_sha256": "3fd949a6c870d8336647420e06b6abc998c7e914df407be35a88971e0ce4ef6d",
-        "config_identity": "ffbdbb86340c37cfa10375bf0a18ec1dea99833845dcc5479453e0e0b0799a1e",
-        "vnpy_origin": "D:\\repo\\vnpy\\vnpy\\__init__.py",
-        "elapsed_seconds": 29.58
+        "runner_sha256": "3fd949a6c870d8336647420e06b6abc998c7e914df407be35a88971e0ce4ef6d"
       },
       "degradation": []
     },
@@ -47,7 +65,7 @@
       "check_id": "etf-import-idempotency-repair-index",
       "dimension": "real import counts, repeat-import idempotency, 133-key repair index",
       "status": "MEASURED",
-      "note": "Repeat imports preserved alongside originals; the loop check import_idempotency_and_repair_index re-proved identity at rerun time. 1m: 117,120 input/accepted rows (same keys verified).",
+      "note": "Original receipts reused (never re-imported); the current-runtime loop re-checks their identity. 1m: 117,120 input/accepted rows. Finished source imports were NOT rerun for final04N.",
       "evidence": [
         {
           "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04f-dev/import-1d.stdout.json",
@@ -92,7 +110,7 @@
       "check_id": "etf-snapshot-freeze-verify",
       "dimension": "freeze + snapshot integrity verification",
       "status": "MEASURED",
-      "note": "verify counts are STORE-GLOBAL work-unit counts of that verify run, not per-snapshot object counts. The rerun loop's verify reported 40 revisions / 40 objects after other owners published more; the snapshot manifest itself pins 3 selections.",
+      "note": "verify counts are STORE-GLOBAL work units of that verify run, not per-snapshot object counts. Snapshot manifest pins 3 selections; the store verifies clean in the current-runtime loop.",
       "evidence": [
         {
           "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04f-dev/freeze.stdout.json",
@@ -120,8 +138,7 @@
         "freeze_snapshot_id": "snap-030369f20bd18303",
         "freeze_datasets": 2,
         "first_verify_revisions": 25,
-        "first_verify_objects": 25,
-        "first_verify_failures": 0
+        "first_verify_objects": 25
       },
       "degradation": []
     },
@@ -130,570 +147,18 @@
       "check_id": "native-symbol-resolution-real",
       "dimension": "bare native symbol reads on the real snapshot",
       "status": "MEASURED",
-      "note": "native06 read-time resolution verified on real data by the loop checks; independent Claude qualified/native recheck verdict PASS (QUALIFIED_NATIVE_RECHECK_06.md).",
+      "note": "native06 read-time resolution verified on real data; independent Claude qualified/native recheck verdict PASS (QUALIFIED_NATIVE_RECHECK_06.md). Unknown vendor suffix stays an ordinary empty result; unmapped labels refuse explicitly.",
       "evidence": [
         {
-          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04f-dev/opencode-loop.rerun.stdout.json",
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/etf-current-runtime-20260930/utf8-run/result.json",
           "exists": true,
-          "sha256": "4b2d14ab17a36c4dc720235afc105d236d1bb8bd9f52670396285e0845212848",
-          "size": 867492,
+          "sha256": "7d3b0dbb470fd9368d90118bb44565484d03033be05f71949b114e5e08d85bbe",
+          "size": 868062,
           "json": true
         }
       ],
-      "facts": {
-        "bare_stamp_check": [
-          {
-            "detail": {
-              "daily/510130.SSE": {
-                "core_rows": 4,
-                "database_rows": 4,
-                "digest_equal": true
-              },
-              "daily/510300.SSE": {
-                "core_rows": 4,
-                "database_rows": 4,
-                "digest_equal": true
-              },
-              "minute/510130.SSE": {
-                "core_rows": 960,
-                "database_rows": 960,
-                "digest_equal": true
-              },
-              "minute/510300.SSE": {
-                "core_rows": 960,
-                "database_rows": 960,
-                "digest_equal": true
-              }
-            },
-            "name": "core_database_value_identity",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "native_bare_symbol_stamping",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "base_window_source_reference_counts",
-            "pass": true
-          },
-          {
-            "detail": {
-              "510130.SSE": {
-                "days": {
-                  "2016-01-18": {
-                    "count": 240,
-                    "first": "2016-01-18 09:30:00",
-                    "last": "2016-01-18 14:59:00",
-                    "lunch_bars": []
-                  },
-                  "2016-01-19": {
-                    "count": 240,
-                    "first": "2016-01-19 09:30:00",
-                    "last": "2016-01-19 14:59:00",
-                    "lunch_bars": []
-                  },
-                  "2016-01-20": {
-                    "count": 240,
-                    "first": "2016-01-20 09:30:00",
-                    "last": "2016-01-20 14:59:00",
-                    "lunch_bars": []
-                  },
-                  "2016-01-21": {
-                    "count": 240,
-                    "first": "2016-01-21 09:30:00",
-                    "last": "2016-01-21 14:59:00",
-                    "lunch_bars": []
-                  }
-                },
-                "lunch_bars_total": 0
-              },
-              "510300.SSE": {
-                "days": {
-                  "2016-01-18": {
-                    "count": 240,
-                    "first": "2016-01-18 09:30:00",
-                    "last": "2016-01-18 14:59:00",
-                    "lunch_bars": []
-                  },
-                  "2016-01-19": {
-                    "count": 240,
-                    "first": "2016-01-19 09:30:00",
-                    "last": "2016-01-19 14:59:00",
-                    "lunch_bars": []
-                  },
-                  "2016-01-20": {
-                    "count": 240,
-                    "first": "2016-01-20 09:30:00",
-                    "last": "2016-01-20 14:59:00",
-                    "lunch_bars": []
-                  },
-                  "2016-01-21": {
-                    "count": 240,
-                    "first": "2016-01-21 09:30:00",
-                    "last": "2016-01-21 14:59:00",
-                    "lunch_bars": []
-                  }
-                },
-                "lunch_bars_total": 0
-              }
-            },
-            "name": "minute_lunch_edges_and_session_shape",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "source_end_label_mapping",
-            "pass": true
-          },
-          {
-            "detail": {
-              "510130.XSHG@2016-01-18 09:31:00": {
-                "close": 3.25,
-                "high": 3.25,
-                "low": 3.25,
-                "open": 3.25,
-                "turnover": 0.0,
-                "volume": 0.0
-              },
-              "510130.XSHG@2016-01-18 11:30:00": {
-                "close": 3.25,
-                "high": 3.25,
-                "low": 3.25,
-                "open": 3.25,
-                "turnover": 0.0,
-                "volume": 0.0
-              },
-              "510130.XSHG@2016-01-18 13:01:00": {
-                "close": 3.277,
-                "high": 3.277,
-                "low": 3.277,
-                "open": 3.277,
-                "turnover": 655.0,
-                "volume": 200.0
-              },
-              "510300.XSHG@2016-01-18 09:31:00": {
-                "close": 3.148,
-                "high": 3.169,
-                "low": 3.12,
-                "open": 3.129,
-                "turnover": 36976904.0,
-                "volume": 11817500.0
-              }
-            },
-            "name": "pinned_source_rows",
-            "pass": true
-          },
-          {
-            "detail": {
-              "2016-01-18 09:30:00": {
-                "close": 3.25,
-                "high": 3.25,
-                "low": 3.25,
-                "open": 3.25,
-                "turnover": 0.0,
-                "volume": 0.0
-              },
-              "2016-01-18 11:29:00": {
-                "close": 3.25,
-                "high": 3.25,
-                "low": 3.25,
-                "open": 3.25,
-                "turnover": 0.0,
-                "volume": 0.0
-              }
-            },
-            "name": "zero_volume_source_rows_preserved",
-            "pass": true
-          },
-          {
-            "detail": {
-              "510130.SSE": {
-                "digest": "7c69fb1cf3e21e73ab388a77b2e91a65180a46510b36a85c2f8d77af3f5928b8",
-                "first": {
-                  "close": 3.25,
-                  "dataset_id": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
-                  "datetime": "2016-01-18T09:30:00",
-                  "exchange": "SSE",
-                  "high": 3.25,
-                  "interval": "1m",
-                  "low": 3.25,
-                  "open": 3.25,
-                  "open_interest": 0.0,
-                  "snapshot_id": "snap-030369f20bd18303",
-                  "source_exchange_label": "XSHG",
-                  "source_identity": "510130.XSHG",
-                  "source_label": "2016-01-18 09:31:00",
-                  "source_symbol": "510130.XSHG",
-                  "symbol": "510130",
-                  "trading_date": "2016-01-18",
-                  "turnover": 0.0,
-                  "volume": 0.0
-                },
-                "last": {
-                  "close": 3.256,
-                  "dataset_id": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
-                  "datetime": "2016-01-21T14:58:00",
-                  "exchange": "SSE",
-                  "high": 3.256,
-                  "interval": "1m",
-                  "low": 3.256,
-                  "open": 3.256,
-                  "open_interest": 0.0,
-                  "snapshot_id": "snap-030369f20bd18303",
-                  "source_exchange_label": "XSHG",
-                  "source_identity": "510130.XSHG",
-                  "source_label": "2016-01-21 14:59:00",
-                  "source_symbol": "510130.XSHG",
-                  "symbol": "510130",
-                  "trading_date": "2016-01-21",
-                  "turnover": 0.0,
-                  "volume": 0.0
-                },
-                "rows": 959
-              },
-              "510300.SSE": {
-                "digest": "34f54e091d03af469a3028e3af84928a2e1e2fdb83d95f468b38cad86d262455",
-                "first": {
-                  "close": 3.148,
-                  "dataset_id": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
-                  "datetime": "2016-01-18T09:30:00",
-                  "exchange": "SSE",
-                  "high": 3.169,
-                  "interval": "1m",
-                  "low": 3.12,
-                  "open": 3.129,
-                  "open_interest": 0.0,
-                  "snapshot_id": "snap-030369f20bd18303",
-                  "source_exchange_label": "XSHG",
-                  "source_identity": "510300.XSHG",
-                  "source_label": "2016-01-18 09:31:00",
-                  "source_symbol": "510300.XSHG",
-                  "symbol": "510300",
-                  "trading_date": "2016-01-18",
-                  "turnover": 36976904.0,
-                  "volume": 11817500.0
-                },
-                "last": {
-                  "close": 3.08,
-                  "dataset_id": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
-                  "datetime": "2016-01-21T14:58:00",
-                  "exchange": "SSE",
-                  "high": 3.084,
-                  "interval": "1m",
-                  "low": 3.071,
-                  "open": 3.075,
-                  "open_interest": 0.0,
-                  "snapshot_id": "snap-030369f20bd18303",
-                  "source_exchange_label": "XSHG",
-                  "source_identity": "510300.XSHG",
-                  "source_label": "2016-01-21 14:59:00",
-                  "source_symbol": "510300.XSHG",
-                  "symbol": "510300",
-                  "trading_date": "2016-01-21",
-                  "turnover": 3745563.0,
-                  "volume": 1217200.0
-                },
-                "rows": 959
-              }
-            },
-            "name": "minute_nonaligned_inclusive_end",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "database_alpha_raw_value_identity",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "alpha_df_windows_and_preprocessing",
-            "pass": true
-          },
-          {
-            "detail": {
-              "2016-01-18 09:30:00": {
-                "close": 0.9040333796940194,
-                "high": 0.9040333796940194,
-                "low": 0.9040333796940194,
-                "open": 0.9040333796940194,
-                "volume": 0.0,
-                "vwap": NaN
-              },
-              "2016-01-18 11:29:00": {
-                "close": 0.9040333796940194,
-                "high": 0.9040333796940194,
-                "low": 0.9040333796940194,
-                "open": 0.9040333796940194,
-                "volume": 0.0,
-                "vwap": NaN
-              },
-              "2016-01-18 13:00:00": {
-                "turnover": 655.0,
-                "volume": 200.0,
-                "vwap": 3.275
-              }
-            },
-            "name": "alpha_df_zero_volume_vwap_missing",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "suffixed_identity_crosscheck",
-            "pass": true
-          },
-          {
-            "detail": [],
-            "name": "snapshot_overview_scope",
-            "pass": true
-          },
-          {
-            "detail": {
-              "bootstrap_config": {
-                "allow_missing_auxiliary": false,
-                "backtesters": [
-                  "cta",
-                  "portfolio"
-                ],
-                "database_timezone": "Asia/Shanghai",
-                "integration_path": "D:/repo/vnpy/integrations/vnpy_researchstore",
-                "range": {
-                  "end": "2016-01-21 14:59:00",
-                  "start": "2016-01-18 09:30:00"
-                },
-                "repo_path": "D:/repo/vnpy",
-                "runtime_dir": "D:/quant-data/runtime/delivery_etf_loop",
-                "snapshot_id": "snap-030369f20bd18303",
-                "store_root": "D:/quant-data"
-              },
-              "bootstrap_config_identity": "73006c1816db23de6d0f51480b4d23932d0db5b14c0f124c35e220ca93c78f87",
-              "bootstrap_config_path": "D:\\quant-data\\runtime\\delivery_etf_loop\\delivery_etf_bootstrap.json",
-              "child": {
-                "bootstrap_config_path": "D:\\quant-data\\runtime\\delivery_etf_loop\\delivery_etf_bootstrap.json",
-                "config_identity": "73006c1816db23de6d0f51480b4d23932d0db5b14c0f124c35e220ca93c78f87",
-                "engines": {
-                  "cta/daily/510130.SSE": {
-                    "first": "2016-01-18T00:00:00",
-                    "last": "2016-01-21T00:00:00",
-                    "module": "vnpy_ctastrategy.backtesting",
-                    "rows": 4
-                  },
-                  "cta/daily/510300.SSE": {
-                    "first": "2016-01-18T00:00:00",
-                    "last": "2016-01-21T00:00:00",
-                    "module": "vnpy_ctastrategy.backtesting",
-                    "rows": 4
-                  },
-                  "cta/minute/510130.SSE": {
-                    "first": "2016-01-18T09:30:00",
-                    "last": "2016-01-21T14:59:00",
-                    "module": "vnpy_ctastrategy.backtesting",
-                    "rows": 960
-                  },
-                  "cta/minute/510300.SSE": {
-                    "first": "2016-01-18T09:30:00",
-                    "last": "2016-01-21T14:59:00",
-                    "module": "vnpy_ctastrategy.backtesting",
-                    "rows": 960
-                  },
-                  "portfolio/daily": {
-                    "dts": 4,
-                    "first": "2016-01-18T00:00:00",
-                    "last": "2016-01-21T00:00:00",
-                    "module": "vnpy_portfoliostrategy.backtesting",
-                    "per_symbol": {
-                      "510130.SSE": 4,
-                      "510300.SSE": 4
-                    },
-                    "rows": 8
-                  },
-                  "portfolio/minute": {
-                    "dts": 960,
-                    "first": "2016-01-18T09:30:00",
-                    "last": "2016-01-21T14:59:00",
-                    "module": "vnpy_portfoliostrategy.backtesting",
-                    "per_symbol": {
-                      "510130.SSE": 960,
-                      "510300.SSE": 960
-                    },
-                    "rows": 1920
-                  }
-                },
-                "python": "D:\\repo\\vnpy\\integrations\\vnpy_researchstore\\.venv\\Scripts\\python.exe",
-                "receipt": {
-                  "adapter": "vnpy_researchstore/0.1.0.dev1",
-                  "backtesters": {
-                    "cta": "D:\\veighna_studio\\Lib\\site-packages\\vnpy_ctastrategy\\backtesting.py",
-                    "portfolio": "D:\\veighna_studio\\Lib\\site-packages\\vnpy_portfoliostrategy\\backtesting.py"
-                  },
-                  "config_identity": "73006c1816db23de6d0f51480b4d23932d0db5b14c0f124c35e220ca93c78f87",
-                  "created_at": "2026-09-17T02:04:46.669863+00:00",
-                  "cwd": "D:\\quant-data\\runtime\\delivery_etf_loop",
-                  "database": {
-                    "allow_missing_auxiliary": false,
-                    "class": "Database",
-                    "diagnostics": [],
-                    "module": "vnpy_researchstore.database",
-                    "settings_name": "researchstore"
-                  },
-                  "pid": 85996,
-                  "python": "D:\\repo\\vnpy\\integrations\\vnpy_researchstore\\.venv\\Scripts\\python.exe",
-                  "range": {
-                    "end": "2016-01-21 14:59:00",
-                    "start": "2016-01-18 09:30:00"
-                  },
-                  "receipt_path": "D:\\quant-data\\runtime\\delivery_etf_loop\\native_bootstrap_receipt-20260917T020446Z.json",
-                  "snapshot_id": "snap-030369f20bd18303",
-                  "store_root": "D:\\quant-data",
-                  "vnpy": {
-                    "module_file": "D:\\repo\\vnpy\\vnpy\\__init__.py",
-                    "repo_path": "D:\\repo\\vnpy",
-                    "version": "4.4.0"
-                  }
-                }
-              },
-              "engines": {
-                "cta/daily/510130.SSE": {
-                  "first": "2016-01-18T00:00:00",
-                  "last": "2016-01-21T00:00:00",
-                  "module": "vnpy_ctastrategy.backtesting",
-                  "rows": 4
-                },
-                "cta/daily/510300.SSE": {
-                  "first": "2016-01-18T00:00:00",
-                  "last": "2016-01-21T00:00:00",
-                  "module": "vnpy_ctastrategy.backtesting",
-                  "rows": 4
-                },
-                "cta/minute/510130.SSE": {
-                  "first": "2016-01-18T09:30:00",
-                  "last": "2016-01-21T14:59:00",
-                  "module": "vnpy_ctastrategy.backtesting",
-                  "rows": 960
-                },
-                "cta/minute/510300.SSE": {
-                  "first": "2016-01-18T09:30:00",
-                  "last": "2016-01-21T14:59:00",
-                  "module": "vnpy_ctastrategy.backtesting",
-                  "rows": 960
-                },
-                "portfolio/daily": {
-                  "dts": 4,
-                  "first": "2016-01-18T00:00:00",
-                  "last": "2016-01-21T00:00:00",
-                  "module": "vnpy_portfoliostrategy.backtesting",
-                  "per_symbol": {
-                    "510130.SSE": 4,
-                    "510300.SSE": 4
-                  },
-                  "rows": 8
-                },
-                "portfolio/minute": {
-                  "dts": 960,
-                  "first": "2016-01-18T09:30:00",
-                  "last": "2016-01-21T14:59:00",
-                  "module": "vnpy_portfoliostrategy.backtesting",
-                  "per_symbol": {
-                    "510130.SSE": 960,
-                    "510300.SSE": 960
-                  },
-                  "rows": 1920
-                }
-              },
-              "exit_code": 0,
-              "receipt_path": "D:\\quant-data\\runtime\\delivery_etf_loop\\native_bootstrap_receipt-20260917T020446Z.json"
-            },
-            "name": "offline_cta_portfolio_bootstrap",
-            "pass": true
-          },
-          {
-            "detail": {
-              "failures": [],
-              "objects_checked": 40,
-              "revisions_checked": 40,
-              "snapshots_checked": 1,
-              "status": "ok"
-            },
-            "name": "snapshot_verify",
-            "pass": true
-          },
-          {
-            "detail": {
-              "1d": {
-                "accepted_rows": 488,
-                "dataset_id": "ds-d939147fd6b633fd348fa62ed1fef74c",
-                "duplicate_rows": 0,
-                "idempotency_key": "a82885f392731abd1a47b7f796a987005e7c0a9553ec622ba419fe650a900a5f",
-                "identical": {
-                  "accepted_rows": true,
-                  "dataset_id": true,
-                  "duplicate_rows_zero": true,
-                  "idempotency_key": true,
-                  "input_rows": true,
-                  "repair_index_loaded_133": true
-                },
-                "input_rows": 488,
-                "repaired_keys": 133
-              },
-              "1m": {
-                "accepted_rows": 117120,
-                "dataset_id": "ds-b9bbad83ec09f4b9dcef6ea9a81c4b51",
-                "duplicate_rows": 0,
-                "idempotency_key": "d75bf0d6d9259c668ca6126a3806a3e79bc2e49e2ae355ffb47461b3ba42e08e",
-                "identical": {
-                  "accepted_rows": true,
-                  "dataset_id": true,
-                  "duplicate_rows_zero": true,
-                  "idempotency_key": true,
-                  "input_rows": true,
-                  "repair_index_loaded_133": true
-                },
-                "input_rows": 117120,
-                "repaired_keys": 133
-              },
-              "note": "repair index contains NO keys for 510130.XSHG/510300.XSHG (coordinator inspection); loading is still exercised and receipted before base archives"
-            },
-            "name": "import_idempotency_and_repair_index",
-            "pass": true
-          }
-        ],
-        "overview_native_symbols": [
-          {
-            "count": 4800,
-            "end": "2016-01-29T14:59:00",
-            "exchange": "SSE",
-            "interval": "1m",
-            "start": "2016-01-04T09:30:00",
-            "symbol": "510130"
-          },
-          {
-            "count": 244,
-            "end": "2016-12-30T00:00:00",
-            "exchange": "SSE",
-            "interval": "d",
-            "start": "2016-01-04T00:00:00",
-            "symbol": "510130"
-          },
-          {
-            "count": 4800,
-            "end": "2016-01-29T14:59:00",
-            "exchange": "SSE",
-            "interval": "1m",
-            "start": "2016-01-04T09:30:00",
-            "symbol": "510300"
-          },
-          {
-            "count": 244,
-            "end": "2016-12-30T00:00:00",
-            "exchange": "SSE",
-            "interval": "d",
-            "start": "2016-01-04T00:00:00",
-            "symbol": "510300"
-          }
-        ]
-      },
-      "fact_note": "checks/overview are recorded whole; the named checks native_bare_symbol_stamping and suffixed_identity_crosscheck PASS inside that file. Developer 77-test count lives in opencode-native06-handoff.md prose and is NOT re-asserted here.",
+      "facts": {},
+      "fact_note": "The bound file carries the named checks native_bare_symbol_stamping and suffixed_identity_crosscheck as PASS inside checks[]. Developer 77-test counts live in handoff prose and are NOT re-asserted here.",
       "degradation": []
     },
     {
@@ -701,20 +166,13 @@
       "check_id": "source-root-inventory",
       "dimension": "both source roots inventoried (files/bytes/kinds)",
       "status": "MEASURED",
-      "note": "Hash policy: no bulk hashing of the 54GB tree; formal imports hash actual input. The preserved 04a inventory FAILURE record is kept visible (fixed by delivery04b).",
+      "note": "SS 123 files / 19,667,963,677 bytes; holographic 3,608 files / 53,907,819,144 bytes. No bulk hashing; formal imports hash actual input. The 04a inventory FAILURE record is retained as history (fixed by delivery04b).",
       "evidence": [
         {
           "path": "D:/quant-data/reports/delivery04d/delivery04d-evidence.json",
           "exists": true,
           "sha256": "1775e64544f5b386e8f9e45044b3d6344bacc3f637aa7c4764cb8321abfcb68f",
           "size": 6393,
-          "json": true
-        },
-        {
-          "path": "D:/quant-data/reports/delivery04a/delivery04a-inventory.json",
-          "exists": true,
-          "sha256": "8a1fad5b742a3811eccdce357379e9575b0beba4e32f9d70fdea782bf52b0ec6",
-          "size": 8634,
           "json": true
         },
         {
@@ -730,38 +188,16 @@
         "holo_bytes": 53907819144,
         "ssquant_file_count": 123,
         "ssquant_bytes": 19667963677,
-        "rq_packages_listed": 9,
-        "return_status": "success"
-      },
-      "degradation": []
-    },
-    {
-      "wp": "WP02",
-      "check_id": "inventory-failed-record-preservation",
-      "dimension": "broken archive-list elements stay visible (04B fix)",
-      "status": "MEASURED",
-      "note": "failed_records/unrecognized_records counts preserved by fix.",
-      "evidence": [
-        {
-          "path": "D:/quant-data/reports/delivery04b/delivery04b-evidence.json",
-          "exists": true,
-          "sha256": "e7e7f65357b125f34bf5d8e455d2a568e8e757f75dcb15ca0c1dd107001e9d33",
-          "size": 3714,
-          "json": true
-        }
-      ],
-      "facts": {
-        "task": "TASK_KIMI_DELIVERY_04B",
-        "qualification": "unknown qualification preserved: missing archives and permission-denied batches are reported as gaps/caveats, never as verified or silently dropped"
+        "rq_packages_listed": 9
       },
       "degradation": []
     },
     {
       "wp": "WP04",
       "check_id": "delivery04k-representatives",
-      "dimension": "stock raw target=store, JQ 33-col/NULL, ETF 133 repaired keys, P4 catalog",
+      "dimension": "stock raw target=store, JQ 33-col/NULL, ETF 133 repaired keys, P4 catalog (historical measured representatives)",
       "status": "MEASURED",
-      "note": "Per-report assertions/coverage are machine fields inside each file. JQ adjustment stays unknown; P4 catalog coverage is not import qualification. futures.json carries the measured label conflict that 04L must resolve.",
+      "note": "Historical measured representatives retained; JQ adjustment stays unknown; P4 catalog coverage is NOT import qualification. The futures representative is superseded by the delivery04l final case below.",
       "evidence": [
         {
           "path": "D:/quant-data/reports/delivery04k/stock.json",
@@ -790,32 +226,107 @@
           "sha256": "47dc32017b944085be7cb228bf5ddb88424c097c17323584f0f712e50d7d349c",
           "size": 12734,
           "json": true
-        },
-        {
-          "path": "D:/quant-data/reports/delivery04k/futures.json",
-          "exists": true,
-          "sha256": "0f66e2ecfc04246c2018f2121d86092903a776f27436e6a8d7c7e5f3878c9b93",
-          "size": 16097,
-          "json": true
         }
       ],
       "facts": {
         "stock_case": "stock",
         "stock_ended_utc": "2026-09-17T01:27:09.936246+00:00",
-        "jq_case": "stock",
-        "etf_disputed_entry": null
+        "etf_disputed_entry": {
+          "instrument": "160105.XSHE",
+          "label": "2017-09-19 13:01:00",
+          "new": {
+            "amount": "0.0",
+            "close": "1.056",
+            "datetime": "2017-09-19 13:01:00",
+            "high": "1.056",
+            "low": "1.056",
+            "num_trades": "0.0",
+            "open": "1.056",
+            "order_book_id": "160105.XSHE",
+            "volume": "0.0"
+          },
+          "old": {
+            "amount": "-56796.0",
+            "close": "1.056",
+            "datetime": "2017-09-19 13:01:00",
+            "high": "1.056",
+            "low": "1.056",
+            "num_trades": "0.0",
+            "open": "1.056",
+            "order_book_id": "160105.XSHE",
+            "volume": "-53957.0"
+          },
+          "rule": "negative_turnover_or_volume_to_zero",
+          "upstream_refetch": {
+            "amount": "15840.0",
+            "close": "1.056",
+            "high": "1.056",
+            "low": "1.056",
+            "num_trades": "0.0",
+            "open": "1.056",
+            "volume": "15000.0"
+          }
+        }
       },
-      "degradation": [
-        "fact 'etf_disputed_entry' not found at 'etf.disputed_entry'"
-      ]
+      "degradation": []
+    },
+    {
+      "wp": "WP08",
+      "check_id": "futures-final-real-case",
+      "dimension": "A2505 exact source trading_date mapping; contract/dominant candidates; window joins",
+      "status": "MEASURED",
+      "note": "PASS 14/14, 59.838s, zero canonical publication. Contains 222,180 contract + 392,640 dominant candidates and 1,035 window joins. Independent actual Claude scoped PASS (review-futures04l-final-20260930/REVIEW_FUTURES04L_FINAL_20260930.md). The futures time-label direction remains UNKNOWN by design: the public normalizer/spec default is UNKNOWN and scoped time evidence is the only qualifier.",
+      "evidence": [
+        {
+          "path": "D:/quant-data/reports/delivery04l-final-20260930/futures-final.json",
+          "exists": true,
+          "sha256": "e5ca1659506e6bded642edb137a75b8fb9a5b22e1d21b21f301179218db545a5",
+          "size": 18045,
+          "json": true
+        }
+      ],
+      "facts": {
+        "status": "PASS",
+        "store_id": "store-398306491d834f99",
+        "elapsed_seconds": 59.838,
+        "peak_rss_mb": 3070.4
+      },
+      "degradation": []
+    },
+    {
+      "wp": "WP08",
+      "check_id": "futures-historical-fail-assertions",
+      "dimension": "historical: delivery04l fixed-case runner mismatch",
+      "status": "HISTORICAL",
+      "note": "FAIL_ASSERTIONS (exit 1) preserved unchanged as history: the runner compared all-instrument unmatched 199,425 against A2505-only null 7,125. Superseded by futures-final-real-case; never copied over.",
+      "evidence": [
+        {
+          "path": "D:/quant-data/reports/delivery04l-fixed-20260930/futures-fixed-final.json",
+          "exists": true,
+          "sha256": "bb695368dd0d06535bb99eb563ce5f1043cac005360d4082ff6e5d5e9743089e",
+          "size": 16703,
+          "json": true
+        }
+      ],
+      "facts": {
+        "status": "FAIL_ASSERTIONS"
+      },
+      "degradation": []
     },
     {
       "wp": "WP07",
-      "check_id": "ss-capture-stage",
-      "dimension": "SSQuant 10.22GB capture validation",
-      "status": "PARTIAL",
-      "note": "Stage receipt status=validated (measured). Still OWNED ELSEWHERE: strict SQLite-header allowance + unchanged-input recovery receipt (capture04H) must finish before this becomes a reusable capture acceptance.",
+      "check_id": "ss-capture-04h-terminal",
+      "dimension": "SSQuant 10.22GB capture validation + current recovery receipt",
+      "status": "MEASURED",
+      "note": "capture04H is terminal with the current recovery receipt; the original captured_at uncertainty remains recorded. Reused as-is - no new 10GB copy or hash was performed for final04N.",
       "evidence": [
+        {
+          "path": "D:/quant-data/reports/delivery04h/delivery04h-verify-capture.json",
+          "exists": true,
+          "sha256": "3c6853ccf9c0ba6e67573c35da1e70f9295c2fc77263770c72a57aa1037af2f3",
+          "size": 871,
+          "json": true
+        },
         {
           "path": "D:/quant-data/reports/delivery04h/delivery04h-verify-capture-stage.json",
           "exists": true,
@@ -827,64 +338,279 @@
       "facts": {
         "stage_status": "validated",
         "capture_path": "D:\\quant-data\\captures\\kline_data_capture_20260916T164711Z.db",
-        "source_size_bytes": 10224500736,
-        "capture_size_bytes": 10224500736,
-        "updated_at": "2026-09-17T02:14:31+00:00"
+        "source_size_bytes": 10224500736
       },
       "degradation": []
     },
     {
       "wp": "WP07",
-      "check_id": "ss-representative-import",
-      "dimension": "SS 1/5/15m isolation, SimNow8 key, MA untrusted amount",
-      "status": "PENDING",
-      "note": "Owned by SS04M; no receipt exists yet — nothing is claimed.",
-      "evidence": [],
-      "facts": {},
-      "degradation": []
-    },
-    {
-      "wp": "WP08",
-      "check_id": "rq-futures-night-trading-date",
-      "dimension": "A2505 exact source trading_date mapping; END/START direction",
-      "status": "PENDING",
-      "note": "Measured label conflict is bound; the public normalizer/spec fix (default END label -> UNKNOWN + scoped time evidence) is owned by futures04L. Until then the futures direction stays UNKNOWN.",
+      "check_id": "ss-representative-import-rb2605",
+      "dimension": "real rb2605 import/repeat/freeze/query/immutability; 1/5/15m isolation; SimNow8 quarantine",
+      "status": "MEASURED",
+      "note": "Independent scoped PASS (claude-ss04m-20260930): S1 snap-ec86298119e47e9c (60/12/4 rows), S2 snap-ab182160a7c6eb31 (120/24/8 rows); 1/5/15m remain separate datasets; exact 8 SimNow keys quarantined. Scope = the evidenced windows ONLY; calendar, units and broader eligibility stay unknown. Old numeric-turnover v1 snapshots remain immutable history; semantic-v2 supersedes for new usage.",
       "evidence": [
         {
-          "path": "D:/quant-data/reports/delivery04k/futures.json",
+          "path": "D:/quant-data/reports/delivery04m/delivery04m-phase2.json",
           "exists": true,
-          "sha256": "0f66e2ecfc04246c2018f2121d86092903a776f27436e6a8d7c7e5f3878c9b93",
-          "size": 16097,
+          "sha256": "7bf314bdc26666487f64e5bd139e3329d7ac61fbc79dee8b9b2fea8f0a3cee0e",
+          "size": 11733,
+          "json": true
+        },
+        {
+          "path": "D:/quant-data/reports/delivery04m/delivery04m-phase2-repeat.json",
+          "exists": true,
+          "sha256": "6f9d156e611ca727d3a97fcb729f1c6e02173e4f56e2dbee1c2ddab8e4210d86",
+          "size": 2567,
+          "json": true
+        },
+        {
+          "path": "D:/quant-data/reports/delivery04m/delivery04m-simnow-quarantine.json",
+          "exists": true,
+          "sha256": "55168f739a051214ff9b4d04e6046508863ca3e226523cb89a84abec91b1df2f",
+          "size": 2549,
           "json": true
         }
       ],
       "facts": {
-        "defect_repro": null,
-        "implementation_request": null
+        "phase": "2",
+        "elapsed_seconds": 17.741,
+        "simnow_all_eight_quarantined": true,
+        "simnow_total_quarantined": 8
       },
-      "degradation": [
-        "fact 'defect_repro' not found at 'defect_repro'",
-        "fact 'implementation_request' not found at 'implementation_request'"
-      ]
+      "degradation": []
+    },
+    {
+      "wp": "WP07",
+      "check_id": "ss-turnover-normalization-postfix",
+      "dimension": "MA/raw missing-turnover normalization; Alpha entrypoint behavior on the postfix snapshot",
+      "status": "MEASURED",
+      "note": "Fresh root registered-Alpha verification exit 0. BOTH public Alpha methods with default options raise StoreError unmapped exchange - the earlier identity refusal - NOT a VWAP-specific exception; no VWAP-specific exception was reached. MA 4,745 candidate-only rows normalized NULL (no fabricated bounds). Independent review exec40881 PASS (40 tests); earlier provisional claims (rows_read 0, Alpha ImportError, native 0 bars) are superseded/stale and the helper/report corrections were made honestly rather than copied.",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/ss04m-postfix-root-read-20260930.json",
+          "exists": true,
+          "sha256": "696baf422da76e2e1d525f1d848cf2e198245214e35d98a3ef834f1ec5505e10",
+          "size": 3210,
+          "json": true
+        }
+      ],
+      "facts": {},
+      "fact_note": "Snapshot snap-0d3404a3803d93cf, 1m ds-07199d36904cd3bf728896e1c3f4783e: 60 positive rows / 60 NULL turnover with raw amounts retained; 5m ds-5ff33396aeb6833347ee073b9e85abf4; 15m ds-3c2eced2f6eabed43eb7cbb979438eee.",
+      "degradation": []
     },
     {
       "wp": "WP08",
-      "check_id": "recording-engineering-durable-instance",
-      "dimension": "journal admission/stop/recover/replay/seal on a durable store session",
-      "status": "PENDING",
-      "note": "D:/quant-data/journals is empty: no durable real-store session exists, so no instance recorder_replay config is shipped (a placeholder session ID would be fabrication). Engineering loops are covered by the scoped test suites; recorder03D B1 + installed-entrypoint acceptance pending. LIVE gateway recording: LIVE_NOT_RUN.",
-      "evidence": [],
-      "facts": {},
+      "check_id": "recorder-engineering-durable-synthetic-session",
+      "dimension": "durable synthetic engineering session: installed same-session flow, seal, replay; F1/F2 closure; EOF/retry + retention repairs",
+      "status": "MEASURED",
+      "note": "Explicitly SYNTHETIC engineering proof on the real store store-398306491d834f99: session sess-d7c9ad113b2e42f5 (CLOSED, sealed batch-0ddd90b14eca4cde ticks + batch-61efad21d3b04f95 bars), snapshot snap-7914084cde1ff139, 5 ticks + 2 bars. F1/F2 installed defects fixed with independent scoped PASS (claude-recorder-fix-20260930); recorder.py sha256 118fbcb932bb8e5f...; r2 wheel b2fb7dbb65ad1af8... Recorder EOF/retry repair: independent scoped PASS (7 launcher + 38 related tests). Coverage/retention repair: independent scoped PASS (40 tests). Old key/value-formatted sessions remain replayable but cannot seal; repeated recover-session creates distinct successors (advise inspect first, --no-successor for report-only repeats). This is NOT real market history and NOT live capture.",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/recorder03d-installed-20260930/quantdata_same_session.result.json",
+          "exists": true,
+          "sha256": "e641484991c9876445feffd0c08eabe5f3a1efb6b61aa61fcf110e36eecb01e8",
+          "size": 23284,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/recorder03d-installed-20260930/flow_same_session.result.json",
+          "exists": true,
+          "sha256": "10c43832d5fc73c8dfd0b31fff01bf9c766b1ef4a198845f3ab67706bada221f",
+          "size": 14402,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/claude-recorder-fix-20260930/result.json",
+          "exists": true,
+          "sha256": "049942bc5d3ade62c7afa3af6e8ee7ebe995b1184829c962c575521ddd86cdf9",
+          "size": 4303,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/REVIEW_RECORDER_20260930.md",
+          "exists": true,
+          "sha256": "b0918b7772656f18b4afba0aa2dd5d1d137a80486d7549526b30d5fbae3a7b2c",
+          "size": 5766
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/REVIEW_RETENTION_20260930.md",
+          "exists": true,
+          "sha256": "52f4bb5a739130c002e12942408335a08aa315e85b77b0c865575869eb81fbee",
+          "size": 5979
+        }
+      ],
+      "facts": {
+        "durable_status": "QUANTDATA_SYNTHETIC_SAME_SESSION_OK"
+      },
       "degradation": []
     },
     {
       "wp": "WP10",
-      "check_id": "final-stable-checks",
-      "dimension": "datasource suite, ruff/mypy both integrations, build, sync_check",
-      "status": "NOT_RUN",
-      "note": "Phase 2 only: requires stable completed dependencies (04H/04L/02IA/03D/04M). Deliberately not run in phase 1; no partial or broad moving-package test was executed.",
-      "evidence": [],
-      "facts": {},
+      "check_id": "report-recording-visibility-fix",
+      "dimension": "public store report shows durable journal-only sessions; catalog-only retained; errors visible; successor lineage correct for catalog-only root parents",
+      "status": "MEASURED",
+      "note": "Authorized bounded fix in research_store/report.py: durable journal-only sessions visible (journal authority), catalog-only rows retained with missing-journal errors, duplicate ids reconciled (catalog status kept visible), committed watermark + successor lineage exposed, live counters null (never zero), unreadable/partial journals visible as errors, read-only reads (no lock file, no catalog writes). Root-found lineage defect CLOSED: successor lineage is computed for EVERY entry by comparing other.predecessor_session_id to entry.session_id with no predecessor prerequisite, so catalog-only root parents keep their durable children and non-root parents never list siblings (root failed repro report_catalog_lineage_probe.json preserved showing actual []; post-fix probe lineage_fixed=true; 3 lineage regression tests). Real-store report shows sess-d7c9ad113b2e42f5 CLOSED committed 5. Pre-fix public repro preserved unchanged at repro_recording_report_20260930.json; focused tests in tests/test_report_recording_sessions.py (12).",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/repro_postfix.stdout.json",
+          "exists": true,
+          "sha256": "48d06161e8f6111e25d4f4a022bc5e50abb413382c4d1f5fba9e807f38abf575",
+          "size": 1458,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/store-report.stdout.json",
+          "exists": true,
+          "sha256": "3a557475748b7b7f0bcca36668589f54176d0a8227307ae416b519303978db8c",
+          "size": 32297,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/report_catalog_lineage_postfix.json",
+          "exists": true,
+          "sha256": "4a73722fde28edbdc0e72cddce887a6980755441d3829f9bc24c462b9d64f881",
+          "size": 685,
+          "json": true
+        }
+      ],
+      "facts": {
+        "probe_report_status": "sessions_present",
+        "probe_committed_seq": 1,
+        "real_store_recording_status": "sessions_present",
+        "real_store_journal_sessions": 1,
+        "lineage_fixed": true,
+        "lineage_parent_successors": 1
+      },
+      "degradation": []
+    },
+    {
+      "wp": "WP10",
+      "check_id": "datasource-suite-and-cta-engineering",
+      "dimension": "vnpy_datasource current suite; CTA bars/trades engineering run",
+      "status": "MEASURED",
+      "note": "Runtimes recorded separately; never equated.",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_datasource/VERIFICATION.md",
+          "exists": true,
+          "sha256": "5bae48f7b7e3d0fa775e336cda7739c488a8833c2e2fc965b70465470c9bac94",
+          "size": 8542
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_datasource/output/closeout-20260930-cta/result.json",
+          "exists": true,
+          "sha256": "ab87467d11c172bdfe98fcf83175a2da2f444850e17dc6026f86a509f1414b51",
+          "size": 1444,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/pytest-datasource-venv.txt",
+          "exists": true,
+          "sha256": "a3ad83547e594608bf91a05b4046bc117080f4ee6271ff4825239f41576cf785",
+          "size": 750
+        }
+      ],
+      "facts": {
+        "cta_input_rows": 659,
+        "cta_replay_rows": 659,
+        "cta_total_trade_count": 47,
+        "source_database_unchanged": true
+      },
+      "fact_note": "Suite at FINAL source state rerun by final04N in the plugin .venv: 101 passed (pytest-datasource-venv.txt, exit 0; pre-existing pytz warning). Owner-run 2026-09-30 closeout on registered Python 3.14.7 also records 101 passed + root sync_check PASS + the CTA replay (integrations/vnpy_datasource/VERIFICATION.md). CTA engineering run: 659 bars / 47 simulated trades with unchanged source and working-copy hashes - engineering only, no strategy efficacy claim.",
+      "degradation": []
+    },
+    {
+      "wp": "WP10",
+      "check_id": "final-package-build-and-installed-smoke",
+      "dimension": "final wheel/sdist rebuild after SS/report corrections + non-editable installed origins + installed report smoke",
+      "status": "MEASURED",
+      "note": "Built with the disposable build-env-20260930 (used read-only, no env modification); installed with --no-deps into a disposable venv whose dependency imports resolve read-only from the base environment; no shared environment was modified and no network was used. Provisional r1/r2 artifacts remain as history.",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/final-build.json",
+          "exists": true,
+          "sha256": "51c2cb44be254fbd5b2af0651f078693dcea96673342e5a58288d5971be44847",
+          "size": 2836,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/installed-smoke.json",
+          "exists": true,
+          "sha256": "3f8e5a9d5be4ba192dce7b063cd53965b16c4d690bc0a9d6d01c26245f24652b",
+          "size": 1065,
+          "json": true
+        }
+      ],
+      "facts": {
+        "sdist_sha256": "4a7ac9d83f4a7bd1252012b5dbbba7796957acab0d95551d4d4ab7f9cc6e62f2",
+        "wheel_sha256": "1e6761b9fb89e6758d6723555a1d8c650aa0494e12b74bc2ba20fa83881e6dcf",
+        "report_fix_in_wheel": true
+      },
+      "degradation": []
+    },
+    {
+      "wp": "WP10",
+      "check_id": "affected-checks-current",
+      "dimension": "affected focused checks at final source state (48 focused tests, datasource suite, ruff both integrations, scoped mypy, root sync_check, 24-file baseline identity)",
+      "status": "PARTIAL",
+      "note": "PARTIAL only because no single-runtime whole-package equivalence is claimed (environment disposition 2026-09-30: 408/27 with missing Alpha/portfolio dependencies; isolated Alpha/portfolio runtimes cover those scopes) and pytest-in-installed-env was not run. Independent Claude final audit is the next gate.",
+      "evidence": [
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/summary.json",
+          "exists": true,
+          "sha256": "42a725064884c65320ea4cfeba1daeafe79002444af2f4080962c0d15a999a11",
+          "size": 2483,
+          "json": true
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/pytest-focused.txt",
+          "exists": true,
+          "sha256": "5f7b69b7944756cf735666903d1674bf94a006008c30dc295ad5c9a1e51e8c04",
+          "size": 1288
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/ruff-plugin.txt",
+          "exists": true,
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+          "size": 19
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/ruff-datasource.txt",
+          "exists": true,
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+          "size": 19
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/mypy-scoped.txt",
+          "exists": true,
+          "sha256": "a3aaf5f81b19b41bca4db48201304558d1f7ca3800bae38ee86392e044969fad",
+          "size": 45
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/sync-check.txt",
+          "exists": true,
+          "sha256": "f83f171515d449298ecf38d4021be79542585d99d1f007fcf243971524fda32a",
+          "size": 266
+        },
+        {
+          "path": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04n-dev/checks-final/datasource-baseline-check.json",
+          "exists": true,
+          "sha256": "597af48d1e465a7ebb5c219783646a7db07efead774524f446250256ddf0b78c",
+          "size": 6102,
+          "json": true
+        }
+      ],
+      "facts": {
+        "focused_passed": 50,
+        "datasource_suite_passed": 101,
+        "ruff_plugin_exit": 0,
+        "ruff_datasource_exit": 0,
+        "mypy_exit": 0,
+        "sync_check_exit": 0,
+        "baseline_matched": 13,
+        "baseline_entries": 24
+      },
+      "fact_note": "All bound outputs are actual command runs at FINAL source state: 48 focused tests; datasource suite 101 passed (plugin .venv, exit 0); ruff exit 0 on BOTH integrations; scoped mypy exit 0; root sync_check exit 0 (PASS with the pre-existing informational docs/archive warning). 24-file baseline identity: 13/24 match, 11 files legitimately evolved since the 2026-09-16 snapshot (documented in datasource VERIFICATION.md dated sections) - so the old baseline is NOT a current identity proof and the suite was rerun at final state instead of reusing stale identity.",
       "degradation": []
     },
     {
@@ -902,11 +628,11 @@
       "check_id": "expected-coverage",
       "dimension": "market calendar/listing/session evidence",
       "status": "UNKNOWN",
-      "note": "No calendar/listing evidence is available anywhere in scope; expected coverage stays UNKNOWN. Observed min/max dates never imply completeness.",
+      "note": "No calendar/listing evidence exists anywhere in scope; expected coverage stays UNKNOWN. Observed min/max dates never imply completeness.",
       "evidence": [],
       "facts": {},
       "degradation": []
     }
   ],
-  "elapsed_seconds": 0.128
+  "elapsed_seconds": 0.186
 }

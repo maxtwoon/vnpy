@@ -249,6 +249,14 @@ def build_ssquant_spec(
     capture/symbol/range, pass its conclusion (``"start"``/``"end"``) — the
     evidenced convention is part of the dataset's semantic identity, so
     evidenced and unevidenced SSQuant data never share a dataset id.
+
+    ``rule_version`` pins the normalization transform: since the
+    missing-standardized-turnover correction (TASK_OPENCODE_DELIVERY_04:
+    untrusted amount stays raw evidence, standardized turnover MISSING,
+    VWAP rejected), SSQuant datasets carry
+    ``norm-missing-turnover-1`` so pre-fix datasets (numeric flagged
+    turnover) and post-fix datasets (missing standardized turnover) never
+    share a dataset id and historical revisions stay intact.
     """
     return SemanticSpec(
         source_id="ssquant",
@@ -258,7 +266,7 @@ def build_ssquant_spec(
         adjustment=Adjustment.UNKNOWN,
         adjustment_version="",
         series_kind=series_kind,
-        rule_version="",
+        rule_version="norm-missing-turnover-1",
         timezone="Asia/Shanghai",
         source_time_label=TimeLabel(time_label),
         volume_unit="unknown",

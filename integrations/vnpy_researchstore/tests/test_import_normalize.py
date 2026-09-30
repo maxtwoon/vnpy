@@ -166,6 +166,10 @@ def test_ssquant_unknown_label_semantics_and_passthrough() -> None:
     assert row["extensions"]["real_symbol"] == "rb2605"
     assert row["extensions"]["多开"] == 2051.0
     assert row["extensions"]["amount_untrusted"] is True
+    # normalized MISSING turnover: the untrusted raw amount is preserved
+    # verbatim in extensions, never standardized into the canonical field
+    assert row["turnover"] is None
+    assert row["extensions"]["amount"] == 254157290.0
 
 
 def test_rq_futures_dominant_preserves_identity() -> None:

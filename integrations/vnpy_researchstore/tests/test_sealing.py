@@ -161,6 +161,9 @@ def test_seal_publishes_ticks_and_evidenced_bars_only(store) -> None:
     assert len(receipt.partitions) == 2  # ticks partition + bars partition
     assert not receipt.idempotent_replay
     assert "sealed [1, 6]" in receipt.detail
+    # recording02K: all committed events published verbatim -> lossless.
+    assert receipt.lossless is True
+    assert receipt.unknown_time_excluded == 0
 
 
 def test_f1_seal_excludes_partial_tail_but_keeps_all_ticks(store) -> None:
@@ -506,6 +509,35 @@ def test_02ia_unknown_event_time_tick_excluded_never_epoch_zero(store) -> None:
     request = make_request(session.session_id, end=2, source_spec="futures:no-ts")
     receipt = seal(store, request)
     assert "excluded 1 tick(s) with unknown event time" in receipt.detail
+    # recording02K truthful public raw-coverage status on the first seal.
+    assert receipt.unknown_time_excluded == 1
+    assert receipt.lossless is False
+
+    # recording02K: a repeated (idempotent) seal returns the same truthful
+    # exclusion/completeness status - successful known-time publication
+    # never certifies lossless raw preservation while an event is excluded.
+    repeat = seal(store, request)
+    assert repeat.idempotent_replay is True
+    assert repeat.unknown_time_excluded == 1
+    assert repeat.lossless is False
+
+    # The durable seal record persisted in journal meta carries the facts.
+    import json as _json
+    import sqlite3
+
+
+    conn2 = sqlite3.connect(str(store.path.journals / f"{session.session_id}.sqlite"))
+    conn2.row_factory = sqlite3.Row
+    try:
+        meta_row = conn2.execute(
+            "SELECT value FROM session_meta WHERE key='seals'"
+        ).fetchone()
+    finally:
+        conn2.close()
+    records = _json.loads(meta_row["value"])
+    assert records[-1]["unknown_time_excluded"] == 1
+    assert records[-1]["lossless"] is False
+    assert records[-1]["input_events"] == 2
 
     ticks_ds = compute_dataset_id(_spec(request, RecordKind.TICKS, Interval.M1))
     snap = freeze(

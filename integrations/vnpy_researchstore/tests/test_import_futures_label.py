@@ -419,6 +419,37 @@ def test_adapter_member_filter_is_bounded_and_loud(tmp_path: Path) -> None:
         )
 
 
+def test_member_import_leaves_no_staging_spool(tmp_path: Path) -> None:
+    """Regression: a fully consumed member iterator must delete its spool
+    file deterministically, so an immediate rerun cannot hit the
+    spool_member staging collision (the real 04L contract-import failure)."""
+    package = _futures_package(tmp_path)
+    staging = tmp_path / "adapter_staging"
+    import_rq_futures(
+        package,
+        "contract_1m_none",
+        CountingSink(),
+        batch_id="b-spool",
+        staging_dir=staging,
+        years=[2025],
+        members={"2025/unit_0000.parquet"},
+    )
+    leftovers = [path for path in staging.rglob("*") if path.is_file()]
+    assert leftovers == []
+    # a second identical import over the same staging must succeed
+    rerun = import_rq_futures(
+        package,
+        "contract_1m_none",
+        CountingSink(),
+        batch_id="b-spool2",
+        staging_dir=staging,
+        years=[2025],
+        members={"2025/unit_0000.parquet"},
+    )
+    assert rerun.rows_read == 2
+    assert rerun.members_failed == 0
+
+
 def test_default_path_routes_unknown_rows_to_candidates_with_dates(
     tmp_path: Path,
 ) -> None:
@@ -586,3 +617,81 @@ def test_dominant_mapping_build_unchanged(tmp_path: Path) -> None:
     assert ContractDateMapper(mapping).lookup("A2505", "2025-01-02 21:01:00") == (
         "2025-01-03"
     )
+
+
+class _CountingMapping(DominantMapping):
+    """Test double counting how often the full map identity is computed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.version_calls = 0
+
+    @property
+    def version(self) -> str:
+        self.version_calls += 1
+        return str(super().version)  # type: ignore[no-any-return]
+
+
+def test_map_version_computed_once_per_import_and_tracks_changes(
+    tmp_path: Path,
+) -> None:
+    """Regression (futures04l-map-version-profile-20260930): the stable map
+    identity is computed at the import boundary, never per matched row; a
+    mapping changed before a LATER import produces its new identity."""
+    package = tmp_path / "futures5"
+    package.mkdir()
+    rows = [
+        {
+            "datetime": f"2025-01-0{day} 09:{minute:02d}:00",
+            "order_book_id": "A2505",
+            "open": 1.0,
+            "high": 1.1,
+            "low": 0.9,
+            "close": 1.05,
+            "volume": 10.0,
+            "total_turnover": 100.0,
+            "open_interest": 5.0,
+        }
+        for day, minute in ((2, 1), (2, 2), (3, 1), (3, 2), (3, 3))
+    ]
+    _write_tar_zst(
+        package / "rqdatac_contract_1m_none_2025.tar.zst",
+        [("2025/unit_0000.parquet", _parquet_bytes(rows))],
+    )
+    mapping = _CountingMapping()
+    for row in rows:
+        mapping.add("A2505", str(row["datetime"]), "2025-01-03")
+    mapper = ContractDateMapper(mapping)
+
+    first = import_rq_futures(
+        package,
+        "contract_1m_none",
+        CountingSink(),
+        batch_id="b-ver1",
+        staging_dir=tmp_path / "staging",
+        years=[2025],
+        date_mapper=mapper,
+    )
+    # one identity at the import boundary + one in the receipt stats: never
+    # one per matched row (5 matched rows would mean >= 5 extra calls)
+    assert mapping.version_calls == 2
+    first_version = mapping.version  # the test's own read: third call
+    assert first_version == first.extras["trading_date_transfer"]["map_version"]
+
+    # a mapping changed before a LATER import must produce a NEW identity
+    mapping.add("A2505", "2025-06-01 09:01:00", "2025-06-02")
+    calls_before = mapping.version_calls
+    second = import_rq_futures(
+        package,
+        "contract_1m_none",
+        CountingSink(),
+        batch_id="b-ver2",
+        staging_dir=tmp_path / "staging2",
+        years=[2025],
+        date_mapper=mapper,
+    )
+    assert mapping.version_calls == calls_before + 2  # boundary + stats only
+    second_version = mapping.version  # the test's own read
+    assert second_version != first_version
+    assert second.extras["trading_date_transfer"]["map_version"] == second_version
+    assert second.rows_read == 5

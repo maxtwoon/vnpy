@@ -7,8 +7,10 @@ refusal, and source-label inspection queries vs normalized bar-time queries.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,7 @@ from research_store.importers.time_evidence import (
     LabelEvidenceError,
     LabelProfile,
     build_label_evidence,
+    verify_profile_capture,
 )
 from research_store.models import AssetRef, compute_dataset_id
 from research_store.store import init_store
@@ -117,6 +120,30 @@ def test_empty_range_refused(tmp_path: Path) -> None:
             con.close()
 
 
+def _attach_receipt(db: Path) -> dict:
+    """Attach a producer-format validated-capture receipt (test fixture
+    standing in for the capture recovery tool's output). The verifier
+    re-hashes the file, so only the file's TRUE sha256 passes."""
+    receipt = {
+        "validation_kind": "current_recovery_validation",
+        "source": "synthetic-source.db",
+        "capture": str(db),
+        "bytes": db.stat().st_size,
+        "sha256": hashlib.sha256(db.read_bytes()).hexdigest(),
+        "quick_check": "ok",
+        "captured_at": None,
+        "captured_at_basis": "UNKNOWN (test fixture)",
+        "observed_capture_mtime_utc": datetime.fromtimestamp(
+            db.stat().st_mtime, tz=timezone.utc
+        ).isoformat(timespec="seconds"),
+        "validated_at": "2026-09-17T00:00:00+00:00",
+    }
+    db.with_suffix(db.suffix + ".receipt.json").write_text(
+        json.dumps(receipt), encoding="utf-8"
+    )
+    return receipt
+
+
 def _raw(label: str) -> dict:
     return {
         "datetime": label,
@@ -167,7 +194,11 @@ def test_evidenced_publish_and_label_vs_time_queries(tmp_path: Path) -> None:
     """Evidence-qualified scope publishes; source-label inspection stays
     distinct from normalized bar-time queries."""
     db = _make_capture(tmp_path, _COARSE_END)
-    evidence = _evidence(db, capture_sha256="")
+    # Evidence and receipt must bind the SAME content identity: the actual
+    # file hash (the verifier re-checks it for captures <= 2GiB).
+    sha = hashlib.sha256(db.read_bytes()).hexdigest()
+    evidence = _evidence(db, capture_sha256=sha)
+    _attach_receipt(db)
     profile = LabelProfile(evidence, interval_minutes=1)
     store = init_store(tmp_path / "store")
     try:
@@ -256,3 +287,220 @@ def test_unevidenced_rows_become_preserved_candidates(tmp_path: Path) -> None:
         assert "CoreBridgeError" in candidates[0]["reason"]
     finally:
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# capture/table-kind binding guards (04M scope correction, 2026-09-30)
+# ---------------------------------------------------------------------------
+
+
+def test_profile_rejects_tables_outside_evidenced_family(tmp_path: Path) -> None:
+    """A real-contract evidence never qualifies staging tables, and a
+    continuous evidence never qualifies real-contract tables."""
+    db = _make_capture(tmp_path, _COARSE_END)
+    continuous_profile = LabelProfile(_evidence(db), interval_minutes=1)
+    assert continuous_profile.covers(FINE, "2026-02-24 09:31:00")
+    # different symbol / interval / range still guarded
+    assert not continuous_profile.covers("rb2605_1M_raw", "2026-02-24 09:31:00")
+    assert not continuous_profile.covers(FINE, "2026-02-24 10:00:00")
+    assert not continuous_profile.covers("rb888_5M_raw", "2026-02-24 09:31:00")
+
+
+def test_real_contract_profile_rejects_staging(tmp_path: Path) -> None:
+    """The 04M production case: rb2605 real-contract evidence must not
+    qualify the same symbol's staging table (previously a public gap)."""
+    db = tmp_path / "rb.db"
+    con = sqlite3.connect(db)
+    for table in ("rb2605_1M_raw", "rb2605_5M_raw", "rb2605_1M_raw_staging"):
+        con.execute(
+            f'CREATE TABLE "{table}" (datetime TEXT PRIMARY KEY, symbol TEXT,'
+            " real_symbol TEXT, open REAL, high REAL, low REAL, close REAL,"
+            " volume REAL, amount REAL, openint REAL, cumulative_openint REAL)"
+        )
+    for minute in range(5):
+        row = (
+            f"2026-03-02 09:0{minute}:00", "rb2605", "rb2605",
+            100 + minute, 101 + minute, 99 + minute, 100 + minute,
+            1, 1000, 0, 500,
+        )
+        con.execute('INSERT INTO rb2605_1M_raw VALUES (?,?,?,?,?,?,?,?,?,?,?)', row)
+        con.execute('INSERT INTO rb2605_1M_raw_staging VALUES (?,?,?,?,?,?,?,?,?,?,?)', row)
+    con.execute(
+        'INSERT INTO rb2605_5M_raw VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        ("2026-03-02 09:00:00", "rb2605", "rb2605", 100, 105, 99, 104, 5, 5000, 0, 500),
+    )
+    con.commit()
+    con.close()
+    con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+    try:
+        evidence = build_label_evidence(
+            con, "rb2605_1M_raw", "rb2605_5M_raw",
+            "2026-03-02 09:00:00", "2026-03-02 09:05:00",
+            capture_sha256="a" * 64,
+        )
+    finally:
+        con.close()
+    profile = LabelProfile(evidence, interval_minutes=1)
+    assert profile.covers("rb2605_1M_raw", "2026-03-02 09:01:00")
+    # the corrected guard: staging of the same symbol/interval/range
+    assert not profile.covers("rb2605_1M_raw_staging", "2026-03-02 09:01:00")
+
+
+def test_import_refuses_profile_from_different_capture(tmp_path: Path) -> None:
+    """The opened capture must be receipt-bound to the profile's evidence;
+    a different capture (even with identical schema) is refused safely."""
+    from research_store.importers.sink import CountingSink
+
+    db_a = _make_capture(tmp_path, _COARSE_END)
+    db_b = tmp_path / "other.db"
+    db_b.write_bytes(db_a.read_bytes()[:-1] + b"\x00")  # same schema, other bytes
+    sha_a = hashlib.sha256(db_a.read_bytes()).hexdigest()
+    profile = LabelProfile(_evidence(db_a, capture_sha256=sha_a), interval_minutes=1)
+
+    # capture B has no validated receipt at all
+    with pytest.raises(LabelEvidenceError, match="no validated-capture receipt"):
+        import_ssquant_table(db_b, FINE, CountingSink(), "b1", label_profile=profile)
+    # copying capture A's (valid) receipt to B still fails: path identity differs
+    import shutil
+
+    _attach_receipt(db_a)
+    shutil.copy2(
+        db_a.with_suffix(db_a.suffix + ".receipt.json"),
+        db_b.with_suffix(db_b.suffix + ".receipt.json"),
+    )
+    with pytest.raises(LabelEvidenceError, match="different file"):
+        import_ssquant_table(db_b, FINE, CountingSink(), "b2", label_profile=profile)
+
+
+def test_import_positive_with_receipt_and_tamper_refusals(tmp_path: Path) -> None:
+    """Positive path works with a true validated receipt; tampered receipt
+    content or file identity is refused before any row is read."""
+    from research_store.importers.sink import CountingSink
+
+    db = _make_capture(tmp_path, _COARSE_END)
+    sha = hashlib.sha256(db.read_bytes()).hexdigest()
+    profile = LabelProfile(_evidence(db, capture_sha256=sha), interval_minutes=1)
+
+    # evidence bound to a hash that does not match the receipt must fail
+    _attach_receipt(db)
+    bad_profile = LabelProfile(
+        _evidence(db, capture_sha256="f" * 64), interval_minutes=1
+    )
+    with pytest.raises(LabelEvidenceError, match="does not match the validated"):
+        import_ssquant_table(db, FINE, CountingSink(), "t1", label_profile=bad_profile)
+
+    # evidence bound to the receipt's actual sha256 works and gives bounds
+    sink = CountingSink()
+    receipt = import_ssquant_table(db, FINE, sink, "t2", label_profile=profile)
+    assert receipt.rows_read == 5
+    assert all(r["bar_start_ns"] is not None for r in sink.rows)
+
+    # tampering with the receipt content is detected (sha no longer matches)
+    receipt_path = db.with_suffix(db.suffix + ".receipt.json")
+    tampered = json.loads(receipt_path.read_text(encoding="utf-8"))
+    tampered["sha256"] = "0" * 64
+    receipt_path.write_text(json.dumps(tampered), encoding="utf-8")
+    with pytest.raises(LabelEvidenceError, match="does not match the validated"):
+        import_ssquant_table(db, FINE, CountingSink(), "t3", label_profile=profile)
+    _attach_receipt(db)  # restore
+
+    # modifying the file after validation is detected via size
+    db.write_bytes(db.read_bytes() + b"\x00")
+    with pytest.raises(LabelEvidenceError, match="size"):
+        import_ssquant_table(db, FINE, CountingSink(), "t4", label_profile=profile)
+
+
+def test_staging_import_with_profile_stays_candidate(tmp_path: Path) -> None:
+    """Wrong-kind case fails safely: staging rows with a real-contract
+    profile get NO canonical bounds and stay preserved candidates."""
+    db = tmp_path / "rb.db"
+    con = sqlite3.connect(db)
+    for table in ("rb2605_1M_raw", "rb2605_5M_raw", "rb2605_1M_raw_staging"):
+        con.execute(
+            f'CREATE TABLE "{table}" (datetime TEXT PRIMARY KEY, symbol TEXT,'
+            " real_symbol TEXT, open REAL, high REAL, low REAL, close REAL,"
+            " volume REAL, amount REAL, openint REAL, cumulative_openint REAL)"
+        )
+    for minute in range(5):
+        row = (
+            f"2026-03-02 09:0{minute}:00", "rb2605", "rb2605",
+            100 + minute, 101 + minute, 99 + minute, 100 + minute,
+            1, 1000, 0, 500,
+        )
+        con.execute("INSERT INTO rb2605_1M_raw VALUES (?,?,?,?,?,?,?,?,?,?,?)", row)
+        con.execute("INSERT INTO rb2605_1M_raw_staging VALUES (?,?,?,?,?,?,?,?,?,?,?)", row)
+    con.execute(
+        "INSERT INTO rb2605_5M_raw VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        ("2026-03-02 09:00:00", "rb2605", "rb2605", 100, 105, 99, 104, 5, 5000, 0, 500),
+    )
+    con.commit()
+    con.close()
+    sha = hashlib.sha256(db.read_bytes()).hexdigest()
+    con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+    try:
+        evidence = build_label_evidence(
+            con, "rb2605_1M_raw", "rb2605_5M_raw",
+            "2026-03-02 09:00:00", "2026-03-02 09:05:00",
+            capture_sha256=sha,
+        )
+    finally:
+        con.close()
+    _attach_receipt(db)
+    profile = LabelProfile(evidence, interval_minutes=1)
+    store = init_store(tmp_path / "store")
+    try:
+        spec = build_ssquant_spec("1m", "staging", time_label=evidence.conclusion)
+        asset = AssetRef(
+            asset_id="asset-staging",
+            origin=str(db),
+            format="sqlite",
+            size=db.stat().st_size,
+            sha256=sha,
+        )
+        sink = StoreSink(
+            store, asset, spec, adapter="ssquant/0.1",
+            config={"table": "rb2605_1M_raw_staging"}, batch_id="b-staging",
+        )
+        import_ssquant_table(
+            db, "rb2605_1M_raw_staging", sink, batch_id="b-staging",
+            label_profile=profile,
+        )
+        publish = sink.publish()
+        # nothing publishable: staging rows are never given canonical bounds
+        assert publish is None
+        candidates = list(iter_candidates(sink.candidate_path))
+        assert len(candidates) == 5
+        first = candidates[0]["candidate"]
+        assert first["bar_start_ns"] is None
+        assert "outside_label_evidence_scope" in first["quality_flags"]
+    finally:
+        store.close()
+
+
+def test_verify_profile_capture_modes(tmp_path: Path, monkeypatch) -> None:
+    """Small captures are re-hashed; the >threshold receipt-bound mode is
+    explicit policy and still rejects modified files via the mtime guard."""
+    from research_store.importers import time_evidence as te
+
+    db = _make_capture(tmp_path, _COARSE_END)
+    sha = hashlib.sha256(db.read_bytes()).hexdigest()
+    profile = LabelProfile(_evidence(db, capture_sha256=sha), interval_minutes=1)
+    _attach_receipt(db)
+
+    # default mode for a small capture: full sha256 rehash
+    verified = verify_profile_capture(db, profile)
+    assert verified["identity_mode"] == "full_sha256_rehash"
+
+    # >threshold mode: explicit receipt+stat binding (the 10GB capture policy)
+    monkeypatch.setattr(te, "_FULL_REHASH_MAX_BYTES", 1)
+    verified = verify_profile_capture(db, profile)
+    assert verified["identity_mode"] == "receipt_bound_stat"
+    assert "identity_note" in verified
+
+    # a file touched AFTER validation is refused even in receipt-bound mode
+    import os
+
+    os.utime(db, ns=(db.stat().st_atime_ns, db.stat().st_mtime_ns + 2_000_000_000))
+    with pytest.raises(LabelEvidenceError, match="modified after validation"):
+        verify_profile_capture(db, profile)
+

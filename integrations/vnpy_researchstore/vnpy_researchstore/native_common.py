@@ -508,6 +508,10 @@ def load_bars(
 
     start_utc = _native_to_utc_aware(start)
     end_utc = _native_to_utc_aware(end)
+    # Emitted timestamps use naive DB_TZ; normalize aware query boundaries
+    # to the same convention before the precise inclusive range check.
+    start_native = start_utc.astimezone(DB_TZ).replace(tzinfo=None)
+    end_native = end_utc.astimezone(DB_TZ).replace(tzinfo=None)
     if native_interval is Interval.DAILY:
         internal_end = end_utc + timedelta(days=1)
     else:
@@ -574,7 +578,7 @@ def load_bars(
             else:
                 dt = _ns_to_native_datetime(int(row["bar_start"]))
             # Precise inclusive-end filtering on the native timestamp.
-            if dt < start or dt > end:
+            if dt < start_native or dt > end_native:
                 continue
 
             field_quality = parse_field_quality(row["field_quality"])

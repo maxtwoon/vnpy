@@ -400,6 +400,8 @@ FUTURES. A typed `source_spec` (below) constrains `asset_class` further.
 | `input_events` | `int` | Events read from journal |
 | `accepted_rows` | `int` | Total rows published (ticks + bars) |
 | `detail` | `str` | Human-readable summary |
+| `unknown_time_excluded` | `int` | Committed events excluded from tick publication (unknown event time); appended 02K, positional-safe |
+| `lossless` | `bool` | True ONLY when every committed event in the range was published verbatim; conservative default False (02K) |
 
 ### 4.2 Identity vs idempotency (F2, revised)
 
@@ -578,8 +580,18 @@ Eligibility criteria (ALL must hold):
    `.sqlite-shm`, `.lock`) inside `<store>/journals/`.
 2. At least one verified complete seal exists (all seal batches PUBLISHED
    in catalog; a conflicted/partial publication is NOT verified).
-3. Newest seal is at least 14 days old.
-4. No live process holds the session lock (msvcrt `LK_NBLCK` probe).
+3. RAW COVERAGE (recording02K, fail-closed): provably lossless seals
+   together cover EVERY committed journal event up to the current
+   watermark. A durable seal record proves losslessness only via its
+   persisted facts (`lossless: true`, `unknown_time_excluded: 0`,
+   `input_events` == dense range span). Exclusion-bearing seals (e.g.
+   missing event-time ticks), partial-range tails, and legacy pre-02K
+   records without coverage evidence all refuse deletion with a precise
+   reason — the journal is then the only copy of those raw events. Re-seal
+   with the current version to (re-)prove coverage. No acknowledged-loss
+   override exists.
+4. Newest seal is at least 14 days old.
+5. No live process holds the session lock (msvcrt `LK_NBLCK` probe).
 
 CLOSED-without-seal sessions are NOT eligible. All target paths are
 resolved and validated to stay inside `<store>/journals/` — path

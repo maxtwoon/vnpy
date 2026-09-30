@@ -42,9 +42,10 @@ Usage:
     python tools/delivery_representatives.py --config <config.json> --case stock
 
 Every case prints its evidence JSON on stdout and writes it to
-``<reports_dir>/<case>.json``. Exit code is nonzero when the case errors;
-failing assertions keep exit code 0 but mark the case status FAIL_* in the
-evidence file (failures are never rewritten into successes).
+``<reports_dir>/<case>.json`` (override the file name with
+``--evidence-name``). Exit code is nonzero whenever the case errors or its
+terminal status is not ``PASS`` — FAIL_ASSERTIONS and FAIL_SOFTWARE both
+fail the process, so a failing run can never look successful.
 """
 
 from __future__ import annotations
@@ -200,6 +201,102 @@ def assertion(
         "expected": expected,
         "actual": actual,
         "pass": bool(passed),
+    }
+
+
+def interpreter_matches_policy(
+    executable: str, policy: dict[str, Any]
+) -> tuple[bool, dict[str, str]]:
+    """Resolve the current interpreter against runtime-policy identity.
+
+    ``policy`` is the parsed ``D:/repo/quant/runtime-policy.json`` payload;
+    only an exact resolved-path match with ``projects.vnpy.python`` counts.
+    Pure helper so the refusal is unit-testable without touching the real
+    policy file.
+    """
+    section = policy.get("projects", {}).get("vnpy", {})
+    expected = str(section.get("python", "")).strip()
+    resolved_expected = str(Path(expected).resolve()) if expected else ""
+    resolved_actual = str(Path(executable).resolve())
+    matches = bool(expected) and resolved_actual.casefold() == resolved_expected.casefold()
+    detail = {
+        "policy_python": expected,
+        "resolved_expected": resolved_expected,
+        "resolved_actual": resolved_actual,
+        "matches": str(matches),
+    }
+    return matches, detail
+
+
+def reconcile_date_transfer_counts(
+    mapper_stats: dict[str, Any],
+    candidate_rows: list[dict[str, Any]],
+    instrument: str,
+) -> dict[str, Any]:
+    """Reconcile exact-key date-transfer counts on identical scopes.
+
+    The public adapter applies the date mapper to EVERY contract row of the
+    selected member, so the mapper's own ``matched_keys``/``unmatched_keys``
+    are GLOBAL across all instruments in that member; any single
+    instrument's null-date rows are a strictly smaller subset. Comparing
+    the global unmatched count against one instrument's null rows is a
+    scope bug (the futures04l-fixed-20260930 real run: 199425 vs 7125).
+    Both views are therefore reconciled explicitly and must agree
+    internally:
+
+    * global: null-date rows == unmatched_keys + conflicted_keys, and
+      with-date rows == matched_keys (a conflicted key lookup returns None
+      without counting as unmatched);
+    * selected instrument: rows == with-date + null-date, with-date is a
+      positive subset of the global matched rows (the case mapping is
+      built from that instrument's dominant keys only).
+
+    Pure helper so the reconciliation is unit-testable offline.
+    """
+    matched = int(mapper_stats.get("matched_keys") or 0)
+    unmatched = int(mapper_stats.get("unmatched_keys") or 0)
+    conflicted = int(mapper_stats.get("conflicted_keys") or 0)
+    all_rows = len(candidate_rows)
+    all_with_date = sum(1 for row in candidate_rows if row.get("trading_date"))
+    all_null = all_rows - all_with_date
+    selected = [
+        row
+        for row in candidate_rows
+        if str(row.get("instrument")) == instrument
+    ]
+    selected_with_date = sum(1 for row in selected if row.get("trading_date"))
+    global_ok = (
+        all_null == unmatched + conflicted and all_with_date == matched
+    )
+    selected_ok = (
+        len(selected) == selected_with_date + (len(selected) - selected_with_date)
+        and 0 < selected_with_date <= matched
+    )
+    return {
+        "global": {
+            "rows": all_rows,
+            "with_date": all_with_date,
+            "null_date": all_null,
+            "mapper_matched": matched,
+            "mapper_unmatched": unmatched,
+            "mapper_conflicted": conflicted,
+            "null_equals_unmatched_plus_conflicted": (
+                all_null == unmatched + conflicted
+            ),
+            "with_date_equals_matched": all_with_date == matched,
+        },
+        "selected_instrument": {
+            "instrument": instrument,
+            "rows": len(selected),
+            "with_date": selected_with_date,
+            "null_date": len(selected) - selected_with_date,
+            "subset_of_global_matched": 0 < selected_with_date <= matched,
+            "note": (
+                "selected-instrument view is a strict subset; global mapper "
+                "counts must never be compared against it"
+            ),
+        },
+        "pass": global_ok and selected_ok and all_rows > 0,
     }
 
 
@@ -486,7 +583,6 @@ def run_futures(config: dict[str, Any], frame: dict[str, Any]) -> dict[str, Any]
         DominantMapping,
     )
     from research_store.importers.normalize import normalize_rq_futures_row
-    from research_store.importers.sink import CountingSink
     from research_store.importers.store_sink import StoreSink, iter_candidates
 
     section = config["futures"]
@@ -880,23 +976,42 @@ def run_futures(config: dict[str, Any], frame: dict[str, Any]) -> dict[str, Any]
             and close_mismatches == 0,
         )
     )
+    # Date-transfer count reconciliation on IDENTICAL scopes: the mapper's
+    # counts are global across all instruments of the selected member, so
+    # they reconcile against ALL candidate rows; the assigned instrument's
+    # null-date subset is reported separately as a diagnostic.
+    date_reconciliation = reconcile_date_transfer_counts(
+        mapper_stats,
+        [entry["candidate"] for entry in contract_report["candidates"]],
+        instrument,
+    )
+    frame["date_transfer_reconciliation"] = date_reconciliation
     frame["assertions"].append(
         assertion(
-            "unmatched contract keys keep trading_date NULL (candidate, honest)",
-            mapper_stats.get("unmatched_keys"),
-            sum(
-                1
-                for entry in contract_report["candidates"]
-                if str(entry["candidate"].get("instrument")) == instrument
-                and entry["candidate"].get("trading_date") is None
-            ),
-            mapper_stats.get("unmatched_keys")
-            == sum(
-                1
-                for entry in contract_report["candidates"]
-                if str(entry["candidate"].get("instrument")) == instrument
-                and entry["candidate"].get("trading_date") is None
-            ),
+            "global unmatched keys equal all-instrument NULL-date candidates",
+            {
+                "null_date": date_reconciliation["global"]["mapper_unmatched"]
+                + date_reconciliation["global"]["mapper_conflicted"],
+                "with_date": date_reconciliation["global"]["mapper_matched"],
+            },
+            {
+                "null_date": date_reconciliation["global"]["null_date"],
+                "with_date": date_reconciliation["global"]["with_date"],
+            },
+            date_reconciliation["pass"],
+        )
+    )
+    frame["assertions"].append(
+        assertion(
+            "selected-instrument date-transfer diagnostic (strict subset view)",
+            {
+                "instrument": instrument,
+                "with_date_within_global_matched": True,
+                "rows_split_preserved": True,
+            },
+            date_reconciliation["selected_instrument"],
+            date_reconciliation["selected_instrument"]["subset_of_global_matched"]
+            and date_reconciliation["selected_instrument"]["rows"] > 0,
         )
     )
 
@@ -1841,12 +1956,25 @@ def run_env(config: dict[str, Any], frame: dict[str, Any]) -> dict[str, Any]:
         "never_reinitialized": True,
     }
     store.close()
+    # Interpreter identity: resolved against the registered runtime policy
+    # (projects.vnpy.python), never a loose executable-name substring.
+    policy_path = Path(
+        config.get("runtime_policy", "D:/repo/quant/runtime-policy.json")
+    )
+    policy_payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    matches, detail = interpreter_matches_policy(sys.executable, policy_payload)
+    frame["runtime_policy"] = {
+        "path": str(policy_path),
+        "sha256": sha256_file(policy_path),
+        **detail,
+        "actual_executable": sys.executable,
+    }
     frame["assertions"].append(
         assertion(
-            "runner runs inside the plugin .venv",
-            True,
-            sys.executable,
-            "venv" in sys.executable.lower(),
+            "interpreter matches registered runtime-policy projects.vnpy.python",
+            detail["resolved_expected"],
+            detail["resolved_actual"],
+            matches,
         )
     )
     return frame
@@ -1907,6 +2035,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--case", required=True, choices=CASES)
+    parser.add_argument(
+        "--evidence-name",
+        default=None,
+        help=(
+            "evidence file name without .json (default: the case name); use a "
+            "fresh name to avoid overwriting prior acceptance evidence"
+        ),
+    )
     args = parser.parse_args(argv)
 
     config, identity = load_config(args.config)
@@ -1932,16 +2068,16 @@ def main(argv: list[str] | None = None) -> int:
 
         frame["traceback"] = traceback.format_exc()
     frame = finish_case_frame(frame, started)
-    evidence_path = reports_dir / f"{args.case}.json"
+    evidence_path = reports_dir / f"{args.evidence_name or args.case}.json"
     write_json_atomic(evidence_path, frame)
     print(
         json.dumps(
             frame, indent=2, sort_keys=True, ensure_ascii=False, default=str
         )
     )
-    if frame["status"].startswith("FAIL_SOFTWARE"):
-        return 1
-    return 0
+    # Truthful exit: any non-PASS terminal status is nonzero, so a
+    # FAIL_ASSERTIONS run can never look successful to a caller.
+    return 0 if frame["status"] == "PASS" else 1
 
 
 if __name__ == "__main__":

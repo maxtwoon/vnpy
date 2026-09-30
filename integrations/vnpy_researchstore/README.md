@@ -4,9 +4,12 @@ Immutable research data store and VeighNa recorder for personal quant
 research: a pure storage core (`research_store`, no vnpy dependency), a
 read-only native bridge (`vnpy_researchstore`) that binds VeighNa consumers
 to one frozen snapshot, and a small CLI. One local plugin; no backend, no
-service. Status: **v0.1.0.dev1, development complete pending independent
-audit** — see VERIFICATION.md for exactly what is measured, pending, or
-unknown.
+service. Status: **v0.1.0.dev1, accepted for the agreed personal offline
+research scope**. Independent final audit: PASS; see
+`.coordination/claude-delivery04n-final/REVIEW.md` and
+`.coordination/completion-audit-20260930.json`. See VERIFICATION.md for
+measured scopes and remaining data limitations; live gateway recording
+remains LIVE_NOT_RUN.
 
 ## Install
 
@@ -48,13 +51,30 @@ import-idempotency cross-check — 16 checks, exit code 0/2):
 
 ```powershell
 cd D:\repo\vnpy\integrations\vnpy_researchstore
+# plugin-runtime command (historical 2026-09-17 evidence, plugin .venv):
 .venv\Scripts\python.exe tools\delivery_etf_loop.py --config D:\quant-data\configs\delivery_etf_loop.json
 ```
+
+The CURRENT 16/16 PASS claim (2026-09-30, 27.9 s) was produced on the
+REGISTERED vnpy-alpha runtime, not the plugin .venv. To reproduce on that
+route you need: the registered vnpy-alpha interpreter per
+`D:/repo/quant/runtime-policy.json` (`C:/Python314/python.exe
+D:/repo/quant/scripts/runtime.py run vnpy-alpha -- <args>`), the hash-pinned
+local dependency overlays recorded in
+`.coordination/etf-current-runtime-20260930` and
+`.coordination/runtime-alpha-20260930/copied-packages.json` +
+`copied-cta.json` plus the verified isolated portfolio plugin
+(`D:/repo/quant/.runtime/verification/warehouse-union-portfolio-20260928/plugin`),
+and process-local `PYTHONUTF8=1` / `PYTHONIOENCODING=utf-8` for child
+processes. The exact instance config and recorded run live at
+`.coordination/etf-current-runtime-20260930/utf8-run/` (config.json,
+result.json, exit 0). Runtimes are recorded separately and never equated.
 
 Bind: store `store-398306491d834f99`, snapshot `snap-030369f20bd18303`,
 datasets `ds-d939147fd6b633fd348fa62ed1fef74c` (1d) /
 `ds-b9bbad83ec09f4b9dcef6ea9a81c4b51` (1m), window 2016-01-18..21
-Asia/Shanghai. Machine evidence: `.coordination/delivery04f-dev/opencode-loop.rerun.stdout.json`.
+Asia/Shanghai. Machine evidence:
+`.coordination/etf-current-runtime-20260930/utf8-run/result.json`.
 
 ## Offline CTA/Portfolio bootstrap
 
@@ -89,12 +109,30 @@ in one shot.
 
 The recorder launcher (`vnpy-recorder`) and the journal CLI support offline
 admission, clean stop vs UNCLEAN_END, `recover-session`, committed-only
-`replay`, and idempotent `seal` into a canonical revision. Recording loops
-are covered by the scoped test suites; **no durable recorded session exists
-on the real store yet** (`D:/quant-data/journals` is empty), so no instance
-replay/seal config is shipped — fill `configs/recorder_replay.json` (repo
-template) from an ACTUAL session. No authorized live gateway capture has
-been run; `live_gateway_recording` stays `LIVE_NOT_RUN`.
+`replay`, and idempotent `seal` into a canonical revision. A durable
+SYNTHETIC engineering session exists on the real store
+(`sess-d7c9ad113b2e42f5`, CLOSED and sealed, 5 ticks + 2 bars, snapshot
+`snap-7914084cde1ff139` — explicitly not real market history):
+
+```powershell
+.venv\Scripts\python.exe -m research_store --root D:/quant-data replay --session-id sess-d7c9ad113b2e42f5
+.venv\Scripts\python.exe -m research_store --root D:/quant-data report --output D:\quant-data\reports\store-report.html
+```
+
+The public store report reads recording sessions read-only from the durable
+journals (journal authority): journal-only sessions are visible with their
+committed watermark and successor lineage, catalog-only rows are retained
+with their missing journal marked as an error, unreadable/partial journals
+are visible as errors, and live in-memory admission counters (accepted/
+backlog/rejected/errors) are rendered as explicit **UNKNOWN** when null
+(they stay `null` in the machine JSON — never inferred zero). Long cells
+wrap, so the tables stay inside the viewport.
+
+Known recording behavior: old key/value-formatted sessions remain replayable
+but cannot seal; repeated `recover-session` creates DISTINCT successors —
+run `inspect` first and use `--no-successor` for report-only repeats. No
+authorized live gateway capture has been run; `live_gateway_recording` stays
+`LIVE_NOT_RUN`.
 
 ## Configs: templates vs real instances
 
@@ -105,12 +143,13 @@ been run; `live_gateway_recording` stays `LIVE_NOT_RUN`.
 | `D:/quant-data/configs/smoke_snapshot.json` | real instance | verified freeze selections of `snap-030369f20bd18303` |
 | `D:/quant-data/configs/backtest_profile.json` | real instance | verified offline bootstrap binding (receipt `native_bootstrap_receipt-20260917T020446Z.json`) |
 | `D:/quant-data/configs/delivery_etf_loop.json` | real instance | verified 16-check consumer loop binding |
-| recorder replay/seal instance | — | intentionally absent: no real session ID exists yet |
+| `D:/quant-data/configs/recorder_replay.json` | real instance | durable SYNTHETIC session `sess-d7c9ad113b2e42f5` (replay/report reference; explicitly not market history) |
 
 Read-only validation of all instance configs:
 `.venv\Scripts\python.exe tools\delivery_finalize.py check-configs` — checks
-paths, store identity, snapshot manifests, dataset publication; missing
-future work is reported as `pending_items`, never invented.
+paths, store identity, snapshot manifests, dataset publication and recording
+journal presence; missing future work is reported as `pending_items`, never
+invented.
 
 ## Phase report
 
@@ -124,9 +163,14 @@ degrades the entry to `EVIDENCE_MISSING` instead of passing.
 
 * Expected market coverage is UNKNOWN everywhere: no calendar/listing
   evidence exists in scope; observed min/max dates never imply completeness.
-* SS (1/5/15m/SimNow8/MA), RQ futures END-label direction, recording
-  calendar/NULL semantics, and the recorder B1 launcher fix are owned by
-  in-flight tasks (04H/04L/04M/02IA/03D) — see VERIFICATION.md.
+* SS representative scope is the evidenced rb2605 windows only (1/5/15m
+  datasets separate; semantic-v2 supersedes numeric-turnover v1, which stays
+  immutable history); calendar, units and broader eligibility unknown. Both
+  public Alpha entrypoints on the postfix snapshot refuse at the earlier
+  unmapped-exchange identity check — no VWAP-specific exception is reached.
+* RQ futures: final real case PASS 14/14 (zero canonical publication); the
+  time-label direction remains UNKNOWN by design pending scoped time
+  evidence.
 * LIVE_NOT_RUN is a standing label, not a placeholder to be filled by
   connecting an account.
 

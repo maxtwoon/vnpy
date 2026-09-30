@@ -1,4 +1,4 @@
-"""Retention of journal files (WP09).
+"""Retention of journal files (WP09, revised recording02K).
 
 A journal file is eligible for deletion ONLY when ALL of the following hold:
 
@@ -8,12 +8,21 @@ A journal file is eligible for deletion ONLY when ALL of the following hold:
 2. Every seal recorded for the session is VERIFIED complete: the sealed
    batches are PUBLISHED in the catalog and their receipts match the durable
    seal record in the journal's own meta.
-3. At least 14 days have passed since the newest verified seal.
-4. No live owner holds the session lock.
+3. RAW COVERAGE (recording02K): the provably lossless seals together cover
+   EVERY committed journal event up to the current watermark. A seal proves
+   losslessness only through its durable record fields (``lossless`` true,
+   ``unknown_time_excluded == 0``, and an ``input_events`` count consistent
+   with its dense sequence range). A seal that EXCLUDED any committed event
+   (e.g. a missing event-time tick), or a legacy record without coverage
+   evidence, never counts toward coverage — the journal is then retained
+   (fail-closed). Partial ranges leave the uncovered tail journal-only and
+   refuse deletion.
+4. At least 14 days have passed since the newest verified seal.
+5. No live owner holds the session lock.
 
 A partially sealed range never permits deletion of the remaining events.
 CLOSED-without-seal is explicitly NOT eligible — no automatic deletion just
-because a session closed.
+because a session closed. There is no acknowledged-loss override.
 
 All paths are resolved and validated to live inside the intended store root
 before any cleanup; symlink/junction escapes are refused.
@@ -82,6 +91,57 @@ def _session_lock_held(store: Store, session_id: str) -> bool:
         return False
 
 
+def _committed_watermark(journal_path: Path) -> int:
+    """Current committed watermark of the journal (raw event authority)."""
+
+    conn = sqlite3.connect(str(journal_path), timeout=5.0, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT committed_seq FROM watermark").fetchone()
+        return int(row["committed_seq"]) if row is not None else 0
+    finally:
+        conn.close()
+
+
+def _lossless_coverage(seal_record: dict) -> tuple[int, int] | None:
+    """Range a seal PROVABLY covered losslessly, else ``None`` (fail-closed).
+
+    A durable seal record proves raw coverage only when it carries the
+    recording02K fields AND they are internally consistent:
+    ``lossless is True``, ``unknown_time_excluded == 0``, and
+    ``input_events`` equals the dense range span. Legacy records (pre-02K)
+    and exclusion-bearing records return ``None`` — they never acquire a
+    fabricated complete status. Bars are excluded from the judgment: they
+    are a derived representation, not the raw event copy.
+    """
+
+    if seal_record.get("lossless") is not True:
+        return None
+    try:
+        excluded = int(seal_record["unknown_time_excluded"])
+        start = int(seal_record["committed_seq_start"])
+        end = int(seal_record["committed_seq_end"])
+        input_events = int(seal_record["input_events"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if excluded != 0 or start < 1 or end < start:
+        return None
+    if input_events != end - start + 1:
+        return None
+    return start, end
+
+
+def _coverage_reach(ranges: list[tuple[int, int]]) -> int:
+    """Contiguous coverage reach from seq 1 over sorted lossless ranges."""
+
+    covered_to = 0
+    for start, end in sorted(ranges):
+        if start > covered_to + 1:
+            break  # gap between lossless seals
+        covered_to = max(covered_to, end)
+    return covered_to
+
+
 def _verified_seals(store: Store, session_id: str) -> tuple[list[dict], str | None]:
     """Seal records from the journal meta cross-checked against the catalog.
 
@@ -146,6 +206,39 @@ def evaluate_retention(store: Store, session_id: str) -> RetentionDecision:
             paths=(),
         )
     assert newest is not None
+
+    # recording02K raw-coverage gate (fail-closed): deletion requires that
+    # provably lossless seals cover EVERY committed journal event up to the
+    # current watermark. Exclusion-bearing seals (e.g. missing event-time
+    # ticks), legacy records without coverage evidence, and unsealed range
+    # tails all refuse — the journal is then the only copy of those events.
+    watermark = _committed_watermark(journal_path)
+    ranges = [
+        coverage
+        for coverage in (_lossless_coverage(seal) for seal in seals)
+        if coverage is not None
+    ]
+    covered_to = _coverage_reach(ranges)
+    if covered_to < watermark:
+        if not ranges:
+            reason = (
+                "no seal proves lossless raw coverage (legacy record without "
+                "coverage evidence, or recorded exclusions); journal deletion "
+                "refused"
+            )
+        else:
+            reason = (
+                f"lossless seals cover committed events only through seq "
+                f"{covered_to} of {watermark}; events {covered_to + 1}.."
+                f"{watermark} remain journal-only; deletion refused"
+            )
+        return RetentionDecision(
+            session_id=session_id,
+            eligible=False,
+            reason=reason,
+            paths=(),
+        )
+
     try:
         sealed_at = datetime.fromisoformat(newest)
     except ValueError:
@@ -175,7 +268,10 @@ def evaluate_retention(store: Store, session_id: str) -> RetentionDecision:
     return RetentionDecision(
         session_id=session_id,
         eligible=True,
-        reason=f"{len(seals)} verified seal(s); newest {age.days}d old",
+        reason=(
+            f"{len(seals)} verified lossless seal(s) cover all {watermark} "
+            f"committed events; newest {age.days}d old"
+        ),
         paths=paths,
         sealed_at=newest,
     )

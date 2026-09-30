@@ -675,6 +675,13 @@ def seal(store: Store, request: SealRequest) -> SealReceipt:
     )
 
     # Durable seal record in the journal's own meta (journal-owned file).
+    # recording02K: the record carries truthful RAW COVERAGE facts so
+    # retention can distinguish a lossless seal from one that excluded
+    # committed events (e.g. missing event time). ``lossless`` is true only
+    # when every committed event in the sealed range was published verbatim
+    # (``unknown_time_excluded == 0``); bars are a derived representation
+    # and never count toward raw coverage.
+    lossless = unknown_time_excluded == 0
     conn = _connect(journal_path)
     try:
         with conn:
@@ -688,6 +695,9 @@ def seal(store: Store, request: SealRequest) -> SealReceipt:
                 "asset_class": request.asset_class.value,
                 "volume_unit": request.volume_unit,
                 "turnover_unit": request.turnover_unit,
+                "input_events": plan.event_count,
+                "unknown_time_excluded": unknown_time_excluded,
+                "lossless": lossless,
                 "ticks": {
                     "batch_id": tick_receipt.batch_id,
                     "dataset_id": tick_receipt.dataset_id,
@@ -737,6 +747,8 @@ def seal(store: Store, request: SealRequest) -> SealReceipt:
         dataset_id=tick_receipt.dataset_id,
         input_events=plan.event_count,
         accepted_rows=tick_receipt.accepted_rows + bar_receipt.accepted_rows,
+        unknown_time_excluded=unknown_time_excluded,
+        lossless=lossless,
         detail=detail,
     )
 

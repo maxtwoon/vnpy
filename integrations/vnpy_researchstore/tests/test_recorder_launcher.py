@@ -3,16 +3,19 @@
 These exercise the SAME module shipped in the wheel (console script
 ``vnpy-recorder`` / ``python -m vnpy_researchstore``): bootstrap ordering,
 vnpy origin refusal, ``--status`` JSON snapshot, and the ``--stop``
-barrier-close flow INCLUDING the B1 failed-stop contract: a failed stop
-must NOT exit the process, NOT stop the event engine, and NOT close the
-parent — a retry against the SAME accepted cutoff stays possible until the
-journal durably reports committed==cutoff CLOSED; stdin EOF parks the
-launcher truthfully instead of hard-exiting.
+barrier-close flow INCLUDING the binding failed-stop contract: a failed
+stop must NOT exit the process, NOT stop the event engine, and NOT close
+the parent. Interactive input lines retry the SAME accepted cutoff; when
+stdin is unavailable (EOF), the launcher itself keeps issuing the same
+public retries in a visible, individually bounded series with backoff
+until the journal durably reports committed==cutoff CLOSED (production EOF
+retry — an earlier park-only generation was rejected because liveness is
+not a usable retry controller).
 
 All offline, simulated/test labelled, task-owned temp runtime dirs only;
-no gateway/account/network is touched. The subprocess test reclaims ONLY
-its own isolated child after the assertion deadline (test-only cleanup,
-never production behavior).
+no gateway/account/network is touched. The subprocess test uses an
+external deadline and reclaims ONLY its own isolated child (test-only
+cleanup, never production behavior).
 """
 
 from __future__ import annotations
@@ -279,17 +282,13 @@ def test_launcher_failed_stop_forbids_exit_and_retries_same_cutoff(
     assert watermark == closed_doc["accepted_seq"] == closed_doc["committed_seq"]
 
 
-def test_launcher_stdin_eof_parks_never_self_exits(
+def test_launcher_stdin_eof_runs_normal_stop_and_closes(
     tmp_path, launcher_store, _restore_cwd
 ) -> None:
-    """B1 subprocess regression: stdin EOF is NOT permission to hard-exit.
-
-    The launcher parks with the engine alive and the session OPEN; the
-    harness observes the no-self-exit via a bounded deadline and then
-    reclaims ONLY its own isolated child (test-only cleanup). Against the
-    rejected pre-fix generation (``os._exit(2)`` after EOF) this same
-    scenario self-exited quickly with code 2 — the before-fix behavior was
-    captured separately in an isolated harness repro.
+    """Subprocess regression: initial stdin EOF still requests the NORMAL
+    barrier stop through the original controller, and an empty session
+    closes on the first attempt — exit 0, journal durably CLOSED. External
+    deadline bounds the child; the harness reclaims only its own child.
     """
 
     work = tmp_path / "sub"
@@ -312,18 +311,133 @@ def test_launcher_stdin_eof_parks_never_self_exits(
         cwd=str(work),
         env=env,
     )
-    self_exited = False
     try:
         out, err = proc.communicate(timeout=SUBPROCESS_DEADLINE_S)
-        self_exited = True  # closed stdin means EOF immediately
-        detail = (out + err).decode("utf-8", "replace")
     except subprocess.TimeoutExpired:
         proc.kill()  # reclaim ONLY this harness-owned child
         out, err = proc.communicate()
-        detail = (out + err).decode("utf-8", "replace")
-    assert not self_exited, (
-        f"launcher self-exited on stdin EOF (B1 violation): {detail[-500:]}"
-    )
-    assert "parks" in detail, f"expected truthful park message, got: {detail[-500:]}"
-    sessions = list(launcher_store.path.journals.glob("sess-*.sqlite"))
-    assert sessions, "recording session must exist and stay as-is while parked"
+        pytest.fail(
+            "launcher did not complete the normal stop after EOF within "
+            f"{SUBPROCESS_DEADLINE_S}s: "
+            f"{(out + err).decode('utf-8', 'replace')[-500:]}"
+        )
+    detail = (out + err).decode("utf-8", "replace")
+    assert proc.returncode == 0, detail[-500:]
+    assert '"result": "CLOSED"' in detail
+    assert "running the normal stop-barrier close" in detail
+    journals = launcher_store.path.journals
+    session_ids = [p.stem for p in journals.glob("sess-*.sqlite")]
+    assert len(session_ids) == 1, session_ids
+    import sqlite3
+
+    conn = sqlite3.connect(str(journals / f"{session_ids[0]}.sqlite"))
+    try:
+        state = conn.execute(
+            "SELECT value FROM session_meta WHERE key='state'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert state == "CLOSED"
+
+
+def test_launcher_eof_failed_stop_auto_retries_same_cutoff_closed(
+    tmp_path, launcher_store, capsys, monkeypatch, _restore_cwd
+) -> None:
+    """Bounded production EOF retry regression (actual controller).
+
+    stdin is unavailable from the start (EOF everywhere); the FIRST barrier
+    stop is forced to fail by a temporarily unavailable writer condition;
+    once that condition recovers, the launcher's OWN visible retry series —
+    through the original engine barrier and the journal's public
+    ``retry_close`` against the SAME accepted cutoff — must reach CLOSED
+    with the normal parent close. No os._exit, no engine stop, and no
+    parent close before CLOSED, and no test-only wake event anywhere.
+    """
+
+    from vnpy.event import EventEngine
+    from vnpy.trader.engine import MainEngine
+    from research_store.journal import JournalSession
+
+    config = _write_config(tmp_path, launcher_store.root)
+    original_close = JournalSession.close_at_cutoff
+    original_retry = JournalSession.retry_close
+    calls: list[str] = []
+    close_attempts = {"n": 0}
+
+    def flaky_close(self, *, timeout=10.0):  # noqa: ANN001, ANN202
+        close_attempts["n"] += 1
+        calls.append(f"close_attempt:{close_attempts['n']}")
+        if close_attempts["n"] == 1:
+            # Writer condition temporarily unavailable: bounded failure.
+            return original_close(self, timeout=0.001)
+        return original_close(self, timeout=timeout)
+
+    def tracked_retry(self, *, timeout=10.0):  # noqa: ANN001, ANN202
+        calls.append("retry_close")
+        return original_retry(self, timeout=timeout)
+
+    def forbidden_os_exit(code):  # noqa: ANN001
+        calls.append("os._exit")
+        raise AssertionError(
+            f"forbidden os._exit({code}) on a failed stop (B1 violation)"
+        )
+
+    real_engine_stop = EventEngine.stop
+
+    def tracked_engine_stop(self):  # noqa: ANN001
+        calls.append("engine_stop")
+        return real_engine_stop(self)
+
+    real_parent_close = MainEngine.close
+
+    def tracked_parent_close(self):  # noqa: ANN001
+        calls.append("parent_close")
+        return real_parent_close(self)
+
+    monkeypatch.setattr(JournalSession, "close_at_cutoff", flaky_close)
+    monkeypatch.setattr(JournalSession, "retry_close", tracked_retry)
+    monkeypatch.setattr(os, "_exit", forbidden_os_exit)
+    monkeypatch.setattr(EventEngine, "stop", tracked_engine_stop)
+    monkeypatch.setattr(MainEngine, "close", tracked_parent_close)
+
+    def always_eof(*_args):  # noqa: ANN002 — closed stdin for every prompt
+        raise EOFError
+
+    monkeypatch.setattr(builtins, "input", always_eof)
+    code = main(["--config", str(config), "--stop"])
+    monkeypatch.undo()
+
+    # Exact ordering: the bounded failed stop, the launcher's own automatic
+    # retry against the SAME cutoff, and only then parent close + engine
+    # stop inside the successful close. No os._exit anywhere.
+    assert calls == [
+        "close_attempt:1",
+        "retry_close",
+        "parent_close",
+        "engine_stop",
+    ], calls
+    assert code == 0
+    docs = [
+        d for d in _json_docs(capsys.readouterr().out) if "result" in d
+    ]
+    assert [d["result"] for d in docs] == ["STOP_FAILED", "CLOSED"]
+    closed = docs[-1]
+    assert closed["accepted_seq"] == closed["committed_seq"]
+
+    journals = launcher_store.path.journals
+    session_ids = [p.stem for p in journals.glob("sess-*.sqlite")]
+    assert len(session_ids) == 1, session_ids
+    import sqlite3
+
+    conn = sqlite3.connect(str(journals / f"{session_ids[0]}.sqlite"))
+    try:
+        state = conn.execute(
+            "SELECT value FROM session_meta WHERE key='state'"
+        ).fetchone()[0]
+        watermark = conn.execute(
+            "SELECT committed_seq FROM watermark"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert state == "CLOSED"
+    assert watermark == closed["accepted_seq"]
