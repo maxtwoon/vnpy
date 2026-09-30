@@ -3,7 +3,7 @@ task: AGENT-20260922 - approved workspace entrypoints and snapshot provenance
 version: 4.4.0
 stage: dev
 owner: codex
-updated: 2026-09-22
+updated: 2026-09-30
 deliverables:
   - HANDOFF.md
   - integrations/vnpy_datasource/README.md
@@ -15,6 +15,86 @@ blockers: []
 ---
 
 ## Current workspace integration
+
+### 2026-09-30 unfinished-work continuation
+
+User objective: finish remaining items. Current-state verification takes priority
+over the historical September 17 status tables. No gateway/account operation or
+remote publication is included.
+
+- DataSource: full current suite 101 passed; root sync check passed. Fixed
+  snapshot `20260920T173637Z-c6cc6b2e` CTA example replayed all 659 daily bars
+  with 47 simulated trades; source/runtime hashes stayed unchanged. Artifacts:
+  `integrations/vnpy_datasource/output/closeout-20260930-cta/`.
+- Example cleanup now covers early return and exceptions; datasource Ruff
+  passes after correcting two existing test statement separators.
+- ResearchStore capture04H has a terminal recovery-validation handoff; old
+  tables saying it is still running are stale. Historical completion timestamp
+  of the original capture remains unknown.
+- Actual recording02J review originally terminated with scoped FAIL: excluded
+  unknown-time events could be lost during retention. The September 30 actual
+  OpenCode02K correction now persists lossless coverage and refuses deletion
+  for exclusions, legacy evidence and uncovered ranges. Developer verification
+  passed 40 tests and the unchanged original repro; actual Claude recheck is
+  scoped PASS with no source drift (`REVIEW_RETENTION_20260930.md`). Developer
+  tests used registered vnpy 3.14; reviewer reported legacy plugin/Studio checks.
+  Packaging and whole-project acceptance remain separate and pending.
+- Futures04L checkpoint is TERMINAL_QUOTA_PARTIAL_NOT_ACCEPTED, not running:
+  public contract import failed, and the representative runner returned zero
+  despite failed assertions. SS04M, installed recorder lifecycle, and final
+  report/instance configuration checks remain required.
+- ResearchStore's original actual-OpenCode/Kimi development and Claude review
+  role restriction was found; user clarification about direct Codex development
+  is pending. Original actual OpenCode sessions have now been resumed for
+  bounded retention02K, futures04L and recorder03D fixes on disjoint files;
+  no direct Codex ResearchStore product edits. Live handles and evidence are
+  in `integrations/vnpy_researchstore/.coordination/closeout-20260930.json`.
+- Current registered-vnpy full ResearchStore suite: 408 passed, 27 failed
+  (215.48s). Alpha failures reproduce missing `alphalens`; the separate
+  vnpy-alpha environment lacks `duckdb` and the Store package. No environments
+  were merged or shared dependencies installed. Native bootstrap failures need
+  separate dependency/runtime disposition. This baseline preceded the
+  September 30 recording corrections; it is not final corrected-source evidence.
+- Isolated environment disposition now passes: 16 Alpha tests and 7 affected
+  mixed tests under vnpy-alpha with only locally copied duckdb/zstandard;
+  8 bootstrap/overview tests under vnpy with the previously isolated portfolio
+  plugin. Package copies have hash manifests; shared environments unchanged.
+- Actual current-runtime ETF loop now passes all 16 checks for the SAME real
+  `snap-030369f20bd18303`: core, Database, both Alpha methods and offline
+  CTA/Portfolio bootstrap. Registered vnpy-alpha used only hash-pinned local
+  duckdb/zstandard/CTA/portfolio overlays, with no shared install. Evidence:
+  `.coordination/etf-current-runtime-20260930/utf8-run/result.json` (27.927s).
+  First attempt failed on child GBK/parent UTF8 decoding; process-local
+  PYTHONUTF8/PYTHONIOENCODING fixed the execution environment, not source data.
+  This is consumer/data-identity verification, not strategy performance.
+- Combined Ruff: datasource clean after the two statement-separator fixes;
+  ResearchStore has one existing unused `CountingSink` import in
+  `tools/delivery_representatives.py:489`.
+- Chan offline consumer integration implemented in `examples/czsc_shadow/`,
+  reusing the active project's VnpyShadowAdapter/public TimingEngine. Seven
+  meaningful synthetic engineering tests pass, including nonempty decision
+  replay identity, input rejection and output protection. Actual CLI with the
+  default 20,000-bar warmup accepts 35 synthetic bars and truthfully reports
+  warming_up/zero decisions; artifacts at
+  `D:/repo/quant/.runtime/verification/vnpy-czsc-shadow-20260930/`.
+  This is an offline consumer, not continuous live shadow or strategy efficacy.
+  No directional/trading authorization is inferred. Git delivery remains open;
+  no commit/push is claimed.
+- Recorder03D developer exited 0 with 7 launcher and 38 related tests, scoped
+  Ruff/mypy and CLI status smoke. Actual independent Claude review passed the
+  bounded EOF/retry fix, with fresh 7+38 tests and unchanged source hashes;
+  `.coordination/REVIEW_RECORDER_20260930.md` preserves its result. Installed
+  package lifecycle acceptance remains separate and pending.
+  Retention02K initial attempt and futures04L encountered request-rate limits;
+  partial retention code initially still failed the original repro. Retention
+  developer then completed successfully; futures04L has now resumed alone.
+
+Reuse: existing warehouse reader, immutable Store, native DB bridge, CTA engine
+and CZSC public APIs are the implementation base. QROS `knowledge list
+--component vnpy --json` returned no records. Gaps are final integration and
+the named lifecycle defects; use bounded adapters and targeted regression/real
+offline lifecycle checks, not a new engine or governance framework. No reusable
+knowledge is published before the remaining checks finish.
 
 The user explicitly requested implementation of the approved workspace plan.
 Implementation and local verification are recorded in

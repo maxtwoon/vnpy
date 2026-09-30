@@ -24,7 +24,9 @@ The directory was removed from the working tree on 2026-09-21; the archive notic
 historical files remain in git history (commit `35dfca4b2`).
 The active Chan-theory timing project is `D:\repo\czsc-timing-engine`.
 Use that project's current instructions and signal semantics for future timing
-research; its integration with VeighNa has not yet been implemented.
+research. The research-only offline consumer is `examples/czsc_shadow/`; it
+reuses the active project's adapter and public engine. Continuous live shadow
+and trading integration have not been implemented or qualified.
 References to the local Chan example below describe the archived workspace.
 
 ## Local dataSource integration (2026-09-16)
