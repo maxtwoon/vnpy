@@ -1,0 +1,54 @@
+{
+  "adapter": "rq_etf/0.1",
+  "source_root": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_etf_lof_daily_minute_20110802_20260731",
+  "asset": {
+    "origin": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_etf_lof_daily_minute_20110802_20260731",
+    "format": "tar_zst_csv",
+    "note": "formal import hashes each archive via sha256 sidecars before reading"
+  },
+  "repair_index": {
+    "package_dir": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_etf_lof_daily_minute_20110802_20260731",
+    "audit_csv": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_etf_lof_daily_minute_20110802_20260731/RQDataC_customer_feedback_supplement_20260912/01_etf_lof/source_refetch_audit.csv",
+    "rule": "load BEFORE base archives; 133 repaired keys already inside rebuilt 2016/17/18 bases; disputed refetch keys flagged not resolved"
+  },
+  "semantic": {
+    "source_id": "rqdatac",
+    "asset_class": "etf",
+    "record_kind": "bars",
+    "adjustment": "none",
+    "timezone": "Asia/Shanghai",
+    "source_time_label": "end",
+    "volume_unit": "share",
+    "turnover_unit": "CNY",
+    "origin_method": "source"
+  },
+  "frequencies": ["1m", "1d"],
+  "batches": [
+    {"frequency": "1d", "years": [2011, 2012, 2013], "partitions_by": "year"},
+    {"frequency": "1m", "years": [2011, 2012, 2013], "partitions_by": "year"},
+    {"frequency": "1d", "years": [2014, 2015, 2016, 2017, 2018, 2019], "partitions_by": "year"},
+    {"frequency": "1m", "years": [2014, 2015, 2016, 2017, 2018, 2019], "partitions_by": "year"},
+    {"frequency": "1d", "years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "partitions_by": "year"},
+    {"frequency": "1m", "years": [2020, 2021, 2022, 2023, 2024, 2025, 2026], "partitions_by": "year"}
+  ],
+  "smoke": {
+    "frequency": "1m",
+    "years": [2016],
+    "instruments": ["510300.XSHG", "159915.XSHE"],
+    "note": "first runnable loop before full-market incremental runs"
+  },
+  "increment_overlay": {
+    "archives": [
+      "daily_increment_latest__rqdatac_etf_lof_1d_2026.tar.zst",
+      "daily_increment_latest__rqdatac_etf_lof_1m_2026.tar.zst"
+    ],
+    "manifest": "daily_increment_latest_manifest.json",
+    "coverage": "2026-09-09..2026-09-11",
+    "treatment": "separate asset + explicit merge/conflict checks; August 2026 gap unresolved and stays visible"
+  },
+  "known_issues": [
+    "133 deterministic repairs already inside rebuilt 2016/17/18 base archives",
+    "118 repaired keys differ from upstream refetch (disputed; excluded from default backtests with visible gaps)",
+    "latest sample Sep 9-11 vs base through Jul 31; August gap unresolved"
+  ]
+}

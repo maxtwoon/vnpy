@@ -1,0 +1,13 @@
+# Coordinator disposition — consumers03
+
+Actual Claude sessiona0d3f24c-cb85-45a4-bd67-125c7fe31d89 completed exit0. Exact report: CONSUMERS_AUDIT_03.md. Bounded verdict PARTIAL, one HIGH finding accepted. Fourteen focused consumer tests passed; real3x10 Client evidence was inspected/reused, not independently rerun. Do not expand that into final delivery acceptance.
+
+Accepted finding: repaired/disputed rows are reported excluded, yet public freeze/read/export/backtest paths return them. Actual reproduction publishes3rows, report says2excluded/1qualified, then default snapshot reader returnsall3 with no gap/refusal. This violates the approved mandatory rule, regardless of the source-level counting being correct.
+
+The report's option to merely reword documentation/defer enforcement is NOT an acceptable closure for this task. The approved plan and COORDINATOR_IMPORT_REQUIREMENTS require actual default exclusion/refusal through the store/snapshot/consumer path. An optional qualified-only mode leaving default backtest reads permissive is also insufficient. This is completing an existing requirement, not adding a new qualification service/framework.
+
+The next single actual developer receives explicit cross-boundary ownership for the minimum complete fix (core reader/snapshot/quality integration plus affected native/CLI/export callers if necessary). All previous product owners are terminal. Preserve observational source/candidate records, hashes and old snapshots; do not delete or overwrite raw data. Default qualified reads must not return any of the133 repaired keys; an explicit accepted gap must leave the excluded row absent. Any observational override must be explicit and cannot silently enter native qualified backtests. Do not globally exclude unrelated clean rows or silently fill gaps.
+
+Use the actual reviewer reproduction and meaningful public-path checks, including a deterministic repair equal to its upstream candidate and a disputed repair. Prove counts/gaps and candidate provenance agree with actual read behavior, Database and both Alpha paths, CLI export/readback, explicit known-gap handling and immutable snapshot semantics. Reuse prior core/native evidence for untouched behavior; actual Claude performs one focused closure review after the fix.
+
+Full historical import is not a new gate. Representative real SS capture/import and other WP10 loops remain required and separately pending. The handoff's reference to an SSQuant contract_1m_none_trading_date_sidecar START/END conflict is a source-label mix-up: that sidecar belongs to the located RQ futures package; preserve the exact source attribution in final documentation.

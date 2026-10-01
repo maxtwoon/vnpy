@@ -1,0 +1,11 @@
+## Bounded diagnosis result — CAPTURE_DIAG_04G
+
+**Observed stage (evidence-based):** The task-owned process chain (kimi.exe 78924 → bash 83728/70852/78284 → python 84224/83664) **does not exist** in the current process table. I queried `Win32_Process` for those exact PIDs (zero matches) and separately enumerated all `kimi*`, `python*`, `bash*` processes system-wide — no `kimi.exe`, no `delivery_inventory_capture.py` worker, and none of the cited PIDs are present under any name. Only unrelated pre-existing processes (veighna_station, an old baostock REPL, my own diagnostic shells) are running.
+
+**Target file state:** `kline_data_capture_20260916T164711Z.db` is still 10,224,500,736 bytes, `-shm` 32768 bytes, `-wal` 0 bytes. `LastWriteTime` = 2026-09-17 00:57:06; current time at check = 01:44:21 → **47 minutes with zero byte/mtime change**. A non-exclusive read-open succeeded (`FileShare.ReadWrite`), consistent with no active writer holding the file, though this alone doesn't prove SQLite consistency. No receipt file exists anywhere under the captures directory.
+
+**Conclusion:** Not "slow but progressing" — the worker chain has **exited/terminated** (crashed, finished, or was stopped) with no successful receipt. This is stronger and more actionable than the task's framing of a possibly-stalled live process. Whether the resulting file is a valid, complete, checkpointed capture is **UNKNOWN** — no quick_check/hash was run (per scope) and size alone doesn't prove consistency, especially with no clean receipt and an unresolved 0-byte WAL/32768-byte SHM pairing.
+
+**Minimum developer action:** Since no process is running, there is nothing live to avoid disturbing. Next step for whoever has scope: inspect stderr/exit logs for the actual Kimi04A session (not found under `.coordination` by that name — likely logged elsewhere or lost with the process) to learn why it exited, then decide whether to run a single official verification (checksum/quick_check) before trusting or discarding this file — do not assume success from size alone.
+
+No product/store/source/Git/memory files were touched; only read-only `Get-CimInstance`/file-stat/non-exclusive-open probes were run, and only my own short-lived diagnostic child processes existed. Temp scripts left at `.coordination/review-capture04g/` as requested.

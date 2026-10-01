@@ -1,0 +1,9 @@
+{
+  "_comment": "REPOSITORY TEMPLATE - generic snapshot freeze request for research_store. Copy to an instance location and replace every REPLACE_ME with real dataset/partition values discovered from actual import receipts ('inspect' command or receipts' publish.partitions). selections are [dataset_id, partition] pairs and are partition-wide (never date/instrument filters). Do not add blanket allow_known_gaps; known gaps need explicit scoped entries with reasons.",
+  "selections": [
+    ["ds-REPLACE_ME_DATASET_HASH", "REPLACE_ME_PARTITION"],
+    ["ds-REPLACE_ME_DATASET_HASH", "REPLACE_ME_PARTITION"]
+  ],
+  "required_fields": ["open", "high", "low", "close", "volume", "turnover"],
+  "allow_known_gaps": []
+}

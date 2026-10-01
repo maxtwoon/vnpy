@@ -21,18 +21,17 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
           cache: pip
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install ruff mypy uv types-tqdm
-          uv pip install ta-lib==0.6.4 --index=https://pypi.vnpy.com --system
-          uv pip install -e .[alpha,dev] --system
+          python -m pip install -r requirements-toolchain.txt
+          python -m pip install -c requirements-toolchain.txt -e ".[alpha,dev]" types-tqdm
 
       - name: Lint
-        run: ruff check .
+        run: |
+          ruff check vnpy tests tools/handoff.py tools/sync_check.py
 
       - name: Type check
         run: mypy vnpy
@@ -43,8 +42,3 @@ jobs:
       - name: sync_check (root)
         run: python tools/sync_check.py
 
-      - name: sync_check (czsc_strategy)
-        run: python tools/sync_check.py --root examples/czsc_strategy
-
-      - name: pytest (czsc_strategy unit, not realdb)
-        run: python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"

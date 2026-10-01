@@ -1,0 +1,37 @@
+schema_version = "1.0"
+
+[engine]
+engine_id = "vnpy-cffex-shadow"
+base_freq = "1分钟"
+trigger_freq = "5分钟"
+setup_freq = "30分钟"
+regime_freq = "日线"
+closed_only = true
+decision_clock = "TRIGGER_BAR_CLOSE"
+execution_lag = "NEXT_TRADABLE_BAR"
+
+[runtime]
+warmup_1m_bars = 20000
+max_count = 3000
+max_bi_num = 50
+reject_duplicates = true
+reject_out_of_order = true
+gap_policy = "degrade"
+
+[market]
+profile_id = "cffex_index_futures"
+default_session_profile_id = "cffex_index_futures"
+market_id = "futures"
+timezone = "Asia/Shanghai"
+czsc_market = "期货"
+allow_short = true
+stale_after_seconds = 180
+
+[policy]
+policy_id = "passthrough"
+policy_version = "1.0"
+
+[output]
+emit_native_signals = true
+emit_project_signals = true
+write_health_events = true

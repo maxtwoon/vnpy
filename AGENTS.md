@@ -1,5 +1,46 @@
 # AGENTS.md — VeighNa Quantitative Trading Framework
 
+## Unified research runtime (2026-09-21)
+
+AlphaLab and CPU factor/model research use the separate `vnpy-alpha` route in
+`D:/repo/quant/runtime-policy.json`, also Python 3.14.7. Do not mix its
+empyrical/peewee dependencies with the `vnpy` SQLite/integration environment.
+Run via `C:/Python314/python.exe D:/repo/quant/scripts/runtime.py run vnpy-alpha -- <args>`.
+
+Research core and local dataSource/researchstore integrations now use the Python
+3.14.7 environment declared in `D:/repo/quant/runtime-policy.json` (`projects.vnpy.python`).
+Use `C:/Python314/python.exe D:/repo/quant/scripts/runtime.py run vnpy -- <args>`.
+The vendor Studio Python 3.13.8 installation remains available for broker gateways;
+its full gateway ecosystem has not been qualified on 3.14. Historical Studio test
+instructions below describe that compatibility environment. See
+`D:/repo/quant/RUNTIMES.md` for current validation and known exceptions.
+
+## Current local research decision (2026-09-15)
+
+The user has archived `examples/czsc_strategy` in place. Its source, evidence,
+tests, and existing CI/sync paths are retained for historical compatibility.
+Do not treat its historical HANDOFF items or launch instructions as current work.
+The directory was removed from the working tree on 2026-09-21; the archive notice and all
+historical files remain in git history (commit `35dfca4b2`).
+The active Chan-theory timing project is `D:\repo\czsc-timing-engine`.
+Use that project's current instructions and signal semantics for future timing
+research. The research-only offline consumer is `examples/czsc_shadow/`; it
+reuses the active project's adapter and public engine. Continuous live shadow
+and trading integration have not been implemented or qualified.
+References to the local Chan example below describe the archived workspace.
+
+## Local dataSource integration (2026-09-16)
+
+`integrations/vnpy_datasource/` is a separate editable plugin installed in
+`D:\veighna_studio\python.exe`. It reads `D:\repo\dataSource` through that
+project's current ledger and `registry/ds.py run` runtime. See its README and
+VERIFICATION.md before changing provider mappings, units, or time semantics.
+Do not merge provider dependencies into vnpy core or edit the dataSource ledger
+from this consumer. Credentials stay in the dataSource root `.env`.
+Chinese Yahoo minute bars currently fail real quality checks and are explicitly
+unsupported; Tencent intraday points are not OHLCV. Provider-level verified
+status must not bypass those capability-specific restrictions.
+
 > This file is written for AI coding agents who need to understand and work on the VeighNa (`vnpy`) codebase. The project user-facing documentation (`README.md`, `docs/`, `CHANGELOG.md`) is primarily in Chinese, but code comments, docstrings, and symbol names are in English. This document is therefore written in English.
 
 ---
@@ -33,9 +74,9 @@ The core framework lives in the `vnpy/` package. Trading interfaces (gateways), 
 
 The current working tree also contains local research/audit artifacts that are **not** part of the upstream `vnpy` core:
 
-* `examples/czsc_strategy/` — Chan-theory (`缠论`) strategy workspace with `chan_strategy/`, `diagnostics/`, `skill_build/`, and `tests/`.
+* `examples/czsc_strategy/` — removed from the working tree on 2026-09-21 (full history in git, commit `35dfca4b2`). Current timing research uses `D:\repo\czsc-timing-engine`.
 * `docs/chanlunnew/` — Local documentation and audit pack for the Chan-theory strategy (has its own `AGENTS.md`).
-* Extra top-level files: `analyze_db.py`, `cosmic-ray.signals.toml`, `cosmic-ray.sqlite`, `extract_strategy.py`, `state_machine_strategy.py`, `run_state_machine_backtest.py`, `run_backtest.bat`, `.coveragerc`, `pytest.ini`.
+* Extra top-level files: `analyze_db.py`, `extract_strategy.py`, `state_machine_strategy.py`, `run_state_machine_backtest.py`, `run_backtest.bat`, `pytest.ini`.
 
 These additions influence the current test/coverage configuration (see [Testing Strategy](#testing-strategy)) but are separate from the core framework.
 
@@ -45,10 +86,8 @@ These additions influence the current test/coverage configuration (see [Testing 
 
 | File | Purpose |
 | ---- | ------- |
-| `pyproject.toml` | Project metadata, dependencies, optional extras (`alpha`, `dev`), Hatchling build config, Ruff lint rules, mypy strict-mode config, mutmut config. |
+| `pyproject.toml` | Project metadata, dependencies, optional extras (`alpha`, `dev`), Hatchling build config, Ruff lint rules, mypy strict-mode config. |
 | `pytest.ini` | pytest markers (`realdb`, `slow`) and deprecation warning filters. |
-| `.coveragerc` | Coverage scope for the local Chan example (`examples/czsc_strategy/chan_strategy`). |
-| `cosmic-ray.signals.toml` | Mutation-testing config targeting `examples/czsc_strategy/chan_strategy/signals.py`. |
 | `.github/workflows/pythonapp.yml` | CI workflow: lint, type check, build on Windows. |
 | `.github/dependabot.yml` | Weekly pip and GitHub Actions dependency updates targeting `dev`. |
 | `docs/conf.py` | Sphinx documentation config (alabaster theme, recommonmark, autodoc). |
@@ -199,7 +238,6 @@ Example launchers are in `examples/`:
 * `examples/no_ui/` — Headless / server-style usage.
 * `examples/client_server/` / `examples/simple_rpc/` — RPC demos.
 * `examples/data_recorder/` — Data recorder script.
-* `examples/czsc_strategy/` — Local Chan-theory strategy research workspace.
 
 ---
 
@@ -308,15 +346,10 @@ Tests are written with **pytest**.
 | `tests/test_alpha101.py` | Validates Alpha 101 factor expressions via `calculate_by_expression` on a synthetic Polars DataFrame. |
 | `tests/alpha/test_dataproxy.py` | Tests `DataProxy` arithmetic, comparison, and unary operators. |
 
-### Local Chan example tests (`examples/czsc_strategy/tests/`)
+### Local integration tests (`integrations/vnpy_datasource/tests/`)
 
-A larger local test suite for the Chan-theory CZSC strategy, organized into:
-
-* `unit/` — core unit tests
-* `integration/` — integration tests
-* `performance/` — performance smoke tests
-
-Representative areas include signal classification, buy/sell paths, position accounting, data adapter, daily filter / no-lookahead checks, regression tests, state machine replay, and 中枢 (zhongshu) construction.
+The dataSource bridge (local warehouse reader, online providers, storage) has its own
+pytest suite; run it with the Studio interpreter from `integrations/vnpy_datasource`.
 
 ### Running tests
 
@@ -326,9 +359,6 @@ pytest
 
 # Run a specific core test file
 pytest tests/test_alpha101.py
-
-# Run Chan example unit tests (used by mutation testing)
-pytest examples/czsc_strategy/tests/unit -q
 
 # Skip tests that require a local historical database
 pytest -m "not realdb"
@@ -342,16 +372,10 @@ pytest -m "not slow"
 * `realdb` — requires a local historical SQLite database.
 * `slow` — long-running tests.
 
-### Mutation testing
+### Mutation testing and coverage
 
-Mutation testing is configured for the local Chan example:
-
-* `pyproject.toml` `[tool.mutmut]` — targets `examples/czsc_strategy/chan_strategy` with tests in `examples/czsc_strategy/tests/unit`.
-* `cosmic-ray.signals.toml` — targets `examples/czsc_strategy/chan_strategy/signals.py`.
-
-### Coverage
-
-`.coveragerc` is scoped to `examples/czsc_strategy/chan_strategy` with branch coverage enabled. Core `vnpy` coverage is not currently configured.
+The mutmut / cosmic-ray / `.coveragerc` configuration that targeted the removed Chan example
+was deleted on 2026-09-21. Core `vnpy` coverage and mutation testing are not currently configured.
 
 ### CI
 
@@ -365,10 +389,8 @@ Mutation testing is configured for the local Chan example:
 6. `mypy vnpy`
 7. `uv build`
 8. `python tools/sync_check.py`
-9. `python tools/sync_check.py --root examples/czsc_strategy`
-10. `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`
 
-The workflow now runs the czsc_strategy unit-test suite and both sync_check gates in CI.
+The czsc_strategy lint / sync_check / pytest steps were removed with that directory on 2026-09-21.
 
 ---
 
@@ -455,9 +477,6 @@ mypy vnpy
 # Tests
 pytest
 
-# Chan example unit tests
-pytest examples/czsc_strategy/tests/unit -q
-
 # Editable install with all optional deps
 pip install -e ".[alpha,dev]"
 
@@ -477,7 +496,7 @@ python run.py
 * **Keep changes minimal**: VeighNa values stability. Prefer small, focused PRs over large refactors.
 * **Docstrings in English, user text translatable**: New public APIs need English docstrings; UI strings should use `_("...")` for i18n.
 * **Type hints are mandatory**: mypy strict mode is enforced in CI; untyped code will fail the build.
-* **Separate local additions from core changes**: Files such as `examples/czsc_strategy/`, `docs/chanlunnew/`, and the associated coverage/mutation configs are local workspace artifacts. Be careful not to break them, but also do not treat them as upstream `vnpy` core when reasoning about framework behavior.
+* **Separate local additions from core changes**: Files such as `integrations/`, `docs/chanlunnew/` and the top-level research scripts are local workspace artifacts. Be careful not to break them, but also do not treat them as upstream `vnpy` core when reasoning about framework behavior.
 
 ## sync-guardian workflow
 
@@ -488,15 +507,13 @@ This repository uses a root-level `HANDOFF.md` and `.synccheck.yml` to track mul
 * Run `python tools/sync_check.py` before handing work off so version, docs, and handoff state stay aligned
 * Treat `HANDOFF.md` as the single source of truth for cross-agent state
 * Use `tools/handoff.py` for routine stage transitions instead of editing `HANDOFF.md` by hand
-* `project_version_freshness` in `.synccheck.yml` (A60) guards the
-  `examples/czsc_strategy/VERSION`/`CHANGELOG.md` pair: any commit that changes a
-  top-level key in `chan_strategy/config.py`'s `STRATEGY_CONFIG`/`BACKTEST_CONFIG`
-  must also touch `VERSION` or `CHANGELOG.md`. The gate only inspects commits
-  after the block was introduced, so older changes are not retroactively punished.
-* `diagnostics_banner_check` in `.synccheck.yml` (A54) enforces that every
-  `diagnostics/*.md` report carries the `RESEARCH-ONLY / NOT PROMOTION EVIDENCE`
-  banner. Exemptions (including `audit_issue_diagnostics_*.md` and the
-  `diagnostics/archive/` directory) are declared in `.synccheck.yml` via `skip`
-  glob patterns and `exempt_dirs`. Use
-  `examples/czsc_strategy/diagnostics/declassify_historical_reports.py` to
-  backfill missing banners.
+* The `project_version_freshness` (A60) and `diagnostics_banner_check` (A54) gates in
+  `.synccheck.yml` only ever targeted `examples/czsc_strategy`; both blocks were removed
+  with that directory on 2026-09-21. `tools/sync_check.py` still supports them if a
+  future project needs the same guards.
+
+## 跨项目架构与知识复用
+
+开发前阅读 [统一架构](D:/repo/quant/ARCHITECTURE.md) 和 [vnpy 能力指南](D:/repo/quant/docs/frameworks/vnpy.md)，再按当前任务查询 QROS knowledge（组件/关键词；必要时跨项目）。按 [复用说明](D:/repo/quant/docs/templates/strategy-reuse.md) 在现有任务设计或交接中记录已有能力、缺口及验证方式；新增基础组件须比较已有实现。
+
+收尾仅对可复用经验拟定知识草稿，引用真实证据与适用条件；无合格证据保持 unverified。发布另建 verified 记录，历史不改写。版本或数据契约变化后只读查询适用性；unknown/needs_review/conflict 不能当作当前有效结论。自动提案不等于保存、研究执行或交易授权。

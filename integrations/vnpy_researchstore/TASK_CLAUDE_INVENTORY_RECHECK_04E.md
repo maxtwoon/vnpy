@@ -1,0 +1,5 @@
+# Actual Claude inventory04E — focused closure
+
+After actual Kimi04D terminal handoff and stable inventory/safeio/test/evidence hashes, recheck only INVENTORY_RECHECK_04C findings and directly affected resolver safety. Verify actual nested paths produce futures326present/0missing and PIT352present/37genuine shares gaps (recalculate, never hard-code), retain flat packages and failed-record visibility, reject dataset/file path escape, expose conflicting flat/nested candidates. Inspect actual measured fresh evidence UTC start/end/generated timestamps and unchanged preserved04B historical artifacts.
+
+Actual Claude read-only; temp repro only .coordination/review-inventory04e. No product/Git/assistant-memory/raw/ledger/credentials/defaultsettings/core/sitepackages/rootHANDOFF/network/provider/account/gateway changes. Other disjoint workers active: scoped inventory tests only, no moving package suite. Reuse04C unchanged evidence. Return F1/F2 CLOSED or OPEN, up to2new directly introduced concrete findings, commands/hashes/counts/limits and FINAL_VERDICT PASS/FAIL for inventory correction. Codex saves INVENTORY_RECHECK_04E.md; not fullWP10 acceptance.

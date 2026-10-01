@@ -1,0 +1,14 @@
+{
+  "_comment": "Simulated/test recorder config (offline, no gateway connected). Create the store first: python -c \"import sys; sys.path.insert(0,'.'); from research_store import init_store; init_store('<store_root>')\". calendar_spec uses the revised 02I seal grammar (tz:<IANA> = display/normalization evidence ONLY, never a trading-calendar claim; trading_date stays unknown without explicit source evidence). CTP TickData observations are recorded as quote/snapshot observations, never as exchange trade-by-trade. Simulated and production sources must use separate configs/sessions.",
+  "store_root": "D:/repo/vnpy/integrations/vnpy_researchstore/runtime/recorder_simulated/store",
+  "runtime_dir": "D:/repo/vnpy/integrations/vnpy_researchstore/runtime/recorder_simulated",
+  "repo_path": "D:/repo/vnpy",
+  "source_id": "simnow-test",
+  "source_kind": "simulated",
+  "calendar_spec": "tz:Asia/Shanghai",
+  "instruments": [
+    {"symbol": "rb2501", "exchange": "SHFE"}
+  ],
+  "event_kinds": ["tick"],
+  "gateway_type": "ctp"
+}

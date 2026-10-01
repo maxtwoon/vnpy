@@ -1,0 +1,14 @@
+# Generated from D:/repo/quant/requirements-tools.txt; edit the central file.
+# Shared development tools; versions verified from PyPI on 2026-09-21.
+pip==26.2.1
+setuptools==84.0.0
+wheel==0.48.0
+uv==0.12.17
+ruff==0.16.8
+mypy==2.3.1
+pytest==9.1.1
+pytest-cov==7.1.0
+coverage==7.16.1
+pre-commit==4.6.2
+PyYAML==6.0.3
+jsonschema==4.26.0

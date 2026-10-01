@@ -1,0 +1,77 @@
+{
+  "store_root": "D:/quant-data",
+  "reports_dir": "D:/quant-data/reports/delivery04k",
+  "runtime_dir": "D:/repo/vnpy/integrations/vnpy_researchstore/.coordination/delivery04k-dev",
+  "stock": {
+    "input_dir": "D:/repo/vnpy/integrations/vnpy_datasource/output/verification-20260915-235250",
+    "inputs": {
+      "stock_raw.json": "600519.SSE",
+      "tushare_raw.json": "600519.SSE"
+    },
+    "expected_sha256": {
+      "stock_raw.json": "b98a727833e8e3e6570ab671c4318db1e51807408fac54aaced229d57efbd76a",
+      "tushare_raw.json": "06c47463a0e1eabcf3f60306aae17a2415af474637a1c037769f6fa36e0ff85f"
+    },
+    "historical_registry_sha256": "7442f1416a710a7d7649db8077c6358586c08d9b037554d12f6657b062ad568a"
+  },
+  "futures": {
+    "root": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_china_futures_research_full_history_20260804",
+    "contract_archive": "contract_1m_none/rqdatac_contract_1m_none_2025.tar.zst",
+    "dominant_archive": "dominant_1m_none/rqdatac_dominant_1m_none_2025.tar.zst",
+    "contract_member": "2025/unit_0000.parquet",
+    "dominant_member": "2025/unit_0000.parquet",
+    "instrument": "A2505",
+    "window": {
+      "start": "2025-01-02 00:00:00",
+      "end": "2025-01-07 00:00:00"
+    },
+    "expected_window_rows": 1035,
+    "friday_night": [
+      {"label": "2025-01-03 21:01:00", "trading_date": "2025-01-06"},
+      {"label": "2025-01-02 21:01:00", "trading_date": "2025-01-03"},
+      {"label": "2025-01-06 21:01:00", "trading_date": "2025-01-07"}
+    ],
+    "expected_member_sha256": {
+      "contract": "98e2dd44c7364acedd3ba6239fcf9f73b5ab33a99829a02dbf6d803c19e0d9cb",
+      "dominant": "b93006d70c889c5bc82945b61a777a8bbbe27dcd4a1f949e48433793dc0e189a"
+    },
+    "recorded_archive_sha256_reuse_not_rehashed": {
+      "contract": "ec4c2aa7ffe401a255e70ef719d60ddead84f55c75bf6ac8514ccaed8c4da862",
+      "dominant": "f9954338f75257d3d2aa3e364a469a9657615fb051e4a5a45941a10ff1be380d",
+      "sidecar": "e08fb5bff8d39b1ec0c695b8dc928823d3f1ec0073e9c13d79d5c3a1dd6ed6a8"
+    },
+    "review_04ib": "D:/repo/vnpy/integrations/vnpy_researchstore/FUTURES_TIME_REVIEW_04IB.md",
+    "review_04ib_disposition": "D:/repo/vnpy/integrations/vnpy_researchstore/FUTURES_TIME_REVIEW_04IB_DISPOSITION.md",
+    "label_convention": "UNKNOWN per FUTURES_TIME_REVIEW_04IB (supersedes 04I END resolution); no canonical bounds may be constructed"
+  },
+  "jq": {
+    "daily_dir": "D:/BaiduNetdiskDownload/全息日线/daily",
+    "year": 2024,
+    "instrument": "600519.XSHG",
+    "window": {
+      "start": "2024-01-01",
+      "end": "2024-02-01"
+    }
+  },
+  "etf": {
+    "package_dir": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_etf_lof_daily_minute_20110802_20260731",
+    "frequency": "1m",
+    "year": 2017,
+    "instrument": "160105.XSHE",
+    "disputed_key": {
+      "instrument": "160105.XSHE",
+      "label": "2017-09-19 13:01:00"
+    },
+    "audit_csv": "D:/BaiduNetdiskDownload/全息日线/rqdata/rqdatac_etf_lof_daily_minute_20110802_20260731/RQDataC_customer_feedback_supplement_20260912/01_etf_lof/source_refetch_audit.csv"
+  },
+  "catalog": {
+    "inventory04d": "D:/quant-data/reports/delivery04d/delivery04d-inventory.json",
+    "rq_root": "D:/BaiduNetdiskDownload/全息日线/rqdata",
+    "pit_package": "rqdatac_a_share_pit_events_full_history_20260804",
+    "index_package": "rqdatac_index_daily_minute_20110802_20260731",
+    "index_2014_archive": "rqdatac_index_1m_2014.tar.zst",
+    "convertible_package": "rqdatac_convertible_minute_20050104_20260731",
+    "convertible_refetch_manifest": "RQDataC_customer_feedback_supplement_20260912/03_convertible_minute/REFETCH_MANIFEST.json",
+    "expected_pit_missing": 37
+  }
+}

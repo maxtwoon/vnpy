@@ -1,0 +1,15 @@
+# Time contract clarification disposition
+
+Actual Claude Code sessioncb185054-e392-451d-a02e-e13036a38c38 completed exit0; exact report is TIME_CONTRACT_REVIEW.md. This is design clarification during development, not implementation acceptance. The reviewer encountered its own current transcript despite the task exclusion; its description of that file as a prior session is not adopted. Decisions below depend on the plan/schema/source interfaces, not transcript content.
+
+Accepted core/importer corrections:
+
+1. Canonical minute bars with evidenced bar_start/bar_end may preserve trading_date=NULL. BARS_SCHEMA_V1 and tick schema (if it has that field) must permit unknown trading day, with explicit quality/provenance. Do not derive a trading day from a timestamp's natural date. This permits RQ real-contract minute observations to enter the immutable store without inventing a calendar.
+2. Daily imports must reject NULL trading_date at publication; daily identity/dedup is instrument-or-series plus trading_date. Minute identity stays normalized start, ticks retain session+sequence. Do not confuse a daily NOT NULL validation with implementing the daily identity rule.
+3. OpenCode core bridge separates missing normalized bounds from missing trading_date; valid minute bounds+unknown trading day passes unchanged with quality flags. Snapshot quality binds that uncertainty. Native backtest/Alpha consumers must refuse ambiguous required time semantics and cannot infer qualification from successful publication. Core observation reads remain available.
+
+Scope correction to the reviewer's blanket SSQuant statement:
+
+The original plan already records three source1m-vs5m windows supporting START labels and requires validating the selected import scope. Thus permanently blocking ALL SSQuant canonical import is not an accepted narrowing of v0.1. No global START assumption is approved either. OpenCode must implement an explicit time-label evidence/profile path: capture/table/range-bound evidence and validation determine source START/END for the supported selected range, with its identity/hash in the transform and receipt. Unknown/unverified ranges stay honest candidates, preserving original labels and payload through an exposed observation/inspection path; they cannot be labelled qualified canonical bars with invented bounds. Resolved bounds can publish minute candidates even while trading_date is still unknown under corrections1–3. Required tests distinguish evidence-qualified scope, outside-scope refusal/candidate preservation and source-label queries from normalized bar-time queries.
+
+Owners: Kimi schema/core validation/daily identity and interfaces; OpenCode bridge, scoped label evidence/SS import path, source flags, consumer refusal. Complete this correction before core/consumer milestone acceptance; do not modify another owner's live files. Developer self-tests and later actual Claude implementation audit must cover minute NULL roundtrip, daily NULL rejection AND daily-key duplicate/conflict behavior, flag persistence, no fabricated trading day and SS scope behavior.

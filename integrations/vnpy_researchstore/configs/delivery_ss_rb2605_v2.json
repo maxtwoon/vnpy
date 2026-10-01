@@ -1,0 +1,46 @@
+{
+  "task": "TASK_OPENCODE_SS_REPRESENTATIVE_04M (post-fix completion slice)",
+  "config_name": "delivery_ss_rb2605_v2",
+  "created_at": "2026-09-30",
+  "supersedes_nothing": "fresh post-fix identity; pre-fix config delivery_ss_rb2605.json and all pre-fix reports remain untouched",
+  "turnover_representation": {
+    "standardized": "MISSING (None) for the untrusted vendor amount",
+    "raw": "amount preserved verbatim in extensions",
+    "marker": "amount_untrusted",
+    "identity": "rule_version=norm-missing-turnover-1 (dataset id changes; historical revisions intact)"
+  },
+  "source": {
+    "adapter": "ssquant/0.1",
+    "capture": "D:/quant-data/captures/kline_data_capture_20260916T164711Z.db",
+    "capture_sha256": "17a10a78f3a0214c07eeb1a36c46391a50386e6b62b2a3d21955530c97e9517e",
+    "capture_receipt": "D:/quant-data/captures/kline_data_capture_20260916T164711Z.db.receipt.json",
+    "receipt_validation_kind": "current_recovery_validation",
+    "captured_at": null,
+    "captured_at_note": "UNKNOWN by validated receipt; never invented"
+  },
+  "symbol": "rb2605",
+  "series_kind": "instrument",
+  "tables": {
+    "1": "rb2605_1M_raw",
+    "5": "rb2605_5M_raw",
+    "15": "rb2605_15M_raw"
+  },
+  "evidenced_window": ["2026-03-02 09:00:00", "2026-03-02 10:00:00"],
+  "label_evidence_source": "D:/quant-data/reports/delivery04m/delivery04m-phase1.json (public_label_evidence W1-*)",
+  "quarantine_source": "D:/quant-data/reports/delivery04m/delivery04m-simnow-quarantine.json (detector_keys; action already proven)",
+  "batch_prefix": "delivery04m2",
+  "report_names": "delivery04m2-* (fresh; never overwrite pre-fix reports)",
+  "ma_sample": {
+    "table": "ma888_1M_raw",
+    "window": ["2026-06-01 00:00:00", "2026-07-01 00:00:00"],
+    "status": "unsupported/candidate: no label evidence, never published"
+  },
+  "store": {
+    "root": "D:/quant-data",
+    "policy": "existing unified store; open only, never reinitialize or delete"
+  },
+  "gate": {
+    "capture_guards": "frozen (time_evidence 40cc5c96, adapters 1d886121)",
+    "released_scope": "SS-only normalize.py + SS semantic transform identity in core_bridge.py + directly affected tests/helper"
+  }
+}

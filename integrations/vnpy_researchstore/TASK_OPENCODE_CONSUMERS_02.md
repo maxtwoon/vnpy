@@ -1,0 +1,31 @@
+# OpenCode development assignment 02 — usable CLI and market-data consumers
+
+Current dispatch owner: actual Kimi consumers02B under TASK_KIMI_CONSUMERS_02B.md, after OpenCode provider quota terminated import01. Retain this file as functional specification; actor/ownership transfer supersedes the historical OpenCode identity below. Native ownership is separate Kimi native02B; do not resume old OpenCode writers without coordinator handoff.
+
+Dispatch only after import01 has finished or explicitly handed off. Read IMPLEMENTATION_PLAN.md mandatory audit amendments, PLAN_AUDIT_DISPOSITION.md, INTERFACES.md and current core/importer handoffs. Actual OpenCode developer, Codex co-ordinates, actual Claude reviews. Do not replace partial core with sample-only wrappers.
+
+Before final importer/consumer integration read TIME_CONTRACT_REVIEW.md and TIME_CONTRACT_DISPOSITION.md. Kimi owns minute trading_date nullability and daily identity correction. You own bridge NULL passage/flags, explicit capture/table/range-bound SSQuant label-evidence profile and preservation/inspection of unknown candidates. Permanent blanket exclusion of all SSQuant is not accepted, nor is globally guessing START. Record API dependencies until the core fix lands; do independent consumer/CLI work in the meantime, then rerun affected integration tests. Native consumers cannot treat a published unknown-day candidate as automatically qualified.
+
+Import01 temporarily used a strict-xfail for a core-blocked publication integration case. This is NOT acceptance. Once the owner fixes the actual issue, remove that temporary xfail and run the unchanged substantive assertion normally; required functionality must not remain skipped/xfail at final delivery. Keep the historical failure and fix evidence rather than rewriting it as a past PASS.
+
+Parallelization update: separate actual Kimi native02B(taking over terminated OpenCode02A) owns vnpy_researchstore/__init__.py,database.py,alpha.py,bootstrap.py,native utility files,test_native_*.py,tools/native_*,configs/native_* and NATIVE_INTERFACES.md. Do not duplicate or edit its files while active. The native requirements below are integration contracts; consume its actual APIs and report requests to coordinator.
+
+Your ownership: research_store/cli.py,__main__.py,report.py,export.py; additive ../vnpy_datasource storage.py/cli.py and related tests/docs; non-native CLI/export/report tests; remaining configs/tools. You may finish your prior importer assignment. Do not edit Kimi core/journal/aggregation or the native02A paths. Recorder bridge/UI has separate follow-up. Coordinate package entrypoint changes through Kimi instead of editing pyproject concurrently.
+
+Implement full named CLI init/inspect/import/recover/coverage/quality/resolve-conflict/freeze/verify/export/report using actual core APIs. Wire future recover-session/seal/replay via Kimi's actual session APIs (not fake success). Single JSON stdout, progress stderr; safe errors/exit statuses, no source query side effects on snapshot reads. Stable config schema samples, later WP10 writes actual runnable instance configs to D:/quant-data/configs.
+
+Datasource target=store must branch BEFORE _normalized_rows/to_bars and directly preserve records NULL/metadata/attempts/request/registry hash. Lazy store import, legacy sqlite/alpha regression tests and offline81baseline or actual current count, no non-ok success receipt. Preserve consumer side boundaries and credentials.
+
+Existing real stock/ETF Client results have been located with exact hashes in .coordination/REAL_INPUT_CANDIDATES.md. Use these read-only historical receipts for the real target=store loop; do not fetch anew or rewrite their historical registry/fetched_at metadata. They lack NULL turnover, so keep the separate synthetic NULL-focused tests clearly labelled.
+
+Also read .coordination/CORE_REQUESTS_DISPOSITION.md and FUTURES_INPUT_CANDIDATES.md. Actual A2505 contract rows have a scoped source trading_date mapping by exact dominant_id+source datetime; preserve this date-reference lineage without copying continuous prices. Its package-specific time-label conflict still needs evidence/disposition, so do not call that mapping alone proof of backtest qualification. Canonical SS partitions use product/month, while table/month remains the import work unit.
+
+Database read-only singleton snapshot. Native1m/1h/1d only; unsupported intervals omitted native overview with diagnostics, retained core. Native load_tick_data explicitly UnsupportedCapability v0.1. All save/delete fail. Auxiliary missing default error; explicit OHLCV-only nan+extra, never fake0. Stock OI not_applicable explicit. Exact inclusive end for Database AND BOTH Alpha loaders; no whole-bar/day padding. Tests finaltimestamp==end and nonaligned boundaries.
+
+Bootstrap binds repository vnpy path and isolated cwd BEFORE imports of vnpy.trader.utility or modules importing it. Explicit plugin import prevents get_database silently falling back; reject initialized singleton; assert class and snapshot before backtester import. New process per snapshot; no current settings/defaultDB mutation. Record actual vnpy.__file__,snapshot,adapter/config in receipt.
+
+ResearchAlphaLab read-only marketdata with separate lab resultdir/snapshot binding. Native1m/1d, preserves extended_days/OHLC normalization/stops legacy missing data from leaking through vwap. Equity vwap with verified units; futures multiplier validated perdate; zero volume =>missing; MA/untrusted turnover fails. Empty input/window stable documented result. Native vs core public field comparisons and appropriate original Alpha preprocessing comparison.
+
+Export snapshot to unmanaged-empty or own matching-binding target only; legacy sqlite/Alpha are rebuildable compatibility copies with receipt/missing-field rules, never new truth. Need actual write/readback verification; no raw input overwrite.
+
+Simple standalone HTML report: assets/coverage timeline/source/quality/conflicts/recording status/disk; no heavy service. Report missing/unknown/partial faithfully. Store APIs return sufficient structured summary; avoid bulk market data embedded in HTML. Targeted tests and recorded actual results; final developer handoff .coordination/opencode-consumers02-handoff.md.

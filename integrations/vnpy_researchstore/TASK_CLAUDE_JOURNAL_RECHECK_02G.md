@@ -1,0 +1,13 @@
+# Actual Claude journal correction02G focused recheck
+
+Dispatch after actual Kimi journalfix02G terminates with .coordination/kimi-journal-fix02g-handoff.md. Read JOURNAL_AUDIT_02E.md, disposition, TASK_KIMI_JOURNAL_FIX_02G.md and original3reviewer repros. Review only the3accepted findings and affected journal/recovery behavior; reuse prior unchanged20-test evidence where appropriate, no whole-project re-audit. Qualified-policy and NEW recorder/UI writers may be active on disjoint paths; do not run their moving tests or mutate their files.
+
+F1: verify old UNCLEAN_END is durably committed while the exclusive journal lock is still held; an opener during forced recovery delay cannot commit a new unreported event. Repeated recovery and optional successor remain correct. A failed durable state write must not falsely update in-memory success/retire the identity.
+
+F2: deterministic concurrent admission/close test must prove every accepted receipt has an event committed through the cutoff or a visible failure with a recoverable state; no accepted sequence may land after writer exit in an undrainable queue. Sequence/enqueue and closing latch/stop must be coordinated. Verify queue-full/error does not create phantom accepted counts, close timeout remains bounded including synchronization, retry works where drain becomes possible, and no event-thread deadlock or silent clean-close occurs.
+
+F3: identical session/seq/source event replay stays idempotent, but changed event_ts_ns or source_event_id conflicts as do changed instrument/kind/payload. Original event timestamp precision and full metadata are retained. Received/audit-time treatment must be explicitly consistent with replay semantics.
+
+Re-run or safely adapt the original repro triggers under .coordination/review-journal02g, leaving original scripts unchanged. Run focused regressions and affected journal tests/type/lint in existing .venv; no installs. Record exact changed-file/dependency hashes, commands and results. Do not turn a different unexpected exception or timeout into successful closure.
+
+No product/Git/assistant-memory writes anywhere (especially no git stash/pop/reset/restore/checkout/clean). Only temporary reproductions in the named review folder; terminate only owned bounded test children. No raw/ledger/credentials/default .vntrader/vnpy core/site-packages/root HANDOFF/provider/network/account/gateway changes. Maximum3 directly introduced regressions if any, per-finding CLOSED/OPEN and FINAL_VERDICT PASS/FAIL for corrected journal foundation. Codex saves exact result as JOURNAL_RECHECK_02G.md. Aggregation/seal/retention/catalog/public stubs/UI/CLI remain separately assigned obligations, LIVE_NOT_RUN unchanged.

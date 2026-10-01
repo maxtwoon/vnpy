@@ -1,12 +1,265 @@
 ---
-task: fix-divergence-status-zhongshu-selection - Fix P4 divergence signal structurally unreachable for shorts
+task: AGENT-20260922 - approved workspace entrypoints and snapshot provenance
+version: 4.4.0
+stage: dev
+owner: codex
+updated: 2026-09-30
+deliverables:
+  - HANDOFF.md
+  - integrations/vnpy_datasource/README.md
+  - integrations/vnpy_datasource/vnpy_datasource/warehouse.py
+  - integrations/vnpy_datasource/vnpy_datasource/storage.py
+  - integrations/vnpy_datasource/examples/read_snapshot.py
+  - tools/staged_check.py
+blockers: []
+---
+
+## Current workspace integration
+
+### 2026-09-30 unfinished-work continuation
+
+User objective: finish remaining items. Current-state verification takes priority
+over the historical September 17 status tables. No gateway/account operation or
+remote publication is included.
+
+- DataSource: full current suite 101 passed; root sync check passed. Fixed
+  snapshot `20260920T173637Z-c6cc6b2e` CTA example replayed all 659 daily bars
+  with 47 simulated trades; source/runtime hashes stayed unchanged. Artifacts:
+  `integrations/vnpy_datasource/output/closeout-20260930-cta/`.
+- Example cleanup now covers early return and exceptions; datasource Ruff
+  passes after correcting two existing test statement separators.
+- ResearchStore capture04H has a terminal recovery-validation handoff; old
+  tables saying it is still running are stale. Historical completion timestamp
+  of the original capture remains unknown.
+- Actual recording02J review originally terminated with scoped FAIL: excluded
+  unknown-time events could be lost during retention. The September 30 actual
+  OpenCode02K correction now persists lossless coverage and refuses deletion
+  for exclusions, legacy evidence and uncovered ranges. Developer verification
+  passed 40 tests and the unchanged original repro; actual Claude recheck is
+  scoped PASS with no source drift (`REVIEW_RETENTION_20260930.md`). Developer
+  tests used registered vnpy 3.14; reviewer reported legacy plugin/Studio checks.
+  Packaging and whole-project acceptance remain separate and pending.
+- Futures04L checkpoint is TERMINAL_QUOTA_PARTIAL_NOT_ACCEPTED, not running:
+  public contract import failed, and the representative runner returned zero
+  despite failed assertions. SS04M, installed recorder lifecycle, and final
+  report/instance configuration checks remain required.
+- ResearchStore's original actual-OpenCode/Kimi development and Claude review
+  role restriction was found; user clarification about direct Codex development
+  is pending. Original actual OpenCode sessions have now been resumed for
+  bounded retention02K, futures04L and recorder03D fixes on disjoint files;
+  no direct Codex ResearchStore product edits. Live handles and evidence are
+  in `integrations/vnpy_researchstore/.coordination/closeout-20260930.json`.
+- Current registered-vnpy full ResearchStore suite: 408 passed, 27 failed
+  (215.48s). Alpha failures reproduce missing `alphalens`; the separate
+  vnpy-alpha environment lacks `duckdb` and the Store package. No environments
+  were merged or shared dependencies installed. Native bootstrap failures need
+  separate dependency/runtime disposition. This baseline preceded the
+  September 30 recording corrections; it is not final corrected-source evidence.
+- Isolated environment disposition now passes: 16 Alpha tests and 7 affected
+  mixed tests under vnpy-alpha with only locally copied duckdb/zstandard;
+  8 bootstrap/overview tests under vnpy with the previously isolated portfolio
+  plugin. Package copies have hash manifests; shared environments unchanged.
+- Actual current-runtime ETF loop now passes all 16 checks for the SAME real
+  `snap-030369f20bd18303`: core, Database, both Alpha methods and offline
+  CTA/Portfolio bootstrap. Registered vnpy-alpha used only hash-pinned local
+  duckdb/zstandard/CTA/portfolio overlays, with no shared install. Evidence:
+  `.coordination/etf-current-runtime-20260930/utf8-run/result.json` (27.927s).
+  First attempt failed on child GBK/parent UTF8 decoding; process-local
+  PYTHONUTF8/PYTHONIOENCODING fixed the execution environment, not source data.
+  This is consumer/data-identity verification, not strategy performance.
+- Combined Ruff: datasource clean after the two statement-separator fixes;
+  ResearchStore has one existing unused `CountingSink` import in
+  `tools/delivery_representatives.py:489`.
+- Chan offline consumer integration implemented in `examples/czsc_shadow/`,
+  reusing the active project's VnpyShadowAdapter/public TimingEngine. Seven
+  meaningful synthetic engineering tests pass, including nonempty decision
+  replay identity, input rejection and output protection. Actual CLI with the
+  default 20,000-bar warmup accepts 35 synthetic bars and truthfully reports
+  warming_up/zero decisions; artifacts at
+  `D:/repo/quant/.runtime/verification/vnpy-czsc-shadow-20260930/`.
+  This is an offline consumer, not continuous live shadow or strategy efficacy.
+  No directional/trading authorization is inferred. Git delivery remains open;
+  no commit/push is claimed.
+- Recorder03D developer exited 0 with 7 launcher and 38 related tests, scoped
+  Ruff/mypy and CLI status smoke. Actual independent Claude review passed the
+  bounded EOF/retry fix, with fresh 7+38 tests and unchanged source hashes;
+  `.coordination/REVIEW_RECORDER_20260930.md` preserves its result. Installed
+  package lifecycle acceptance remains separate and pending.
+  Retention02K initial attempt and futures04L encountered request-rate limits;
+  partial retention code initially still failed the original repro. Retention
+  developer then completed successfully; futures04L has now resumed alone.
+
+Reuse: existing warehouse reader, immutable Store, native DB bridge, CTA engine
+and CZSC public APIs are the implementation base. QROS `knowledge list
+--component vnpy --json` returned no records. Gaps are final integration and
+the named lifecycle defects; use bounded adapters and targeted regression/real
+offline lifecycle checks, not a new engine or governance framework. No reusable
+knowledge is published before the remaining checks finish.
+
+The user explicitly requested implementation of the approved workspace plan.
+Implementation and local verification are recorded in
+[the current workspace guide](../quant/AGENT_WORKFLOWS.md).
+Bridge tests: 94 passed. Existing local ETF snapshot conversion, idempotent replay
+and fixed snapshot readback passed. No new market data or holdout was consumed.
+No commit, push, remote CI, trading, or independent code-review completion is claimed.
+Stage remains dev; this new task does not fabricate a transition from the archived ETF task.
+
+## Archived ETF task — original handoff retained verbatim below
+
+The following record is historical. Its strategy now lives in the archived
+quant/strategies/vnpy-etf workspace. Its roles and conclusions remain unchanged;
+it is not the active task or the source of current deliverable paths.
+
+---
+task: ETF-20260916 - autonomous ETF research with OpenCode Kimi and Claude Code
+version: 4.4.0
+stage: dev
+owner: kimi-code
+updated: 2026-09-16
+deliverables:
+  - HANDOFF.md
+  - research/etf_autonomous/PROTOCOL.md
+  - research/etf_autonomous/TASKS.md
+  - research/etf_autonomous/data.py
+blockers: []
+---
+
+## Current task: autonomous ETF research (2026-09-16)
+
+User instruction: pursue ETF timing/rotation research until Sharpe exceeds 1.
+The research protocol uses net returns on a held-out period and records failed
+trials honestly. No live trading is authorized.
+
+Latest user role assignment overrides historical automation roles: root Codex owns
+planning and coordination; actual OpenCode and Kimi CLIs own development, with
+GPT-5.3-Codex-Spark additionally authorized for development on 2026-09-16. Actual
+Claude Code owns independent review and tests. The exact Spark slug was probed
+through the installed Codex CLI and the service rejected it as unsupported for the current
+ChatGPT login; it has not performed development. Do not substitute another model
+under this authorization. Existing internal development subagents remain stopped.
+
+This new task is first recorded at dev after Codex prepared the research plan;
+it does not claim historical stage transitions. OpenCode will align the stale
+role/CLI configuration in .synccheck.yml with the user instruction. Kimi is the
+primary dev owner, working in parallel with OpenCode on disjoint files. Codex
+coordinates both and remains the only writer of this handoff while they work.
+
+- [Research protocol](research/etf_autonomous/PROTOCOL.md)
+- [Assignments and current status](research/etf_autonomous/TASKS.md)
+- [OpenCode assignment](research/etf_autonomous/task_opencode.md)
+- [Kimi assignment](research/etf_autonomous/task_kimi.md)
+- [Claude Code initial review](research/etf_autonomous/task_claude_plan.md)
+
+Nine raw ETF histories and the corporate-action corrections have been verified.
+Round 1 completed 72 candidates and 144 train/validation evaluations; none
+qualified. Round 2 completed 36 candidates and 72 evaluations; 28 qualified and
+one candidate was frozen before the first final holdout evaluation.
+The completed dataSource integration and archived Chan project below remain
+historical context. Do not reopen their tasks or alter unrelated dirty files.
+
+Current state (2026-09-16): every Round 1 candidate exceeded the 35% training
+drawdown gate. Exact source and results are preserved under round_01. Claude's
+single-candidate training replay matched all four original metrics exactly and
+found no new defect in its scoped 2015 share-conversion check. The minimum
+drawdown was 35.9927%, from 2015-06-12 to 2019-06-03.
+
+Round 2 is specified in ROUND_02_PROTOCOL.md: 36 candidates using fixed asset
+groups, a 10% estimated risk-asset volatility budget, and an actual bond ETF
+defensive position. Data, costs, windows, eligibility and final criteria remain
+unchanged. OpenCode rounds10 wrote the round-aware runner but exited on quota;
+Kimi recovery12 supplied its missing handoff without further code changes. Kimi
+risk_policy11 and display-only report_counts13 completed successfully. Claude's
+36 relevant tests and scoped production lint checks passed before the search.
+The September 16 13:55 heartbeat actually resumed work. Claude session
+1d612f27-7af7-4e0a-b347-fc789147cb7d completed holdout09 and ledger closeout12,
+explicitly authorized after the frozen candidate and developer exits were checked.
+The first holdout opened at 2026-09-16 14:40:34 Asia/Shanghai. Computed base net
+Sharpe is 1.294884, double-cost Sharpe 1.164228, CAGR 17.1007%, max drawdown
+9.0681%; all runs are status ok. The 898-row ledger reconciles with zero error.
+Separate Claude saved_nav_math13 recomputed all four metrics for all three runs
+with standard-library formulas and zero differences. All four predeclared
+quantitative criteria and the scoped numerical/data reviews passed. The local
+research objective is complete. All actual CLI jobs have exited successfully.
+The HTML report was generated and its numbers checked; screenshot/layout QA
+remains unavailable because Playwright blocks local file URLs. This is disclosed,
+not a claimed visual PASS. Root sync_check passed after a documentation-only
+correction, and all 27 frozen numerical/input paths still match their identities.
+See [the final research summary](research/etf_autonomous/RESULTS.md).
+Latest pointers are in
+[Resume instructions](research/etf_autonomous/RESUME.md) and runtime_sessions.json.
+Preserve all partial work and failed logs; do not infer success from schedules or
+sessions. Preserve the shared holdout observation record; this period is now seen.
+The front-matter dev stage is the existing commit-bound sync workflow; no Git
+delivery or fabricated stage transition is claimed by this local research result.
+
+## Historical completed task metadata: DS-20260915
+
+```yaml
+task: DS-20260915 - dataSource integration for personal A-share and ETF research
 version: 4.4.0
 stage: done
 owner: codex
-updated: 2026-07-28
+updated: 2026-09-16
 deliverables:
   - HANDOFF.md
-  - docs/design/fix-divergence-status-zhongshu-selection.md
+  - integrations/vnpy_datasource/README.md
+  - integrations/vnpy_datasource/VERIFICATION.md
+  - integrations/vnpy_datasource/vnpy_datasource/client.py
+  - integrations/vnpy_datasource/vnpy_datasource/datafeed.py
+  - integrations/vnpy_datasource/vnpy_datasource/worker.py
+  - integrations/vnpy_datasource/vnpy_datasource/providers_sdk.py
+  - integrations/vnpy_datasource/vnpy_datasource/providers_http.py
+  - integrations/vnpy_datasource/vnpy_datasource/storage.py
+  - integrations/vnpy_datasource/tests/test_client.py
+blockers: []
+```
+
+## Completed task: dataSource integration (2026-09-16)
+
+The user requested that this framework and its strategies can call available
+sources in `D:\repo\dataSource`. The implementation is a separate local
+`vnpy_datasource` package with a standard Datafeed, direct research client,
+bounded worker through the maintained dataSource runtime, and SQLite/Alpha
+downloads. This new task was first recorded at review after implementation and a
+bounded independent review, then advanced to done with `tools/handoff.py next`.
+It does not claim historical design/dev transitions.
+
+- Seven provider adapters, 54 implemented branches; 52 are backed by current
+  ledger recipes, with product and interval restrictions. Other registry entries
+  remain discoverable with explicit unsupported or unavailable reasons.
+- Studio plugin installed and runtime datafeed configured; original setting
+  backed up. Existing installed package versions preserved while adding the
+  minimal Alpha import/export and verification dependencies.
+- Real data verified through native SQLite, AlphaLab and CTA `load_bar`.
+- Current Chinese one-minute history is unavailable: Tencent is time-share data;
+  Yahoo sample failed session/volume checks; other candidates lack a usable path.
+- The archived `examples/czsc_strategy` and current `D:\repo\czsc-timing-engine`
+  decision remains in force. No timing-engine signal integration or trading
+  operation is included in this data connection.
+- No edits to dataSource, no core vnpy code edits, no Git commit or push.
+
+See [integration usage](integrations/vnpy_datasource/README.md) and
+[verification](integrations/vnpy_datasource/VERIFICATION.md) for actual scope,
+inputs, results, limitations and local evidence paths.
+
+## Historical completed task metadata: A109
+
+```yaml
+task: A109-audit-remediation - CI 门禁与 SimNow 晋级口径修复
+version: 4.4.0
+stage: done
+owner: codex
+updated: 2026-08-01
+deliverables:
+  - HANDOFF.md
+  - .github/workflows/pythonapp.yml
+  - pyproject.toml
+  - vnpy/chart/item.py
+  - examples/czsc_strategy/diagnostics/simnow_20d_aggregate.py
+  - examples/czsc_strategy/diagnostics/run_next_work.ps1
+  - examples/czsc_strategy/diagnostics/ACCEPTANCE.md
+  - examples/czsc_strategy/VERSION
+  - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
 last_transition_actor: codex
@@ -14,7 +267,406 @@ last_transition_from_stage: review
 last_transition_to_stage: done
 last_transition_from_owner: codex
 last_transition_to_owner: codex
+```
+
+## Current local research decision (2026-09-15)
+
+The user archived `examples/czsc_strategy` in place and designated
+`D:\repo\czsc-timing-engine` as the current Chan-theory timing project.
+See [ARCHIVED.md](examples/czsc_strategy/ARCHIVED.md). Historical source, evidence,
+and CI/test paths remain available for review. The historical tasks below are
+not reopened; their pending items and next-agent instructions are not current
+work. This documentation update does not advance the completed A109 stage or
+claim that the new timing project's integration with VeighNa is implemented.
+
+## Background (A109)
+
+User requested a comprehensive project audit, then asked to fix the audit findings. This task closes the high-priority items found in that audit without broad cleanup:
+
+- CI `ruff check .` included local research, archive, and notebook artifacts with hundreds of unrelated lint findings.
+- Root `pyproject.toml` pinned a legacy czsc runtime while the active Chan workspace requires the release candidate declared in its own requirements file.
+- SimNow 20-day promotion aggregation counted `status=pass` rows as pass even when `valid_observation=false`.
+- `run_next_work.ps1` default replay export timeout remained `1200` seconds despite repeated recovered runs requiring `3600`.
+- `mypy vnpy` failed in the current gate because external dependency stubs/imports and one stale ignore were not aligned.
+
+## 验收标准 (A109)
+
+- [x] Invalid SimNow pass rows are counted as failed days and block promotion.
+- [x] CI installs the Chan workspace runtime dependency from `examples/czsc_strategy/requirements.txt` and no longer keeps a conflicting root czsc pin.
+- [x] CI lint uses an explicit maintained scope instead of broad `ruff check .`.
+- [x] `mypy vnpy` passes.
+- [x] Formal replay export default timeout is `3600` seconds and documented in acceptance criteria.
+- [x] `examples/czsc_strategy/VERSION` and `CHANGELOG.md` are updated for the visible workflow change.
+
+## Manual Verification (A109)
+
+- `python -m pytest examples\czsc_strategy\tests\unit\test_simnow_20d_aggregate.py examples\czsc_strategy\tests\unit\test_simnow_promotion_parity.py examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_czsc_runtime_dependency_has_single_ci_source -q` -> `21 passed`.
+- `ruff check vnpy tests tools\handoff.py tools\sync_check.py examples\czsc_strategy\diagnostics\simnow_20d_aggregate.py examples\czsc_strategy\diagnostics\simnow_promotion_decision.py examples\czsc_strategy\tests\unit\test_simnow_20d_aggregate.py examples\czsc_strategy\tests\unit\test_simnow_promotion_parity.py examples\czsc_strategy\tests\unit\test_simnow_ledger_summary.py examples\czsc_strategy\tests\unit\test_repo_hygiene.py` -> passed.
+- `mypy vnpy` -> `Success: no issues found in 60 source files`.
+- `python -m pytest examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_czsc_runtime_dependency_has_single_ci_source examples\czsc_strategy\tests\unit\test_repo_hygiene.py::test_ci_lint_scope_excludes_local_research_artifacts -q` -> `2 passed`.
+- `python -m pytest examples\czsc_strategy\tests\unit\test_run_next_work_wrapper.py::test_replay_timeout_default_matches_recovered_formal_export_window -q` -> `1 passed`.
+- PowerShell parse check for `examples\czsc_strategy\diagnostics\run_next_work.ps1` -> `compiled`.
+
+## Background (A108)
+
+A107 完成后，用户要求设计后续任务 A108：`examples/czsc_strategy/diagnostics/` 目录重组
+（约 480 个平铺文件的研究产出归档化）。A107 设计文档 §6"非目标"已把这项工作明确排除、
+建议作为独立任务，本设计承接该建议。
+
+design 前追加了一次专项只读依赖图审计（覆盖 diagnostics/ 下全部 115 个 .py 文件的 import
+关系），发现风险比 A107 审计阶段的初步印象更深：`diagnostics/` 被 `chan_strategy/
+portfolio_ledger.py` 和 15+ 个测试文件当作 Python 包绝对导入（`from diagnostics.X import`），
+不只是内部脚本互相依赖。据此本设计把范围收窄为"只移动非 `.py` 产出文件"，`.py` 脚本级重组
+明确判定为不建议做（不是"留作后续任务"，是"收益配不上风险"的结论）。
+
+完整发现与设计方案在
+`examples/czsc_strategy/docs/design/A108_diagnostics_reorg.md`，请 dev 完整阅读该文件后
+开工——本节只是指针，不是复述。
+
+## 验收标准
+
+完整、逐条可判定的验收清单见
+`examples/czsc_strategy/docs/design/A108_diagnostics_reorg.md` 的"验收标准"节
+（AC1~AC8）。要点：
+
+- [ ] AC1 零 `.py` 文件改动（`diagnostics/**/*.py` 与仓库其余任何 `.py` 文件都不动），
+      零 `chan_strategy/**` 改动。
+- [ ] AC2 `diagnostics/` 根目录直属文件数从约 480 降到约 118±10。
+- [ ] AC3 `research/MIGRATION_LOG.md` 记录全部迁移条目，与 git rename 记录交叉核对一致。
+- [ ] AC4 `sync_check.py --root examples/czsc_strategy` 通过（尤其
+      `diagnostics_banner_check`，实测验证设计文档 §5 的兼容性判断）。
+- [ ] AC5 `pytest tests/unit -q -m "not realdb"` 通过数不低于基线（1009 passed / 4
+      deselected / 4 xfailed），且必须单独列出所有 `import diagnostics.X` 的测试文件
+      （`test_a69_robustness_gates.py` 等，设计文档 §2 有清单）逐一通过的证据。
+- [ ] AC6 `git mv` 保留历史，`git log --follow` 可追溯。
+- [ ] AC7 活跃文档路径引用同步（历史 CHANGELOG/HANDOFF 条目不回溯改写）。
+- [ ] AC8 完成定义：VERSION bump + CHANGELOG + 设计文档阶段字段更新为
+      "dev implemented"，同一提交；两处 sync_check 均通过。
+
+## 给下一棒的说明
+
+(dev，因 kimi-cli 当前额度耗尽，由用户指示改用 Claude Agent 子代理代跑——沿用 A107 已确立的
+处理方式：`--actor kimi-code` 仅满足门禁字符串匹配，须在 HANDOFF.md 如实披露代跑事实)
+
+1. 先完整阅读 `examples/czsc_strategy/docs/design/A108_diagnostics_reorg.md` 全文，
+   **§4"分类算法"是本任务的核心执行合同**，尤其第三步"移动前必须 grep 全仓库确认无硬编码
+   依赖"——这一步不能跳过或抽样，因为 §2 已经证明这个目录的 import/路径依赖比表面看起来深。
+2. §4 第二步的排除清单（4 个核心文档 + 2 个 named-skip 文档 + 8 个已确认的活跃 simnow
+   配置/状态 json）必须原样保留在 `diagnostics/` 根目录，不得移动。
+3. 发现新的硬编码依赖时，把该文件加入例外清单留在原地，**不要**移动文件再去改代码/测试——
+   设计文档 §6 接入边界明确了这个优先级。
+4. 完成后必须生成 `research/MIGRATION_LOG.md` 并在 Manual Verification 中列出 AC5 要求的
+   逐个 import-diagnostics 测试文件通过证据，不能只报总数。
+5. `.py` 脚本级重组是明确的非目标（§8），不要顺手做、不要"顺便"移动任何 `.py` 文件。
+
+## Manual Verification
+
+- **pytest 基线（迁移前）**：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+  ```
+  结果：`1009 passed, 4 deselected, 4 xfailed`（2026-07-31，A108 dev 开始前）。
+
+- **pytest 迁移后（全量）**：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+  ```
+  结果：`1009 passed, 4 deselected, 4 xfailed`（2026-07-31），与基线完全一致，通过数未减少。
+
+- **AC5 要求的逐个 import-diagnostics 测试文件通过证据**（单独重跑，不只报总数）：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit/test_a69_robustness_gates.py `
+    examples/czsc_strategy/tests/unit/test_backtest_matrix_report.py `
+    examples/czsc_strategy/tests/unit/test_cost_sensitivity_report.py `
+    examples/czsc_strategy/tests/unit/test_divergence_model_comparison_report.py `
+    examples/czsc_strategy/tests/unit/test_exit_event_reachability_report.py `
+    examples/czsc_strategy/tests/unit/test_exit_event_restructure.py `
+    examples/czsc_strategy/tests/unit/test_limit_halt_exposure_report.py `
+    examples/czsc_strategy/tests/unit/test_phase1_dead_factor_equivalence.py `
+    examples/czsc_strategy/tests/unit/test_portfolio_ledger_report.py `
+    examples/czsc_strategy/tests/unit/test_position_sizing_report.py `
+    examples/czsc_strategy/tests/unit/test_resonance_filter_comparison_report.py `
+    examples/czsc_strategy/tests/unit/test_risk_param_sensitivity_report.py `
+    examples/czsc_strategy/tests/unit/test_rollover_contribution_report.py `
+    examples/czsc_strategy/tests/unit/test_rollover_exclusion_report.py `
+    examples/czsc_strategy/tests/unit/test_stop_execution_crosscheck.py `
+    -q -m "not realdb"
+  ```
+  结果：`150 passed`（全部 15 个文件，2026-07-31）。这些文件用 `diagnostics.X` 绝对包路径
+  导入 `diagnostics/*.py` 模块——本任务零 `.py` 文件移动，因此这条证据符合预期，但仍按
+  设计文档要求单独重跑核实，未凭"理论上不受影响"就跳过。
+
+- **`diagnostics/` 根目录直属文件数 前后对比**：
+  - 迁移前：489（373 个候选产出文件 + 115 个 `.py` + 1 个 `.ps1`）。
+  - 迁移后：137（115 个 `.py` + 1 个 `.ps1` + 22 个例外清单文件：14 个设计阶段已知 +
+    7 个 dev 阶段安全网新发现，见下方决策记录）。
+  - 与 AC2"约 118±10"目标有约 9 个文件偏差，原因及依据见设计文档 §10。
+
+- **`research/MIGRATION_LOG.md`**：352 条 `旧路径 -> 新路径` 记录，与实际文件系统位置及
+  `git status`（161 条 `git mv` rename 记录）交叉核对一致。
+
+- **`python tools/sync_check.py`**（根）：PASS（`版本与文档一致` = 4.4.0；唯一提示是与本任务
+  无关的既有 WARN：`archive_dir` 路径 `docs/archive/` 不存在，非本任务引入）。
+
+- **`python tools/sync_check.py --root examples/czsc_strategy`**：PASS（`版本与文档一致` =
+  0.2.66 <!-- synccheck:ignore -->，尤其 `diagnostics_banner_check` 一项：新增的 `research/MIGRATION_LOG.md` 补了
+  `<!-- RESEARCH-ONLY / NOT PROMOTION EVIDENCE -->` 横幅后门禁通过，实测验证了设计文档 §5
+  的兼容性判断成立，而不是纸面推测）。
+
+- **`git diff --stat` / `git status` 范围核查**：确认零 `.py` 文件改动、零 `chan_strategy/**`
+  改动；工作区里此前已知、与 A108 无关的 4 个 SimNow 在制品修改
+  （`diagnostics/ACCEPTANCE.md`、`diagnostics/WORK_LOG.md`、
+  `diagnostics/simnow_20d_promotion_decision.md`、`diagnostics/simnow_observation_window.json`）
+  未被本次提交触碰。
+
+## 决策记录
+
+- 2026-07-30 (claude-code, design) - A108 设计完成，专项依赖图审计发现风险比预期深，
+  据此把范围从"全目录重组"收窄为"只移动非 .py 产出文件"，.py 脚本级重组明确判定不建议做
+  （详见设计文档 §2、§8、§9）。
+- 2026-07-31 (kimi-code, dev) - **说明**：kimi-cli 当前额度耗尽，本轮 dev 由用户明确指示改用
+  Claude Code 的 Agent 子代理独立完成，非真实 kimi-code 执行；`--actor kimi-code` 仅用于满足
+  `.synccheck.yml` 门禁的字符串匹配，如实记录于此保证审计链条不失真（与本 HANDOFF 中 A107
+  round 的既有先例同一处理方式）。实现内容：按设计文档 §4 分类算法机械执行——373 个候选产出
+  文件中，14 个设计阶段已知例外原样保留；对剩余 359 个逐一执行 §4 第三步全仓库安全网 grep，
+  新发现 7 个真实硬编码依赖（`backtest_matrix_20220101_20260424.{json,md}` 被
+  `buy_signal_quality_report.py` 的 `DEFAULT_MATRIX` 默认输入路径读取、
+  `phase1_dead_factor_equivalence.json` 被对应测试文件引用、
+  `simnow_20d_promotion_decision.md`/`simnow_ledger_summary.json` 被
+  `diagnostics/run_next_work.ps1` 自动化脚本硬编码路径读写、`symbol_set_stability_scan.{json,md}`
+  被 `platform_stability_review.py` 引用为默认 evidence 文件名），追加进例外清单未移动；剩余
+  352 个文件按前缀分类归档到 9 个 `research/<topic>/` 子目录并生成 `MIGRATION_LOG.md`。执行中
+  发现设计文档未预见的细节：`diagnostics/` 根目录绝大多数候选文件被根 `.gitignore` 标记为生成
+  产出、从未 `git add`（`git ls-files` 核实根目录直属文件仅 105 个受 git 跟踪），因此 352 个
+  安全移动文件中只有 161 个用 `git mv`，其余 191 个是未跟踪文件、`git mv` 会报错
+  "not under version control"，改用普通文件系统移动（移动前后均不在 git 索引中，无历史丢失，
+  未额外 `git add` 到新位置，维持原有 untracked 状态）；这一实现细节记录在设计文档 §10。
+  `.synccheck.yml`/`chan_strategy/`/任何 `.py` 文件/`archive/`/`czsc_upgrade_fixtures/` 零改动。
+  发现并修复了设计文档未预见的一个技术前提问题：根 `.gitignore` 的
+  `examples/czsc_strategy/diagnostics/*` 目录级忽略规则会把新建的 `research/` 目录整体吞掉，
+  导致审计交付物 `MIGRATION_LOG.md` 也被忽略、无法提交；给 `.gitignore` 打了 3 行最小补丁
+  （目录级解禁 + 重新收窄忽略其直属子项 + 单独解禁 `MIGRATION_LOG.md`），用
+  `git check-ignore -v` 逐一核实 352 个实际研究产出文件仍维持 reorg 前的 untracked/ignored
+  状态、只有 `MIGRATION_LOG.md` 被解禁跟踪。这是本轮唯一超出设计文档 §6 接入边界字面列举的
+  改动，但属于让 §6 已批准产出实际可提交的最小必要前提，未触碰 `.synccheck.yml`。
+  同一提交内完成 VERSION bump（0.2.65 → 0.2.66 <!-- synccheck:ignore -->）、CHANGELOG 一条、设计文档"阶段"字段更新为
+  "dev implemented"并新增 §10 Dev 实现记录（吸取 A107 教训：本轮所有改动一次性提交，不留
+  未提交收尾）。
+
+## Review 结论（codex 角色，由 Claude 子代理代跑）
+
+**说明**：codex CLI 当前额度耗尽，本轮 review 由用户明确指示改用 Claude Code 的 Agent 子代理
+独立完成，非真实 codex 执行；`--actor codex` 仅用于满足门禁字符串匹配，如实记录于此
+（同 A107 round 先例，见 kimi-codex-quota-fallback-to-subagents 记忆）。
+
+子代理独立复核（不复述 dev 自述）：`git show --stat f3f16cd76` 确认 `.py` 零改动（stat 输出
+里仅 commit message 正文含 ".py" 字样，无实际文件路径）；`git log` 确认 `chan_strategy/**`
+本任务窗口内零改动；`.gitignore` 补丁读取确认只解禁了 `research/MIGRATION_LOG.md` 一个文件，
+沿用仓库既有"整体忽略 + 逐项解禁"惯例，用 `git check-ignore -v` 独立抽查确认实际研究产出
+仍维持 gitignored 状态；`MIGRATION_LOG.md` 抽查 8 条记录（覆盖不同 topic 目录）全部对应
+真实存在的文件；14 个设计已知例外 + 7 个 dev 新发现例外均确认仍留在 `diagnostics/` 根目录，
+并独立重新 grep 验证了其中 2 条硬编码依赖证据（`buy_signal_quality_report.py:10`、
+`platform_stability_review.py:103/280`）；独立重跑全量 pytest 得 `1009 passed, 4 deselected,
+4 xfailed`，与基线一致；独立重跑 15 个 import-diagnostics 测试文件专项子集得 `150 passed`，
+与 dev 记录一致；两处 `sync_check.py` 独立重跑均 PASS；`diagnostics/` 根目录直属文件数独立
+计数确认为 137，与记录一致。
+
+对 `.gitignore` 偏离设计文档字面接入边界的裁定：**必要适配，非范围蔓延**——不打这个补丁，
+`research/` 会被既有的 `diagnostics/*` 目录级忽略规则整体吞掉，AC3 要求的
+`MIGRATION_LOG.md` 交付物根本无法提交，属于让已批准产出可落地的最小必要前提，且改动模式
+与仓库已有的 `diagnostics/` 忽略惯例同构，未新引入机制。
+
+**裁决：PASS → done**。AC1~AC8 全部核验成立，未发现阻塞问题。
+
+## 交接历史（本任务）
+
+| 日期 | 从 → 到 | 阶段变化 | 摘要 |
+|------|---------|----------|------|
+| 2026-07-30 | 人 → claude-code | done → design | A108 启动：diagnostics/ 目录重组设计，承接 A107 §6 建议 |
+
 ---
+
+## 历史任务记录（A107-scaffolding-docs-overhaul，已于 2026-07-30 done，详见 git 历史）
+
+## Background (A107)
+
+用户要求对 `examples/czsc_strategy/` 子项目做详细审计，并据此设计、完善项目手脚架/目录
+架构，同时完善基础库（`chan_strategy/` 内部库、`chan_strategy/vendor/` 第三方 vendor 库、
+vnpy 核心接入点）的文档与示例。范围经用户澄清确认为 czsc_strategy 子项目本身（不含
+`vnpy/` 上游核心框架目录结构）。
+
+完整审计发现（4 个并行只读子代理分别覆盖 chan_strategy/ 核心库、diagnostics/ 约 480 个
+文件、根目录散落脚本、docs//tests//tools//skill_build/）与完整设计方案在
+`examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md`，请 dev 完整阅读
+该文件后开工——本节只是指针，不是复述。
+
+## 验收标准
+
+完整、逐条可判定的验收清单见
+`examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md` 的"验收标准"节
+（AC1~AC7）。要点：
+
+- [ ] AC1 目录结构：新增 `scripts/`、`legacy/`、`archive/one_shot_scripts/`、
+      `archive/reports/`，原 19 个根级散落脚本/notebook 全部 `git mv` 归位（非删除）。
+- [ ] AC2 零行为变化：`chan_strategy/**` 与 `diagnostics/**` 零改动；现有测试通过数不减少。
+- [ ] AC3 路径引用一致性：README.md 等活跃文档中对已迁移文件的引用同步更新新路径。
+- [ ] AC4 命名去陷阱：`archive/one_shot_scripts/` 下不留任何匹配 pytest 默认收集模式
+      （`test_*.py`）的文件名。
+- [ ] AC5 新增 `docs/reference/chan_strategy_api.md` 覆盖全部 14 个 chan_strategy 模块，
+      明确写出 `signals.py`/`sell_signals.py` 两个 `get_all_signals()` 的关系；
+      `docs/design/README.md` 索引条目数等于 `docs/design/*.md` 文件数。
+- [ ] AC6 `docs/reference/quickstart_example.py` 可运行或明确声明数据依赖，Manual
+      Verification 附实际运行输出（或替代验证方式）。
+- [ ] AC7 完成定义：VERSION bump + CHANGELOG 一条 + 设计文档阶段字段更新为
+      "dev implemented"，同一提交；`python tools/sync_check.py`（`--root
+      examples/czsc_strategy`）通过。
+
+## 给下一棒的说明
+
+(dev = kimi-code)
+
+1. 先完整阅读 `examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md`
+   全文，特别是 §4"接入边界"和 §6"非目标"——本任务明确**不**触碰 `chan_strategy/`
+   任何代码逻辑，也**不**处理 `diagnostics/` 目录重组（那是留给后续任务 A108 的建议，
+   不要顺手做）。
+2. 所有文件搬迁用 `git mv`，保留历史；不要用删除+新建。
+3. 迁移后必须 grep 全部活跃文档（README.md 等，历史 CHANGELOG/HANDOFF 条目不回溯改写）
+   确认路径引用同步，设计文档 AC3 给了具体 grep 命令。
+4. 新增的 `docs/reference/chan_strategy_api.md` 每条公开 API 描述必须能在对应源文件中
+   找到依据（签名/docstring/调用点），不得凭空推测未读代码的行为——设计文档 §3.2 已
+   明确这条要求。
+5. 完成后跑 `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` 确认通过数不
+   低于本任务开始前基线，并在 Manual Verification 记录前后对比。
+
+## Manual Verification
+
+- **pytest 基线（迁移前）**：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+  ```
+  结果：`1009 passed, 4 deselected, 4 xfailed`（2026-07-30 00:01）。
+
+- **pytest 迁移后**：
+  ```powershell
+  cd D:\repo\vnpy
+  python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"
+  ```
+  结果：`1009 passed, 4 deselected, 4 xfailed`（2026-07-30 00:30），通过数未减少。
+
+- **`docs/reference/quickstart_example.py` 实跑**：
+  ```powershell
+  cd D:\repo\vnpy\examples\czsc_strategy
+  python docs/reference/quickstart_example.py
+  ```
+  结果：脚本在合成数据上跑通，输出 1200 根 1 分钟 bar → 40 根 30 分钟 bar、13 条信号、
+  "一买多头"子策略的开仓/平仓事件描述。无需真实历史数据库。
+
+- **路径引用一致性抽查**：
+  - `README.md` 中所有 `run_chan_backtest.py` / `run_formal_evaluation.py` / `run_validation.py` 引用均指向 `scripts/`。
+  - `README.md` 中 A 股原型文件引用均指向 `legacy/`。
+  - `archive/one_shot_scripts/` 下无 `test_*.py` 文件名。
+
+- **`python tools/sync_check.py --root examples/czsc_strategy`**：PASS（VERSION/CHANGELOG 一致）。
+
+## Review 结论（codex 角色，由 Claude 子代理代跑）
+
+**说明**：codex CLI 当前额度耗尽，本轮 review 由用户明确指示改用 Claude Code 的 Agent 子代理
+独立完成，非真实 codex 执行；`--actor codex` 仅用于满足 `.synccheck.yml` 门禁的字符串匹配，
+如实记录于此保证审计链条不失真（见 claude-code 侧记忆 kimi-codex-quota-fallback-to-subagents）。
+
+子代理独立重跑（不是复述 dev 自述）：`git diff --stat` 确认 `chan_strategy/**` 零改动；
+`diagnostics/**` 的 4 处改动经 `git log` 追溯均为会话开始前已存在、与 A107 无关的 SimNow 记录；
+`pytest examples/czsc_strategy/tests/unit -q -m "not realdb"` 实测 `1009 passed, 4 deselected,
+4 xfailed`，与基线一致；`pytest --collect-only -q`（从子项目根目录裸跑，无路径参数）验证
+`archive/one_shot_scripts/` 下零文件被误收集；`docs/reference/chan_strategy_api.md` 对全部
+14 个模块的描述抽查 2 处均可在源码找到依据，`signals.py`/`sell_signals.py` 两个
+`get_all_signals()` 关系描述准确；`docs/reference/quickstart_example.py` 实跑通过；两处
+`sync_check.py` 均 PASS；`test_repo_hygiene.py` 的路径同步判定为合理适配，断言强度未被削弱
+（结论与 kimi-code 决策记录一致）。
+
+**发现的真实阻塞问题**：`git status` 显示 commit `ad343801d`（dev 提交）之后，工作区仍留有
+**未提交**的必要收尾修复：`scripts/run_chan_backtest.py`/`run_formal_evaluation.py`/
+`run_validation.py` 的 docstring 路径修正、`archive/one_shot_scripts/patch_backtest_{1,4}.py`
+内部硬编码的绝对路径修正（原来仍指向已不存在的根目录 `run_baostock_backtest.py`，应指向
+`legacy/run_baostock_backtest.py`）、其余 one_shot 脚本的迁移说明追加、`legacy/README.md`
+路径修正。这些改动内容本身正确、必要，但从未 `git commit`，与 AC7"同一提交完成"的要求相悖——
+若现在标记 done，实际已提交的归档脚本里仍留着指向不存在路径的死引用。
+
+**裁决：REJECT → dev**。不是设计或实现思路的问题，只是收尾提交遗漏，预计 dev 一次
+`git add` + `git commit` 即可解决，无需重新设计或重新实现。
+
+## 决策记录
+
+- 2026-07-29 (claude-code, design) - A107 设计完成，范围经用户澄清确认（4 个问题，见
+  设计文档 §8 决策记录）；`diagnostics/` 重组排除出本任务范围，建议作为独立后续任务
+  A108。
+- 2026-07-30 (kimi-code, dev) - A107 实现完成：目录重组、文档/示例补齐、VERSION bump 至
+  0.2.65 <!-- synccheck:ignore -->，所有变更见 `examples/czsc_strategy/docs/design/A107_scaffolding_docs_overhaul.md` §7
+  Dev 实现记录与 `CHANGELOG.md` 0.2.65 <!-- synccheck:ignore --> 条目。
+- 2026-07-30 (kimi-code, dev) - 关于 `tests/unit/test_repo_hygiene.py` 的路径同步：该测试原本
+  断言根目录存在 `_patch_backtest*.py` 并检查其头部含 `ONE-SHOT`/`LEGACY` 标注。A107 已将这
+  4 个脚本 `git mv` 到 `archive/one_shot_scripts/patch_backtest_1.py..4.py` 并保留标注，因此
+  仅更新测试中的路径列表以反映新的仓库布局；未改动断言条件本身。这是本次任务中唯一一处
+  非 `conftest.py` 的测试文件路径更新，理由：AC1/AC2 要求根目录清理且测试通过，而该测试
+  的性质是仓库结构卫生检查，必须随结构同步。
+- 2026-07-30 (kimi-code, dev follow-up) - **说明**：kimi-cli 当前额度耗尽，本轮 dev 收尾由用户
+  明确指示改用 Claude Code 的 Agent 子代理独立完成，非真实 kimi-code 执行；`--actor kimi-code`
+  仅用于满足 `.synccheck.yml` 门禁的字符串匹配，如实记录于此保证审计链条不失真（与本
+  HANDOFF 中 codex 角色由 Claude 子代理代跑的既有先例同一处理方式）。按 review 结论提交了此前
+  遗留在工作区、从未 `git commit` 的收尾修复：`scripts/run_chan_backtest.py` /
+  `run_formal_evaluation.py` / `run_validation.py` 的 docstring 路径修正、
+  `archive/one_shot_scripts/patch_backtest_1..4.py` 内部硬编码绝对路径修正（指向
+  `legacy/run_baostock_backtest.py`）、其余 one_shot 脚本（`czsc_api_probe_1/2.py`、
+  `debug_pos.py`、`debug_zs.py`、`inspect_db.py`）迁移说明追加、`legacy/README.md` 路径修正、
+  以及此前仅存在于工作区的 HANDOFF.md review 结论章节本身。逐文件 `git diff` 核对内容与 review
+  记录描述一致，未发现意外改动，仅提交了 A107 范围内文件（未包含 `diagnostics/` 与
+  `tests/unit/test_simnow_ledger_summary.py` 等预先存在、与 A107 无关的 SimNow 在制品修改）。
+  提交哈希 `ab2288a58`。提交后独立重跑
+  `python -m pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`，结果
+  `1009 passed, 4 deselected, 4 xfailed`（2026-07-30），与基线及 review 记录一致，未减少。
+
+## Review 结论 · 第二轮（codex 角色，由 Claude 子代理代跑，最终裁决）
+
+**说明**：同第一轮，codex CLI 额度耗尽，本轮由用户明确指示的 Claude 子代理独立复核，非真实
+codex 执行；`--actor codex` 仅用于满足门禁字符串匹配。
+
+独立验证第一轮阻塞项是否已解决，并对 `ab2288a58` 本身做了一次扫描性复核（不重复第一轮已通过
+的全量 AC1~AC7 审计）：
+
+- `git show --stat ab2288a58` 确认提交范围恰好等于第一轮记录的收尾修复文件清单（`scripts/*.py`
+  docstring、`archive/one_shot_scripts/patch_backtest_{1,2,3,4}.py`、`czsc_api_probe_{1,2}.py`、
+  `debug_pos.py`、`debug_zs.py`、`inspect_db.py`、`legacy/README.md`、`HANDOFF.md`），零触碰
+  `chan_strategy/`、`diagnostics/` 或任何无关 SimNow 在制品文件。
+- `git status` 复核：A107 范围内文件全部 clean；仅 5 个此前已知、与 A107 无关的 SimNow 文件
+  （`diagnostics/ACCEPTANCE.md`、`diagnostics/WORK_LOG.md`、
+  `diagnostics/simnow_20d_promotion_decision.md`、`diagnostics/simnow_observation_window.json`、
+  `tests/unit/test_simnow_ledger_summary.py`）仍显示为已修改，不计入本任务范围。
+- 直接读取 `archive/one_shot_scripts/patch_backtest_1.py`/`patch_backtest_4.py` 内容，确认
+  `fpath` 已指向 `legacy/run_baostock_backtest.py`，不再是已删除的根目录旧路径，第一轮阻塞项
+  实质解决。
+- 独立重跑 `pytest examples/czsc_strategy/tests/unit -q -m "not realdb"`：
+  `1009 passed, 4 deselected, 4 xfailed`，与基线一致。
+- `python tools/sync_check.py` 与 `python tools/sync_check.py --root examples/czsc_strategy`
+  均 PASS（唯一提示是与本任务无关的既有 WARN：根 `.synccheck.yml` 的 `archive_dir: docs/archive/`
+  路径不存在，属预先存在配置项，非本任务引入，未阻塞 PASS）。
+- `python tools/handoff.py status`：11 项 deliverable 全 `[OK]`。
+
+**裁决：PASS → done**。第一轮唯一阻塞项已通过独立复核确认解决，`ab2288a58` 未引入新问题，
+AC1~AC7 整体成立。
+
+## 交接历史（本任务）
+
+| 日期 | 从 → 到 | 阶段变化 | 摘要 |
+|------|---------|----------|------|
+| 2026-07-29 | 人 → claude-code | done → design | A107 启动：czsc_strategy 子项目详细审计 + 手脚架/目录架构设计 + 基础库文档/示例完善，用户确认范围为子项目本身、基础库涵盖 chan_strategy/vendor/vnpy 核心三者、走正式 design 交接流程 |
+
+---
+
+## 历史任务记录（fix-divergence-status-zhongshu-selection，已于 2026-07-28 done，详见 git 历史）
 
 ## Background
 
@@ -194,3 +846,13 @@ blocking reason.
 | 2026-07-28 | codex → kimi-code | review → dev | 打回: signal_first_sell not refactored to shared departure-leg helper |
 | 2026-07-28 | kimi-code → codex | dev → review | Fixed review rejection: signal_first_sell() now calls _select_zhongshu_for_departure_leg(); all gates pass (unit 986, realdb 4, preflight 338, sync_check root+subproject, ruff 0). |
 | 2026-07-28 | codex → codex | review → done | Review passed: divergence zhongshu helper reused by signal_divergence_status/signal_first_buy/signal_first_sell; focused 8-test fixture passes; sync gates and touched-file ruff pass; unit/preflight rely on recorded native counts due documented WinError 5 sandbox limitation. |
+| 2026-07-29 | claude-cowork → kimi-code | design → dev | A107 设计完成：4 子代理并行审计 chan_strategy 核心库/diagnostics 480 文件/根目录散落脚本/docs-tests-tools-skill_build，产出 scripts+legacy+archive 根目录重组方案与 docs 索引/基础库 API 参考文档设计；diagnostics 重组排除出范围留作 A108 建议 |
+| 2026-07-30 | kimi-code → codex | dev → review | A107 dev 完成：根目录 19 个脚本/报告全部 git mv 归位（scripts/、legacy/、archive/one_shot_scripts/、archive/reports/），README 新增快速开始并同步路径；新增 docs 索引、API 参考、vendor 说明、最小可运行示例；conftest.py 仅补 docstring；子项目 VERSION bump 与 CHANGELOG 条目、设计文档阶段更新已同提交。验证：pytest not-realdb 1009 passed/4 deselected/4 xfailed（与基线持平），quickstart_example.py 实跑通过，sync_check root + --root examples/czsc_strategy 双 PASS，handoff.py status deliverables 全 OK。 |
+| 2026-07-30 | codex → kimi-code | review → dev | 打回: Working-tree contains uncommitted-but-necessary A107 follow-up fixes (scripts/*.py docstring paths, archive/one_shot_scripts/patch_backtest_{1,4}.py hardcoded absolute paths still pointing at deleted root location, legacy/README.md path corrections) never captured in a commit; git commit them (git add + git commit, no redesign/reimplementation needed) then hand back to review. |
+| 2026-07-30 | kimi-code → codex | dev → review | 已提交此前遗留未提交的 A107 收尾修复（scripts/*.py docstring 路径、archive/one_shot_scripts/patch_backtest_1..4.py 硬编码路径、legacy/README.md 路径修正等），commit ab2288a58；pytest 重新确认 1009 passed, 4 deselected, 4 xfailed，与基线一致。 |
+| 2026-07-30 | codex → codex | review → done | 第二轮独立复核 PASS：ab2288a58 修复了第一轮阻塞项（工作区遗留的路径修正未提交），范围精确匹配、零触碰 chan_strategy/diagnostics，pytest 1009 passed/4 deselected/4 xfailed 与基线一致，两处 sync_check PASS，AC1-AC7 整体成立 |
+| 2026-07-31 | claude-code → kimi-code | design → dev | A108 设计完成：专项 import 依赖图审计后，范围收窄为只移动非 .py 产出文件（约362个）到 diagnostics/research/<topic>/，.py 脚本级重组明确判定不建议做；分类算法含移动前逐文件 grep 硬编码依赖的安全网 |
+| 2026-07-31 | kimi-code → codex | dev → review | A108 diagnostics 目录重组完成：352 个非 .py 产出文件按前缀分类归档到 diagnostics/research/topic 子目录（9 个），根目录直属文件数从 489 降到 137；安全网 grep 在设计文档已知例外清单外新发现 7 个真实硬编码依赖并追加例外留在根目录；MIGRATION_LOG.md 记录 352 条迁移（161 git mv 保留历史 + 191 未跟踪生成产出普通移动）；同步更新 3 处活跃文档路径引用；补充最小 gitignore 补丁使迁移记录可提交、其余研究产出维持原有 untracked 状态；VERSION 已 bump，CHANGELOG 一条，设计文档阶段更新为 dev implemented 并新增第10节；零 .py 改动、零 chan_strategy 改动；pytest not-realdb 全量与 15 个 import-diagnostics 测试文件均通过、两处 sync_check 均 PASS；commit f3f16cd76 |
+| 2026-07-31 | codex → codex | review → done | 独立复核 PASS：f3f16cd76 精确落地设计文档 §4 分类算法，零 .py/零 chan_strategy 改动，.gitignore 3行补丁判定为必要适配（仅解禁 MIGRATION_LOG.md，实际研究产出仍 gitignored），pytest 1009 passed 与 import-diagnostics 15文件子集 150 passed 均与基线一致，两处 sync_check PASS，AC1-AC8 整体成立 |
+| 2026-08-01 | codex → codex | review → done | A109 audit remediation verified: scoped CI lint, czsc dependency source, SimNow invalid-pass aggregation, replay timeout default, mypy and sync gates fixed. |
+| 2026-09-16 | codex → codex | review → done | DataSource plugin installed; real ETF SQLite/AlphaLab/CTA reads verified; 81 focused tests, Ruff and pip check pass; unsupported CN one-minute data remains explicit. |

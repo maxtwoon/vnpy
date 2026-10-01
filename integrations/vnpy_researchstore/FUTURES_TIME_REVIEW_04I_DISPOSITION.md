@@ -1,0 +1,9 @@
+# Coordinator disposition — source04I qualification limited pending correction
+
+Actual Claude session b67bc48a-b31c-4b9f-a5db-201b8e91736a, exec94188 terminal0. Exact final response in FUTURES_TIME_REVIEW_04I.md; full detailed report recovered verbatim from its Bash tool request in .coordination/review-futures04i/full-report-from-reviewer-command.md. Original repro/source/evidence retained.
+
+Accept the bounded measured facts: archive/member hashes, exact A2505/source-date join of1035 rows with zero unmatched/duplicate keys, source Friday-night trading_date examples and distinct actual contract identity. These are source-date observations, not price substitution or full-calendar proof.
+
+Do NOT yet adopt the review's RESOLVED label qualification. The report quotes universe trading_hours 21:01-23:00,09:01-10:15,10:31-11:30,13:31-15:00 but describes those as independently declared opens21:00/09:00/10:30/13:30. Subtracting one minute from source-declared starts to prove END risks assuming the conclusion. Identify an independent local source for actual interval opens before claiming that reasoning proves labels. The turnover/(volume*10) versus close comparison supports a units/multiplier plausibility check, not timestamp direction. A contract being alive in a later metadata snapshot's date range does not alone establish historical multiplier validity. The exact metadata contradiction stays visible.
+
+Actual Claude correction04IB will use existing extracted evidence without repeat full archive hashes/scans. Until that terminal correction is dispositioned, WP10 real futures may reproduce truthful raw observations/date joins and report candidate/UNKNOWN labels; do not issue READY or forge canonical bounds from04I's overstated sentence. ETF native delivery and unrelated datasets can continue.

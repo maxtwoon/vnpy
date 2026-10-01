@@ -1,0 +1,9 @@
+# Coordinator disposition — corrected source04IB
+
+Actual Claude same session b67bc48a-b31c-4b9f-a5db-201b8e91736a, exec84674 terminal0. Exact corrected report FUTURES_TIME_REVIEW_04IB.md supersedes04I's label/multiplier qualification claims. Original04I remains history, not a source of READY status.
+
+Accept unchanged measured hashes and the1035-row exact real-contract/source-trading-date join, including Friday-night mappings, within the named A2505/member/window only. Declared source multiplier10 and sampled turnover arithmetic remain visible observations/plausibility evidence; historical validity was not independently established. Additional actual scoped unit validation may strengthen evidence later, but no completion claim follows from a contract merely being alive.
+
+Accept correction: local trading_hours begins21:01/09:01/10:31/13:31 exactly as the bar grid. The earlier report's21:00/09:00/10:30/13:30 opens were outside knowledge, not independent local file evidence. Source END-vs-START conflict therefore remains UNKNOWN for this supplied window. Do not construct canonical bounds, qualify native backtests or globally relabel futures from this report. Preserve raw/source-label observations, explicit candidate status and exact date-join provenance; continuous prices never replace real contract prices.
+
+WP10K must demonstrate the currently implemented public candidate/inspection path and return a precise product defect if the default importer silently hardcodes a conflicting label or promotes the uncertain range. This is not permission to fabricate success, permanently reject all futures, omit streaming import capability, or remove the real-futures representative from delivery. The qualified first usable ETF snapshot is a separate scope. Do not repeat archive hashes/large scans or source review without new evidence.
