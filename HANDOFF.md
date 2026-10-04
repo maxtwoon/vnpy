@@ -1,9 +1,9 @@
 ---
 task: AGENT-20260922 - approved workspace entrypoints and snapshot provenance
 version: 4.4.0
-stage: dev
-owner: codex
-updated: 2026-09-30
+stage: review
+owner: claude-code
+updated: 2026-10-04
 deliverables:
   - HANDOFF.md
   - integrations/vnpy_datasource/README.md
@@ -281,10 +281,10 @@ deliverables:
 blockers: []
 last_transition_kind: next
 last_transition_actor: codex
-last_transition_from_stage: review
-last_transition_to_stage: done
+last_transition_from_stage: dev
+last_transition_to_stage: review
 last_transition_from_owner: codex
-last_transition_to_owner: codex
+last_transition_to_owner: claude-code
 ```
 
 ## Current local research decision (2026-09-15)
@@ -874,3 +874,4 @@ blocking reason.
 | 2026-07-31 | codex → codex | review → done | 独立复核 PASS：f3f16cd76 精确落地设计文档 §4 分类算法，零 .py/零 chan_strategy 改动，.gitignore 3行补丁判定为必要适配（仅解禁 MIGRATION_LOG.md，实际研究产出仍 gitignored），pytest 1009 passed 与 import-diagnostics 15文件子集 150 passed 均与基线一致，两处 sync_check PASS，AC1-AC8 整体成立 |
 | 2026-08-01 | codex → codex | review → done | A109 audit remediation verified: scoped CI lint, czsc dependency source, SimNow invalid-pass aggregation, replay timeout default, mypy and sync gates fixed. |
 | 2026-09-16 | codex → codex | review → done | DataSource plugin installed; real ETF SQLite/AlphaLab/CTA reads verified; 81 focused tests, Ruff and pip check pass; unsupported CN one-minute data remains explicit. |
+| 2026-10-04 | codex → claude-code | dev → review | Dev closeout complete: ResearchStore audit/acceptance PASS, full suite 456 passed + 27 env-only failures, ruff clean, sync_check PASS |
