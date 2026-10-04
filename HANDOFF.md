@@ -1,7 +1,7 @@
 ---
 task: AGENT-20260922 - approved workspace entrypoints and snapshot provenance
 version: 4.4.0
-stage: review
+stage: done
 owner: claude-code
 updated: 2026-10-04
 deliverables:
@@ -280,10 +280,10 @@ deliverables:
   - examples/czsc_strategy/CHANGELOG.md
 blockers: []
 last_transition_kind: next
-last_transition_actor: codex
-last_transition_from_stage: dev
-last_transition_to_stage: review
-last_transition_from_owner: codex
+last_transition_actor: claude-code
+last_transition_from_stage: review
+last_transition_to_stage: done
+last_transition_from_owner: claude-code
 last_transition_to_owner: claude-code
 ```
 
@@ -875,3 +875,4 @@ blocking reason.
 | 2026-08-01 | codex → codex | review → done | A109 audit remediation verified: scoped CI lint, czsc dependency source, SimNow invalid-pass aggregation, replay timeout default, mypy and sync gates fixed. |
 | 2026-09-16 | codex → codex | review → done | DataSource plugin installed; real ETF SQLite/AlphaLab/CTA reads verified; 81 focused tests, Ruff and pip check pass; unsupported CN one-minute data remains explicit. |
 | 2026-10-04 | codex → claude-code | dev → review | Dev closeout complete: ResearchStore audit/acceptance PASS, full suite 456 passed + 27 env-only failures, ruff clean, sync_check PASS |
+| 2026-10-04 | claude-code → claude-code | review → done | Review PASS: datasource 101 passed; warehouse provenance fail-closed (unverified/changed manifest refused), idempotent replay hash consistent, read_snapshot rejects latest/current and verifies mapping hashes; staged_check smoke PASS; ResearchStore 456 passed + 27 env-only. Non-blocking: no live/trading scope. |
