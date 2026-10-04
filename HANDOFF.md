@@ -16,6 +16,24 @@ blockers: []
 
 ## Current workspace integration
 
+### 2026-10-04 status (supersedes open items in the 2026-09-30 notes below)
+
+- ResearchStore closeout is complete for the personal offline research scope:
+  `.coordination/completion-audit-20260930.json` (COMPLETE) and
+  `acceptance-current-check.json` (PASS, r3 wheel identity 48/48, 6 configs,
+  `remaining_required_work: []`). Futures04L final real case 14/14 PASS,
+  SS04M and installed recorder lifecycle independently reviewed PASS; the
+  notes below calling them partial/pending are stale.
+- Full ResearchStore suite rerun on final source (registered vnpy 3.14,
+  2026-10-04): 456 passed, 27 failed in 213.88s. All 27 are environment-only:
+  23 missing `alphalens`, 4 missing `vnpy_portfoliostrategy`; those tests were
+  passed under isolated vnpy-alpha/portfolio overlays on 2026-09-30.
+- Ruff clean for vnpy_researchstore, vnpy_datasource and examples/czsc_shadow;
+  the earlier unused `CountingSink` import is gone.
+- Still not done (by design): live gateway recording (LIVE_NOT_RUN), trading
+  authorization, and the unanswered question about direct Codex ResearchStore
+  edits (no edits were needed for closeout).
+
 ### 2026-09-30 unfinished-work continuation
 
 User objective: finish remaining items. Current-state verification takes priority
